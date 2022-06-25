@@ -27,6 +27,7 @@ class Points extends BasePoints {
 
     const material = new ShaderMaterial({
       uniforms: {
+        is2D: uniforms.is2D,
         nodeRadius: uniforms.nodeRadius,
         texturePositions: { value: null },
         size: { value: size },

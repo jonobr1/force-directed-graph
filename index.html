@@ -22,6 +22,8 @@
     <meta property="twitter:description" content="GPU supercharged attraction-graph visualizations for the web built on top of Three.js.">
     <meta property="twitter:image" content="https://jonobr1.com/force-directed-graph/thumbnail.png">
 
+    <meta name="viewport" content="width=device-width, user-scalable=no">
+
     <style>
 
       * { margin: 0; padding: 0; }
@@ -100,7 +102,6 @@
   </head>
   <body>
     <div id="stage"></div>
-    <div class="column"></div>
     <div class="content column">
       <h1 id="title">
         Force Directed Graph
@@ -122,6 +123,7 @@
           "imports": {
             "three": "https://cdn.jsdelivr.net/npm/three/build/three.module.js",
             "three/examples/jsm/misc/GPUComputationRenderer.js": "https://cdn.jsdelivr.net/npm/three/examples/jsm/misc/GPUComputationRenderer.js",
+            "three/examples/jsm/controls/OrbitControls.js": "https://cdn.jsdelivr.net/npm/three/examples/jsm/controls/OrbitControls.js",
             "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui/dist/lil-gui.esm.js"
           }
         }
@@ -131,10 +133,12 @@
         import * as THREE from 'three';
         import { GUI } from 'lil-gui';
         import { ForceDirectedGraph } from './src/index.js';
+        import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera();
+        const controls = new OrbitControls(camera, renderer.domElement);
 
         camera.position.z = 250;
 
@@ -176,6 +180,7 @@
           gui.add(obj, 'value', min, max, step).name(name);
         });
 
+        gui.add(fdg.getUniforms().is2D, 'value').name('2D');
         gui.addColor(fdg.getUniforms().pointColor, 'value').name('pointColor')
         gui.addColor(fdg.getUniforms().linkColor, 'value').name('linkColor');
 
@@ -204,6 +209,7 @@
         }
 
         function render(elapsed) {
+          controls.update();
           fdg.update(elapsed);
           renderer.render(scene, camera);
         }

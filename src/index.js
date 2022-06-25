@@ -22,6 +22,7 @@ class ForceDirectedGraph extends Group {
     const gpgpu = new GPUComputationRenderer(size, size, renderer);
 
     const uniforms = {
+      is2D: { value: false },
       time: { value: 0 },
       size: { value: size },
       maxSpeed: { value: 10 },
@@ -49,15 +50,15 @@ class ForceDirectedGraph extends Group {
       const radius = frustumSize * 0.01 * Math.sqrt(0.5 + k);
       const theta = (k / 100) * Math.PI * 2;
 
-      // const x = frustumSize * (k % size) / size - frustumSize / 2;
-      // const y = frustumSize * Math.floor(k / size) / size - frustumSize / 2;
+      const x = radius * Math.cos(theta);
+      const y = radius * Math.sin(theta);
       const z = 0;
 
       if (k < data.nodes.length) {
 
-        textures.positions.image.data[i + 0] = radius * Math.cos(theta);
-        textures.positions.image.data[i + 1] = radius * Math.sin(theta);
-        textures.positions.image.data[i + 2] = z; // Z value to let Org Chart know if it's visible or not.
+        textures.positions.image.data[i + 0] = x;
+        textures.positions.image.data[i + 1] = y;
+        textures.positions.image.data[i + 2] = z;
         textures.positions.image.data[i + 3] = 0; // Not used
 
       } else {
@@ -108,8 +109,10 @@ class ForceDirectedGraph extends Group {
     gpgpu.setVariableDependencies(variables.positions, [variables.positions, variables.velocities]);
     gpgpu.setVariableDependencies(variables.velocities, [variables.velocities, variables.positions]);
 
+    variables.positions.material.uniforms.is2D = uniforms.is2D;
     variables.positions.material.uniforms.timeStep = uniforms.timeStep;
 
+    variables.velocities.material.uniforms.is2D = uniforms.is2D;
     variables.velocities.material.uniforms.size = uniforms.size;
     variables.velocities.material.uniforms.time = uniforms.time;
     variables.velocities.material.uniforms.nodeRadius = uniforms.nodeRadius;

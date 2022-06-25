@@ -38,6 +38,7 @@ class Links extends LineSegments {
 
     const material = new ShaderMaterial({
       uniforms: {
+        is2D: uniforms.is2D,
         texturePositions: { value: null },
         color: uniforms.linkColor
       },
