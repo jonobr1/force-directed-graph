@@ -1,0 +1,11 @@
+{
+  "include": ["src/**/*"],
+  "compilerOptions": {
+    "allowJs": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "lib": ["es6", "dom"],
+    "module": "commonjs",
+    "baseUrl": "./src/",
+  }
+}
