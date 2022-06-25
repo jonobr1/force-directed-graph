@@ -35,6 +35,14 @@ This example creates 512 nodes and links them randomly like big snakes.
     <meta charset="utf-8">
   </head>
   <body>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.skypack.dev/three@latest",
+          "@jonobr1/force-directed-graph": "https://cdn.skypack.dev/@jonobr1/force-directed-graph@latest"
+        }
+      }
+    </script>
     <script type="module">
 
       import * as THREE from 'three';
