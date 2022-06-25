@@ -234,10 +234,15 @@ const velocitiesFragment = `
 
 const points = {
   vertexShader: `
+    uniform float sizeAttenuation;
+    uniform float frustumSize;
     uniform float is2D;
     uniform float nodeRadius;
+    uniform float nodeScale;
     uniform sampler2D texturePositions;
+
     varying vec2 vUv;
+    varying float zDist;
 
     void main() {
 
@@ -245,21 +250,31 @@ const points = {
       vec3 vPosition = texel.xyz;
       vPosition.z *= 1.0 - is2D;
 
-      gl_PointSize = nodeRadius * 5.0;
+      vec4 mvPosition = modelViewMatrix * vec4( vPosition, 1.0 );
 
-      gl_Position = projectionMatrix * modelViewMatrix * vec4( vPosition, 1.0 );
+      gl_PointSize = nodeRadius * nodeScale;
+      gl_PointSize *= mix( 1.0, frustumSize / - mvPosition.z, sizeAttenuation );
+
+      zDist = 1.0 / - mvPosition.z;
+
+      gl_Position = projectionMatrix * mvPosition;
 
     }
   `,
   fragmentShader: `
+    uniform float frustumSize;
     uniform vec3 color;
     uniform float size;
+
     varying vec2 vUv;
+    varying float zDist;
 
     float circle( vec2 uv, vec2 pos, float rad ) {
       float d = length( pos - uv ) - rad;
       float t = clamp( d, 0.0, 1.0 );
-      return smoothstep(0.33, 0.66, 1.0 - t);
+      float viewRange = smoothstep( 0.0, frustumSize * 0.001, abs( zDist ) );
+      float taper = 0.15 * viewRange + 0.015;
+      return smoothstep( 0.5 - taper, 0.5 + taper, 1.0 - t );
     }
 
     void main() {

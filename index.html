@@ -173,6 +173,7 @@
           { name: 'springLength', min: 0, max: 10, step: 0.5 },
           { name: 'stiffness', min: 0, max: 1, step: 0.1 },
           { name: 'nodeRadius', min: 0, max: 5, step: 0.5 },
+          { name: 'nodeScale', min: 0, max: 50, step: 0.1 },
           { name: 'gravity', min: 0, max: 1, step: 0.1 }
         ].forEach(function({ name, min, max, step }) {
           const uniforms = fdg.getUniforms();
@@ -180,6 +181,7 @@
           gui.add(obj, 'value', min, max, step).name(name);
         });
 
+        gui.add(fdg.getUniforms().sizeAttenuation, 'value').name('sizeAttenuation');
         gui.add(fdg.getUniforms().is2D, 'value').name('2D');
         gui.addColor(fdg.getUniforms().pointColor, 'value').name('pointColor')
         gui.addColor(fdg.getUniforms().linkColor, 'value').name('linkColor');

@@ -28,7 +28,10 @@ class Points extends BasePoints {
     const material = new ShaderMaterial({
       uniforms: {
         is2D: uniforms.is2D,
+        sizeAttenuation: uniforms.sizeAttenuation,
+        frustumSize: uniforms.frustumSize,
         nodeRadius: uniforms.nodeRadius,
+        nodeScale: uniforms.nodeScale,
         texturePositions: { value: null },
         size: { value: size },
         color: uniforms.pointColor
