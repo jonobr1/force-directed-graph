@@ -18445,16 +18445,23 @@ function getPotSize(number) {
 
 // src/shaders.js
 var positionsFragment = `
+  uniform float is2D;
   uniform float timeStep;
+
   void main() {
+
     vec2 uv = gl_FragCoord.xy / resolution.xy;
-    vec2 position = texture2D( texturePositions, uv ).xy;
-    vec2 velocity = texture2D( textureVelocities, uv ).xy;
-    vec2 result = position + velocity * timeStep;
-    gl_FragColor = vec4( result.xy, 0.0, 0.0 );
+    vec3 position = texture2D( texturePositions, uv ).xyz;
+    vec3 velocity = texture2D( textureVelocities, uv ).xyz;
+
+    vec3 result = position + velocity * timeStep;
+
+    gl_FragColor = vec4( result.xyz, 0.0 );
+
   }
 `;
 var velocitiesFragment = `
+  uniform float is2D;
   uniform float size;
   uniform float time;
   uniform float nodeRadius;
@@ -18468,188 +18475,286 @@ var velocitiesFragment = `
   uniform float stiffness;
   uniform float gravity;
   uniform sampler2D textureEdges;
-  vec2 getPosition( vec2 uv ) {
-    return texture2D( texturePositions, uv ).xy;
+
+  vec3 getPosition( vec2 uv ) {
+    return texture2D( texturePositions, uv ).xyz;
   }
-  vec2 getVelocity( vec2 uv ) {
-    return texture2D( textureVelocities, uv ).xy;
+
+  vec3 getVelocity( vec2 uv ) {
+    return texture2D( textureVelocities, uv ).xyz;
   }
-  vec2 getAcceleration( vec2 uv ) {
-    return texture2D( textureVelocities, uv ).zw;
-  }
+
   int getIndex( vec2 uv ) {
     int s = int( size );
     int col = int( uv.x * size );
     int row = int( uv.y * size );
     return col + row * s;
   }
+
   float random( vec2 seed ) {
     return fract( sin( dot( seed.xy, vec2( 12.9898, 78.233 ) ) ) * 43758.5453 );
   }
+
   float jiggle( float index ) {
     return ( random( vec2( index, time ) ) - 0.5 ) * 0.000001;
   }
-  vec2 collide( float count, int id1, vec2 p1, vec2 v1 ) {
-    float r2 = nodeRadius * nodeRadius;
-    float xi = p1.x + v1.x;
-    float yi = p1.y + v1.y;
+
+  vec3 collide( float count, int id1, vec3 p1, vec3 v1 ) {
+
     float r  = 2.0 * nodeRadius;
-    vec2 result = vec2( 0.0 );
+    float r2 = nodeRadius * nodeRadius;
+
+    vec3 p = p1 + v1;
+    vec3 result = vec3( 0.0 );
+
     for ( float i = 0.0; i < count; i += 1.0 ) {
+
       float uvx = mod( i, size ) / size;
       float uvy = floor( i / size ) / size;
+
       vec2 uv2 = vec2( uvx, uvy );
+
       int id2 = getIndex( uv2 );
-      vec2 v2 = getVelocity( uv2 );
-      vec2 p2 = getPosition( uv2 );
+
+      vec3 v2 = getVelocity( uv2 );
+      vec3 p2 = getPosition( uv2 );
+
       if ( id2 != id1 ) {
-        float x = xi - ( p2.x + v2.x );
-        float y = yi - ( p2.y + v2.y );
-        float l = x * x + y * y;
+
+        vec3 diff = p - ( p2 + v2 );
+        vec3 mag = abs( diff );
+        float dist = length( diff );
         float seed = float( id1 + id2 );
-        if ( l < r2 ) {
-          if ( abs( x ) <= 0.1 ) {
-            x = jiggle( seed );
-            l += x * x;
+
+        if ( dist < r2 ) {
+
+          if ( mag.x <= 0.1 ) {
+            diff.x = jiggle( seed );
+            dist += diff.x * diff.x;
           }
-          if ( abs( y ) <= 0.1 ) {
-            y = jiggle( seed );
-            l += y * y;
+          if ( mag.y <= 0.1 ) {
+            diff.y = jiggle( seed );
+            dist += diff.y * diff.y;
           }
-          result.x += (x *= l) * r;
-          result.y += (y *= l) * r;
+          if ( mag.z <= 0.1 && is2D <= 0.0 ) {
+            diff.z = jiggle( seed );
+            dist += diff.z * diff.z;
+          }
+
+          result += ( diff *= dist ) * r;
+
         }
       }
     }
+
+    result.z *= ( 1.0 - is2D );
+
     return result;
+
   }
-  vec2 link( float count, int id1, vec2 p1, vec2 v1 ) {
-    vec2 result = vec2( 0.0 );
+
+  vec3 link( float count, int id1, vec3 p1, vec3 v1 ) {
+
+    vec3 result = vec3( 0.0 );
+
     for ( float i = 0.0; i < count; i += 1.0 ) {
+
       float uvx = mod( i, size ) / size;
       float uvy = floor( i / size ) / size;
+
       vec4 edge = texture2D( textureEdges, vec2( uvx, uvy ) );
+
       vec2 source = edge.xy;
       vec2 target = edge.zw;
+
       int si = getIndex( source );
       float siF = float( si );
-      vec2 sv = getVelocity( source );
-      vec2 sp = getPosition( source );
+      vec3 sv = getVelocity( source );
+      vec3 sp = getPosition( source );
+
       int ti = getIndex( target );
       float tiF = float( ti );
-      vec2 tv = getVelocity( target );
-      vec2 tp = getPosition( target );
-      float x = tp.x + tv.x - ( sp.x + sv.x );
-      float y = tp.y + tv.y - ( sp.y + sv.y );
+      vec3 tv = getVelocity( target );
+      vec3 tp = getPosition( target );
+
+      vec3 diff = tp + tv - ( sp + sv );
+      diff.z *= 1.0 - is2D;
+
+      vec3 mag = abs( diff );
       float seed = float( si + ti );
-      if ( abs( x ) <= 0.1 ) {
-        x = jiggle( seed );
-      }
-      if ( abs( y ) <= 0.1 ) {
-        y = jiggle( seed );
-      }
+
       float bias = 0.5;
-      float l = sqrt( x * x + y * y );
-      l = stiffness * ( l - springLength ) / l;
-      x *= l;
-      y *= l;
+      float dist = length( diff );
+
+      dist = stiffness * ( dist - springLength ) / dist;
+      diff *= dist;
+
       if ( id1 == ti ) {
-        result -= vec2( x, y ) * bias;
+        result -= diff * bias;
       } else if ( id1 == si ) {
-        result += vec2( x, y ) * bias;
+        result += diff * bias;
       }
+
     }
+
+    result.z *= 1.0 - is2D;
+
     return result;
+
   }
-  vec2 charge( float count, int id1, vec2 p1, vec2 v1 ) {
-    vec2 result = vec2( 0.0 );
+
+  vec3 charge( float count, int id1, vec3 p1, vec3 v1 ) {
+
+    vec3 result = vec3( 0.0 );
+
     for ( float i = 0.0; i < count; i += 1.0 ) {
+
       float uvx = mod( i, size ) / size;
       float uvy = floor( i / size ) / size;
+
       vec2 uv2 = vec2( uvx, uvy );
       int id2 = getIndex( uv2 );
-      vec2 v2 = getVelocity( uv2 );
-      vec2 p2 = getPosition( uv2 );
-      vec2 diff = ( p2 + v2 ) - ( p1 + v1 );
+      vec3 v2 = getVelocity( uv2 );
+      vec3 p2 = getPosition( uv2 );
+
+      vec3 diff = ( p2 + v2 ) - ( p1 + v1 );
+      diff.z *= 1.0 - is2D;
+
       float dist = length( diff );
-      float magnitude = repulsion / dist;
-      float cutoff = ( 1.0 - step( springLength * 10.0, dist ) );
-      vec2 dir = normalize( diff );
+      float mag = repulsion / dist;
+
+      vec3 dir = normalize( diff );
+
       if ( id1 != id2 ) {
-        result += dir * magnitude;// * cutoff;
+        result += dir * mag;
       }
+
     }
+
+    result.z *= 1.0 - is2D;
+
     return result;
+
   }
-  vec2 center( vec2 p1 ) {
-    vec2 result = - p1 * gravity * 0.1;
-    return result;
+
+  vec3 center( vec3 p1 ) {
+    return - p1 * gravity * 0.1;
   }
+
   void main() {
+
     vec2 uv = gl_FragCoord.xy / resolution.xy;
     int id1 = getIndex( uv );
-    vec2 p1 = getPosition( uv );
-    vec2 v1 = getVelocity( uv );
-    vec2 a1 = getAcceleration( uv );
+
+    vec3 p1 = getPosition( uv );
+    vec3 v1 = getVelocity( uv );
+
     // Calculate Acceleration
     // 1.
-    vec2 a = collide( nodeAmount, id1, p1, v1 );
+    vec3 a = collide( nodeAmount, id1, p1, v1 );
     a *= 1.0 - step( nodeAmount, float( id1 ) );
+
     // 2.
-    vec2 b = link( edgeAmount, id1, p1, v1 );
+    vec3 b = link( edgeAmount, id1, p1, v1 );
     b *= 1.0 - step( edgeAmount, float( id1 ) );
+
     // 3.
-    vec2 c = charge( nodeAmount, id1, p1, v1 );
+    vec3 c = charge( nodeAmount, id1, p1, v1 );
     c *= 1.0 - step( nodeAmount, float( id1 ) );
+
     // 4.
-    vec2 d = center( p1 );
-    vec2 acceleration = a + b + c + d;
+    vec3 d = center( p1 );
+    vec3 acceleration = a + b + c + d;
+
     // Calculate Velocity
-    vec2 velocity = ( v1 + ( acceleration * timeStep ) ) * damping;
+    vec3 velocity = ( v1 + ( acceleration * timeStep ) ) * damping;
     velocity = clamp( velocity, - maxSpeed, maxSpeed );
-    gl_FragColor = vec4( velocity, acceleration );
+    velocity.z *= 1.0 - is2D;
+
+    gl_FragColor = vec4( velocity, 0.0 );
+
   }
 `;
 var points = {
   vertexShader: `
+    uniform float sizeAttenuation;
+    uniform float frustumSize;
+    uniform float is2D;
     uniform float nodeRadius;
+    uniform float nodeScale;
     uniform sampler2D texturePositions;
+
     varying vec2 vUv;
+    varying float zDist;
+
     void main() {
+
       vec4 texel = texture2D( texturePositions, position.xy );
       vec3 vPosition = texel.xyz;
-      gl_PointSize = nodeRadius * 5.0;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4( vPosition, 1.0 );
+      vPosition.z *= 1.0 - is2D;
+
+      vec4 mvPosition = modelViewMatrix * vec4( vPosition, 1.0 );
+
+      gl_PointSize = nodeRadius * nodeScale;
+      gl_PointSize *= mix( 1.0, frustumSize / - mvPosition.z, sizeAttenuation );
+
+      zDist = 1.0 / - mvPosition.z;
+
+      gl_Position = projectionMatrix * mvPosition;
+
     }
   `,
   fragmentShader: `
+    uniform float sizeAttenuation;
+    uniform float frustumSize;
     uniform vec3 color;
     uniform float size;
+
     varying vec2 vUv;
+    varying float zDist;
+
     float circle( vec2 uv, vec2 pos, float rad ) {
+
       float d = length( pos - uv ) - rad;
       float t = clamp( d, 0.0, 1.0 );
-      return smoothstep(0.33, 0.66, 1.0 - t);
+
+      float viewRange = smoothstep( 0.0, frustumSize * 0.001, abs( zDist ) );
+      float taper = 0.15 * viewRange + 0.015;
+      taper = mix( taper, 0.15, sizeAttenuation );
+
+      return smoothstep( 0.5 - taper, 0.5 + taper, 1.0 - t );
+
     }
+
     void main() {
+
       vec2 uv = 2.0 * vec2( gl_PointCoord ) - 1.0;
       float t = circle( uv, vec2( 0.0, 0.0 ), 0.5 );
       float id = size * vUv.x + ( size * size * vUv.y );
+
       gl_FragColor = vec4( color, t );
+
     }
   `
 };
 var links = {
   vertexShader: `
+    uniform float is2D;
     uniform sampler2D texturePositions;
+
     void main() {
+
       vec4 texel = texture2D( texturePositions, position.xy );
       vec3 vPosition = texel.xyz;
+      vPosition.z *= 1.0 - is2D;
+
       gl_Position = projectionMatrix * modelViewMatrix * vec4( vPosition, 1.0 );
+
     }
   `,
   fragmentShader: `
     uniform vec3 color;
+
     void main() {
       gl_FragColor = vec4( color.rgb, 1.0 );
     }
@@ -18670,7 +18775,11 @@ var Points2 = class extends Points {
     geometry.setAttribute("position", new Float32BufferAttribute(vertices, 3));
     const material = new ShaderMaterial({
       uniforms: {
+        is2D: uniforms.is2D,
+        sizeAttenuation: uniforms.sizeAttenuation,
+        frustumSize: uniforms.frustumSize,
         nodeRadius: uniforms.nodeRadius,
+        nodeScale: uniforms.nodeScale,
         texturePositions: { value: null },
         size: { value: size },
         color: uniforms.pointColor
@@ -18708,6 +18817,7 @@ var Links = class extends LineSegments {
     geometry.setAttribute("position", new Float32BufferAttribute(vertices, 3));
     const material = new ShaderMaterial({
       uniforms: {
+        is2D: uniforms.is2D,
         texturePositions: { value: null },
         color: uniforms.linkColor
       },
@@ -18722,14 +18832,13 @@ var Links = class extends LineSegments {
 };
 
 // src/index.js
-var frustumSize = 100;
 var ForceDirectedGraph = class extends Group {
   constructor(renderer, data) {
     super();
     const size = getPotSize(Math.max(data.nodes.length, data.edges.length));
     const gpgpu = new GPUComputationRenderer(size, size, renderer);
-    console.log(size);
     const uniforms = {
+      is2D: { value: false },
       time: { value: 0 },
       size: { value: size },
       maxSpeed: { value: 10 },
@@ -18740,6 +18849,9 @@ var ForceDirectedGraph = class extends Group {
       stiffness: { value: 0.1 },
       gravity: { value: 0.1 },
       nodeRadius: { value: 1 },
+      nodeScale: { value: 8 },
+      sizeAttenuation: { value: true },
+      frustumSize: { value: 100 },
       pointColor: { value: new Color(0.3, 0.3, 0.3) },
       linkColor: { value: new Color(0.9, 0.9, 0.9) }
     };
@@ -18751,19 +18863,21 @@ var ForceDirectedGraph = class extends Group {
     let k = 0;
     for (let i = 0; i < textures.positions.image.data.length; i += 4) {
       const v = 0;
-      const radius = frustumSize * 0.01 * Math.sqrt(0.5 + k);
+      const radius = uniforms.frustumSize.value * 0.01 * Math.sqrt(0.5 + k);
       const theta = k / 100 * Math.PI * 2;
+      const x = radius * Math.cos(theta);
+      const y = radius * Math.sin(theta);
       const z = 0;
       if (k < data.nodes.length) {
-        textures.positions.image.data[i + 0] = radius * Math.cos(theta);
-        textures.positions.image.data[i + 1] = radius * Math.sin(theta);
+        textures.positions.image.data[i + 0] = x;
+        textures.positions.image.data[i + 1] = y;
         textures.positions.image.data[i + 2] = z;
         textures.positions.image.data[i + 3] = 0;
       } else {
-        textures.positions.image.data[i + 0] = frustumSize * 2;
-        textures.positions.image.data[i + 1] = frustumSize * 2;
-        textures.positions.image.data[i + 2] = frustumSize * 2;
-        textures.positions.image.data[i + 3] = frustumSize * 2;
+        textures.positions.image.data[i + 0] = uniforms.frustumSize.value * 2;
+        textures.positions.image.data[i + 1] = uniforms.frustumSize.value * 2;
+        textures.positions.image.data[i + 2] = uniforms.frustumSize.value * 2;
+        textures.positions.image.data[i + 3] = uniforms.frustumSize.value * 2;
       }
       textures.velocities.image.data[i + 0] = v;
       textures.velocities.image.data[i + 1] = v;
@@ -18790,7 +18904,9 @@ var ForceDirectedGraph = class extends Group {
     };
     gpgpu.setVariableDependencies(variables.positions, [variables.positions, variables.velocities]);
     gpgpu.setVariableDependencies(variables.velocities, [variables.velocities, variables.positions]);
+    variables.positions.material.uniforms.is2D = uniforms.is2D;
     variables.positions.material.uniforms.timeStep = uniforms.timeStep;
+    variables.velocities.material.uniforms.is2D = uniforms.is2D;
     variables.velocities.material.uniforms.size = uniforms.size;
     variables.velocities.material.uniforms.time = uniforms.time;
     variables.velocities.material.uniforms.nodeRadius = uniforms.nodeRadius;
@@ -18842,7 +18958,7 @@ var ForceDirectedGraph = class extends Group {
     return this.userData.size;
   }
   setFrustumSize(size) {
-    this.userData.frustumSize = size;
+    this.userData.frustumSize.value = size;
   }
   getNodeCount() {
     const { variables } = this.userData;
