@@ -262,6 +262,7 @@ const points = {
     }
   `,
   fragmentShader: `
+    uniform float sizeAttenuation;
     uniform float frustumSize;
     uniform vec3 color;
     uniform float size;
@@ -270,11 +271,16 @@ const points = {
     varying float zDist;
 
     float circle( vec2 uv, vec2 pos, float rad ) {
+
       float d = length( pos - uv ) - rad;
       float t = clamp( d, 0.0, 1.0 );
+
       float viewRange = smoothstep( 0.0, frustumSize * 0.001, abs( zDist ) );
       float taper = 0.15 * viewRange + 0.015;
+      taper = mix( taper, 0.15, sizeAttenuation );
+
       return smoothstep( 0.5 - taper, 0.5 + taper, 1.0 - t );
+
     }
 
     void main() {
