@@ -15,13 +15,13 @@ Visit the hosted [project page](https://jonobr1.com/force-directed-graph/) for a
 ## Usage
 
 ```
-npm install --save force-directed-graph
+npm install --save @jonobr1/force-directed-graph
 ```
 
 ### Import in ES6 environment
 
 ```javascript
-import { ForceDirectedGraph } from 'force-directed-graph';
+import { ForceDirectedGraph } from '@jonobr1/force-directed-graph';
 ```
 
 ### Load Script in HTML file:
@@ -39,14 +39,14 @@ This example creates 512 nodes and links them randomly like big snakes.
       {
         "imports": {
           "three": "https://cdn.skypack.dev/three@latest",
-          "force-directed-graph": "https://cdn.skypack.dev/force-directed-graph@latest"
+          "@jonobr1/force-directed-graph": "https://cdn.skypack.dev/force-directed-graph@latest"
         }
       }
     </script>
     <script type="module">
 
       import * as THREE from 'three';
-      import { ForceDirectedGraph } from 'force-directed-graph';
+      import { ForceDirectedGraph } from '@jonobr1/force-directed-graph';
 
       const renderer = new THREE.WebGLRenderer({ antialias: true });
       const scene = new THREE.Scene();
