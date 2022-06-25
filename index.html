@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf8">
+
+    <!-- Primary Meta Tags -->
+    <title>FDG — Force Directed Graph</title>
+    <meta name="title" content="FDG — Force Directed Graph">
+    <meta name="description" content="GPU supercharged attraction-graph visualizations for the web built on top of Three.js.">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://jonobr1.com/force-directed-graph">
+    <meta property="og:title" content="FDG — Force Directed Graph">
+    <meta property="og:description" content="GPU supercharged attraction-graph visualizations for the web built on top of Three.js.">
+    <meta property="og:image" content="https://jonobr1.com/force-directed-graph/thumbnail.png">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://metatags.io/">
+    <meta property="twitter:title" content="FDG — Force Directed Graph">
+    <meta property="twitter:description" content="GPU supercharged attraction-graph visualizations for the web built on top of Three.js.">
+    <meta property="twitter:image" content="https://jonobr1.com/force-directed-graph/thumbnail.png">
+
+    <style>
+
+      * { margin: 0; padding: 0; }
+      body {
+        font-family: "Lucida Bright", "Times New Roman", Times, serif;
+        font-size: 20px;
+        line-height: 1.5;
+        color: #333;
+      }
+      .symbols {
+        font-family: webdings;
+      }
+      svg, canvas {
+        display: block;
+      }
+      div#stage {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        overflow: hidden;
+      }
+      div.content {
+        padding: 20px;
+      }
+      p {
+        padding-top: 20px;
+      }
+      div.scripts {
+        display: none;
+      }
+      div.column {
+        display: inline-block;
+        position: relative;
+        vertical-align: top;
+        min-width: 300px;
+      }
+      a {
+        color: #333;
+        text-decoration: none;
+        border-bottom: 1px solid #111;
+      }
+      h1, h2, h3, h4, h5, h6 {
+        font-weight: 100;
+      }
+      p {
+        max-width: 600px;
+      }
+      p + p {
+        margin-top: 10px;
+      }
+      ul {
+        margin-top: 20px;
+        margin-bottom: 20px;
+      }
+      .explanation {
+        cursor: help;
+      }
+      .action {
+        font-style: italic;
+        cursor: pointer;
+        border-bottom: 1px solid #333;
+      }
+      .nota-bene {
+        font-style: italic;
+        border-left: 4px solid orange;
+        padding-left: 10px;
+        margin-left: -10px;
+      }
+      .hidden {
+        display: none;
+      }
+
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <div class="column"></div>
+    <div class="content column">
+      <h1 id="title">
+        Force Directed Graph
+      </h1>
+      <p>
+        GPU supercharged attraction-graph visualizations for the web built on top of Three.js. Importable as a Three.js ES6 module or a fully declarative React Component.
+      </p>
+      <div id="gui"></div>
+    </div>
+    <div class="scripts">
+      <script type="importmap">
+        {
+          "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three/build/three.module.js",
+            "three/examples/jsm/misc/GPUComputationRenderer.js": "https://cdn.jsdelivr.net/npm/three/examples/jsm/misc/GPUComputationRenderer.js",
+            "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui/dist/lil-gui.esm.js"
+          }
+        }
+      </script>
+      <script type="module">
+
+        import * as THREE from 'three';
+        import { GUI } from 'lil-gui';
+        import { ForceDirectedGraph } from './src/index.js';
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera();
+
+        camera.position.z = 250;
+
+        const amount = 1000;
+        const data = {
+          nodes: [],
+          edges: []
+        }
+
+        for (let i = 0; i < amount; i++) {
+          const target = Math.floor(Math.random() * amount);
+          const source = Math.floor(Math.random() * target);
+          data.nodes.push({ id: i });
+          if (i > 0 && Math.random() > 0.5) {
+            data.edges.push({ target: i, source: i - 1 });
+          } else if (target !== source) {
+            data.edges.push({
+              target,
+              source
+            });
+          }
+        }
+
+        const gui = new GUI();
+        const fdg = new ForceDirectedGraph(renderer, data);
+
+        [
+          { name: 'maxSpeed', min: 0, max: 25, step: 1 },
+          { name: 'timeStep', min: 0, max: 1, step: 0.1 },
+          { name: 'damping', min: 0, max: 1, step: 0.1 },
+          { name: 'repulsion', min: -2, max: 2, step: 0.1 },
+          { name: 'springLength', min: 0, max: 10, step: 0.5 },
+          { name: 'stiffness', min: 0, max: 1, step: 0.1 },
+          { name: 'nodeRadius', min: 0, max: 5, step: 0.5 },
+          { name: 'gravity', min: 0, max: 1, step: 0.1 }
+        ].forEach(function({ name, min, max, step }) {
+          const uniforms = fdg.getUniforms();
+          const obj = uniforms[name];
+          gui.add(obj, 'value', min, max, step).name(name);
+        });
+
+        gui.addColor(fdg.getUniforms().pointColor, 'value').name('pointColor')
+        gui.addColor(fdg.getUniforms().linkColor, 'value').name('linkColor');
+
+        scene.add(fdg);
+
+        setup();
+
+        function setup() {
+          renderer.setClearColor('#fff');
+          document.querySelector('#stage').appendChild(renderer.domElement);
+          window.addEventListener('resize', resize, false);
+          resize();
+          renderer.setAnimationLoop(render);
+        }
+
+        function resize() {
+
+          const width = window.innerWidth;
+          const height = window.innerHeight;
+
+          renderer.setSize(width, height);
+          camera.aspect = width / height;
+          camera.updateProjectionMatrix();
+
+        }
+
+        function render(elapsed) {
+          fdg.update(elapsed);
+          renderer.render(scene, camera);
+        }
+
+      </script>
+    </div>
+  </body>
+</html>

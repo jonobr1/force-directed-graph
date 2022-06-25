@@ -1,0 +1,55 @@
+{
+  "name": "force-directed-graph",
+  "version": "1.0.0",
+  "description": "GPU supercharged attraction-graph visualizations for the web built on top of Three.js",
+  "main": "src/index.js",
+  "module": "src/index.js",
+  "types": "types.d.ts",
+  "scripts": {
+    "dev": "esbuild --servedir=. --serve=8080",
+    "build": "node ./utils/build.js",
+    "lint": "eslint . --fix",
+    "types": "tsc --outFile types.d.ts"
+  },
+  "files": [
+    "package.json",
+    "src",
+    "build",
+    "readme.md",
+    "index.html"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jonobr1/force-directed-graph.git"
+  },
+  "keywords": [
+    "force",
+    "directed",
+    "graph",
+    "physics",
+    "gpgpu",
+    "data",
+    "visualization",
+    "dataviz",
+    "2d",
+    "3d",
+    "three.js",
+    "webgl"
+  ],
+  "author": {
+    "name": "jonobr1",
+    "url": "http://jonobr1.com/"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jonobr1/force-directed-graph/issues"
+  },
+  "homepage": "https://github.com/jonobr1/force-directed-graph#readme",
+  "devDependencies": {
+    "esbuild": "^0.14.47",
+    "eslint": "^8.18.0",
+    "react": "^18.2.0",
+    "three": "^0.141.0",
+    "typescript": "^4.7.4"
+  }
+}
