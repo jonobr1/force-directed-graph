@@ -21,8 +21,6 @@ class ForceDirectedGraph extends Group {
     const size = getPotSize(Math.max(data.nodes.length, data.edges.length));
     const gpgpu = new GPUComputationRenderer(size, size, renderer);
 
-    console.log(size);
-
     const uniforms = {
       time: { value: 0 },
       size: { value: size },

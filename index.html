@@ -106,7 +106,13 @@
         Force Directed Graph
       </h1>
       <p>
-        GPU supercharged attraction-graph visualizations for the web built on top of Three.js. Importable as a Three.js ES6 module or a fully declarative React Component.
+        GPU supercharged attraction-graph visualizations for the web built on top of <a href="http://threejs.org">Three.js</a>. Importable as an ES6 module or a fully declarative <s>React Component</s>.
+      </p>
+      <p id="post-scriptum">
+        Created <span id="created-date"></span> and updated <span id="updated-date"></span>.
+        <br />
+        A free and open source tool by <a href="http://jono.fyi/" target="_blank">Jono Brandel</a>
+        <br />
       </p>
       <div id="gui"></div>
     </div>
@@ -136,7 +142,7 @@
         const data = {
           nodes: [],
           edges: []
-        }
+        };
 
         for (let i = 0; i < amount; i++) {
           const target = Math.floor(Math.random() * amount);
@@ -178,6 +184,7 @@
         setup();
 
         function setup() {
+          updateStats();
           renderer.setClearColor('#fff');
           document.querySelector('#stage').appendChild(renderer.domElement);
           window.addEventListener('resize', resize, false);
@@ -199,6 +206,38 @@
         function render(elapsed) {
           fdg.update(elapsed);
           renderer.render(scene, camera);
+        }
+
+        function updateStats() {
+
+          var xhr = new XMLHttpRequest();
+          xhr.open('GET', 'https://api.github.com/repos/jonobr1/force-directed-graph');
+          xhr.onreadystatechange = function() {
+            if (!(xhr.readyState === 4 && xhr.status === 200)) {
+              return;
+            }
+            var resp = JSON.parse(xhr.responseText);
+            document.querySelector('#updated-date').textContent = formatDate(resp.pushed_at);
+            document.querySelector('#created-date').textContent = formatDate(resp.created_at);
+          };
+          xhr.send();
+
+        }
+
+        function formatDate(time) {
+          var date = new Date(time);
+          var suffices = ['st', 'nd', 'rd'];
+          suffices.getIndex = function(n) {
+            var index = parseInt((n + '').slice(-1));
+            return index - 1;
+          };
+          var months = ['January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'];
+          return [
+            months[date.getMonth()],
+            date.getDate() + ',',
+            date.getFullYear()
+          ].join(' ')
         }
 
       </script>
