@@ -69,11 +69,7 @@ This example creates 512 nodes and links them randomly like big snakes.
         const source = Math.floor(Math.random() * target);
 
         data.nodes.push({ id: i });
-
-        if (i > 0 && Math.random() > 0.5) {
-          // Makes long "snake" links
-          data.edges.push({ target: i, source: i - 1 });
-        }
+        data.edges.push({ target: Math.floor(Math.random() * i), source: i });
 
       }
 
