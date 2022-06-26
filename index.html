@@ -170,6 +170,8 @@
         const gui = new GUI();
         const fdg = new ForceDirectedGraph(renderer, data);
 
+        gui.close();
+
         [
           { name: 'maxSpeed', min: 0, max: 25, step: 1 },
           { name: 'timeStep', min: 0, max: 1, step: 0.1 },
