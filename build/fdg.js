@@ -18836,7 +18836,7 @@
   };
 
   // src/index.js
-  var ForceDirectedGraph = class extends Group {
+  var ForceDirectedGraph =  window.ForceDirectedGraph = class extends Group {
     constructor(renderer, data) {
       super();
       const size = getPotSize(Math.max(data.nodes.length, data.edges.length));
