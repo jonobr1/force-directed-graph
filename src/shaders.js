@@ -55,7 +55,7 @@ const velocitiesFragment = `
     return ( random( vec2( index, time ) ) - 0.5 ) * 0.000001;
   }
 
-  vec3 collide( float count, int id1, vec3 p1, vec3 v1 ) {
+  vec3 collide( float i, int id1, vec3 p1, vec3 v1 ) {
 
     float r  = 2.0 * nodeRadius;
     float r2 = nodeRadius * nodeRadius;
@@ -63,43 +63,40 @@ const velocitiesFragment = `
     vec3 p = p1 + v1;
     vec3 result = vec3( 0.0 );
 
-    for ( float i = 0.0; i < count; i += 1.0 ) {
+    float uvx = mod( i, size ) / size;
+    float uvy = floor( i / size ) / size;
 
-      float uvx = mod( i, size ) / size;
-      float uvy = floor( i / size ) / size;
+    vec2 uv2 = vec2( uvx, uvy );
 
-      vec2 uv2 = vec2( uvx, uvy );
+    int id2 = getIndex( uv2 );
 
-      int id2 = getIndex( uv2 );
+    vec3 v2 = getVelocity( uv2 );
+    vec3 p2 = getPosition( uv2 );
 
-      vec3 v2 = getVelocity( uv2 );
-      vec3 p2 = getPosition( uv2 );
+    if ( id2 != id1 ) {
 
-      if ( id2 != id1 ) {
+      vec3 diff = p - ( p2 + v2 );
+      vec3 mag = abs( diff );
+      float dist = length( diff );
+      float seed = float( id1 + id2 );
 
-        vec3 diff = p - ( p2 + v2 );
-        vec3 mag = abs( diff );
-        float dist = length( diff );
-        float seed = float( id1 + id2 );
+      if ( dist < r2 ) {
 
-        if ( dist < r2 ) {
-
-          if ( mag.x <= 0.1 ) {
-            diff.x = jiggle( seed );
-            dist += diff.x * diff.x;
-          }
-          if ( mag.y <= 0.1 ) {
-            diff.y = jiggle( seed );
-            dist += diff.y * diff.y;
-          }
-          if ( mag.z <= 0.1 && is2D <= 0.0 ) {
-            diff.z = jiggle( seed );
-            dist += diff.z * diff.z;
-          }
-
-          result += ( diff *= dist ) * r;
-
+        if ( mag.x <= 0.1 ) {
+          diff.x = jiggle( seed );
+          dist += diff.x * diff.x;
         }
+        if ( mag.y <= 0.1 ) {
+          diff.y = jiggle( seed );
+          dist += diff.y * diff.y;
+        }
+        if ( mag.z <= 0.1 && is2D <= 0.0 ) {
+          diff.z = jiggle( seed );
+          dist += diff.z * diff.z;
+        }
+
+        result += ( diff *= dist ) * r;
+
       }
     }
 
@@ -109,48 +106,44 @@ const velocitiesFragment = `
 
   }
 
-  vec3 link( float count, int id1, vec3 p1, vec3 v1 ) {
+  vec3 link( float i, int id1, vec3 p1, vec3 v1 ) {
 
     vec3 result = vec3( 0.0 );
 
-    for ( float i = 0.0; i < count; i += 1.0 ) {
+    float uvx = mod( i, size ) / size;
+    float uvy = floor( i / size ) / size;
 
-      float uvx = mod( i, size ) / size;
-      float uvy = floor( i / size ) / size;
+    vec4 edge = texture2D( textureEdges, vec2( uvx, uvy ) );
 
-      vec4 edge = texture2D( textureEdges, vec2( uvx, uvy ) );
+    vec2 source = edge.xy;
+    vec2 target = edge.zw;
 
-      vec2 source = edge.xy;
-      vec2 target = edge.zw;
+    int si = getIndex( source );
+    float siF = float( si );
+    vec3 sv = getVelocity( source );
+    vec3 sp = getPosition( source );
 
-      int si = getIndex( source );
-      float siF = float( si );
-      vec3 sv = getVelocity( source );
-      vec3 sp = getPosition( source );
+    int ti = getIndex( target );
+    float tiF = float( ti );
+    vec3 tv = getVelocity( target );
+    vec3 tp = getPosition( target );
 
-      int ti = getIndex( target );
-      float tiF = float( ti );
-      vec3 tv = getVelocity( target );
-      vec3 tp = getPosition( target );
+    vec3 diff = tp + tv - ( sp + sv );
+    diff.z *= 1.0 - is2D;
 
-      vec3 diff = tp + tv - ( sp + sv );
-      diff.z *= 1.0 - is2D;
+    vec3 mag = abs( diff );
+    float seed = float( si + ti );
 
-      vec3 mag = abs( diff );
-      float seed = float( si + ti );
+    float bias = 0.5;
+    float dist = length( diff );
 
-      float bias = 0.5;
-      float dist = length( diff );
+    dist = stiffness * ( dist - springLength ) / dist;
+    diff *= dist;
 
-      dist = stiffness * ( dist - springLength ) / dist;
-      diff *= dist;
-
-      if ( id1 == ti ) {
-        result -= diff * bias;
-      } else if ( id1 == si ) {
-        result += diff * bias;
-      }
-
+    if ( id1 == ti ) {
+      result -= diff * bias;
+    } else if ( id1 == si ) {
+      result += diff * bias;
     }
 
     result.z *= 1.0 - is2D;
@@ -159,32 +152,28 @@ const velocitiesFragment = `
 
   }
 
-  vec3 charge( float count, int id1, vec3 p1, vec3 v1 ) {
+  vec3 charge( float i, int id1, vec3 p1, vec3 v1 ) {
 
-    vec3 result = vec3( 0.0 );
+  vec3 result = vec3( 0.0 );
 
-    for ( float i = 0.0; i < count; i += 1.0 ) {
+    float uvx = mod( i, size ) / size;
+    float uvy = floor( i / size ) / size;
 
-      float uvx = mod( i, size ) / size;
-      float uvy = floor( i / size ) / size;
+    vec2 uv2 = vec2( uvx, uvy );
+    int id2 = getIndex( uv2 );
+    vec3 v2 = getVelocity( uv2 );
+    vec3 p2 = getPosition( uv2 );
 
-      vec2 uv2 = vec2( uvx, uvy );
-      int id2 = getIndex( uv2 );
-      vec3 v2 = getVelocity( uv2 );
-      vec3 p2 = getPosition( uv2 );
+    vec3 diff = ( p2 + v2 ) - ( p1 + v1 );
+    diff.z *= 1.0 - is2D;
 
-      vec3 diff = ( p2 + v2 ) - ( p1 + v1 );
-      diff.z *= 1.0 - is2D;
+    float dist = length( diff );
+    float mag = repulsion / dist;
 
-      float dist = length( diff );
-      float mag = repulsion / dist;
+    vec3 dir = normalize( diff );
 
-      vec3 dir = normalize( diff );
-
-      if ( id1 != id2 ) {
-        result += dir * mag;
-      }
-
+    if ( id1 != id2 ) {
+      result += dir * mag;
     }
 
     result.z *= 1.0 - is2D;
@@ -205,17 +194,31 @@ const velocitiesFragment = `
     vec3 p1 = getPosition( uv );
     vec3 v1 = getVelocity( uv );
 
-    // Calculate Acceleration
-    // 1.
-    vec3 a = collide( nodeAmount, id1, p1, v1 );
+    vec3 a = vec3( 0.0 ),
+         b = vec3( 0.0 ),
+         c = vec3( 0.0 );
+
+    for ( float i = 0.0; i < max( nodeAmount, edgeAmount ); i += 1.0 ) {
+
+      // 1.
+      if ( i < nodeAmount ) {
+        a += collide( i, id1, p1, v1 );
+      }
+
+      // 2.
+      if ( i < edgeAmount ) {
+        b += link( i, id1, p1, v1 );
+      }
+
+      // 3.
+      if ( i < nodeAmount) {
+        c += charge( i, id1, p1, v1 );
+      }
+
+    }
+
     a *= 1.0 - step( nodeAmount, float( id1 ) );
-
-    // 2.
-    vec3 b = link( edgeAmount, id1, p1, v1 );
     b *= 1.0 - step( edgeAmount, float( id1 ) );
-
-    // 3.
-    vec3 c = charge( nodeAmount, id1, p1, v1 );
     c *= 1.0 - step( nodeAmount, float( id1 ) );
 
     // 4.
