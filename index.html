@@ -113,6 +113,11 @@
       <p>
         GPU supercharged attraction-graph visualizations for the web built on top of <a href="http://threejs.org">Three.js</a>. Importable as an ES6 module or a fully declarative <s>React Component</s><sup>Pending</sup>. In this demo you can click and drag the visualization to rotate the camera.
       </p>
+      <p>
+        Check out this demo with different particle counts:
+        <br />
+        <a href="/?amount=250">250 Nodes</a> &middot; <a href="/?amount=1000">1k Nodes</a> &middot; <a href="/?amount=5000">5k Nodes</a> &middot; <a href="/?amount=10000">10k Nodes</a>
+      </p>
       <p id="post-scriptum">
         Created <span id="created-date"></span> and updated <span id="updated-date"></span>.
         <br />
@@ -147,7 +152,8 @@
         controls.enableDamping = true;
         camera.position.z = 250;
 
-        const amount = 1000;
+        const qp = new URLSearchParams(window.location.search);
+        const amount = +(qp.get('amount') || 1000);
         const data = {
           nodes: [],
           edges: []
