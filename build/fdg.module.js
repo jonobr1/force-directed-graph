@@ -18916,6 +18916,12 @@ var ForceDirectedGraph = class extends Group {
     const { variables } = this.userData;
     return variables.velocities.material.uniforms.edgeAmount.value;
   }
+  setBlendMode(mode) {
+    for (let i = 0; i < this.children.length; i++) {
+      const child = this.children[i];
+      child.material.blending = mode;
+    }
+  }
 };
 __publicField(ForceDirectedGraph, "getPotSize", getPotSize);
 export {

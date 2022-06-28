@@ -204,6 +204,13 @@ class ForceDirectedGraph extends Group {
     return variables.velocities.material.uniforms.edgeAmount.value;
   }
 
+  setBlendMode(mode) {
+    for (let i = 0; i < this.children.length; i++) {
+      const child = this.children[i];
+      child.material.blending = mode;
+    }
+  }
+
 }
 
 export { ForceDirectedGraph };
