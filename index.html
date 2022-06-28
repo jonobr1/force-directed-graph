@@ -152,6 +152,8 @@
         import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
         import { ForceDirectedGraph } from './src/index.js';
 
+        let INTERSECTED = null;
+
         const BLEND_MODES = {
           Normal: THREE.NormalBlending,
           Additive: THREE.AdditiveBlending,
@@ -163,6 +165,9 @@
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera();
         const controls = new OrbitControls(camera, renderer.domElement);
+
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2();
 
         controls.enableDamping = true;
         camera.position.z = 250;
@@ -233,6 +238,7 @@
           renderer.setClearColor('#fff');
           document.querySelector('#stage').appendChild(renderer.domElement);
           window.addEventListener('resize', resize, false);
+          window.addEventListener('pointermove', pointermove, false);
           resize();
           renderer.setAnimationLoop(render);
         }
@@ -248,10 +254,30 @@
 
         }
 
+        function pointermove(e) {
+          pointer.x = 2 * (e.clientX / window.innerWidth) - 1;
+          pointer.y = - 2 * (e.clientY / window.innerHeight) + 1;
+        }
+
         function render(elapsed) {
+
           controls.update();
+
+          raycaster.setFromCamera(pointer, camera);
+
+          const intersections = raycaster.intersectObject(fdg.children[0]);
+
+          if (intersections.length > 0) {
+            if (INTERSECTED !== intersections[0].index) {
+              INTERSECTED = intersections[0].index;
+            }
+          } else if (INTERSECTED) {
+            INTERSECTED = null;
+          }
+
           fdg.update(elapsed);
           renderer.render(scene, camera);
+
         }
 
         function reset() {
