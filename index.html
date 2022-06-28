@@ -171,7 +171,7 @@
         const amount = +(qp.get('amount') || 1000);
         const data = {
           nodes: [],
-          edges: []
+          links: []
         };
 
         for (let i = 0; i < amount; i++) {
@@ -179,62 +179,69 @@
           const target = Math.floor(Math.random() * i);
           const source = i;
           if (i > 0 && Math.random() > 0.5) {
-            data.edges.push({ target: i, source: i - 1 });
+            data.links.push({ target: i, source: i - 1 });
           } else if (target !== source) {
-            data.edges.push({
+            data.links.push({
               target,
               source
             });
           }
         }
 
-        const gui = new GUI();
-        const fdg = new ForceDirectedGraph(renderer, data);
-
-        gui.close();
-
-        [
-          { name: 'decay', min: 0, max: 1, step: 0.001 },
-          { name: 'maxSpeed', min: 0, max: 25, step: 1 },
-          { name: 'timeStep', min: 0, max: 2, step: 0.1 },
-          { name: 'damping', min: 0, max: 1, step: 0.1 },
-          { name: 'repulsion', min: -2, max: 2, step: 0.1 },
-          { name: 'springLength', min: 0, max: 10, step: 0.5 },
-          { name: 'stiffness', min: 0, max: 1, step: 0.1 },
-          { name: 'nodeRadius', min: 0, max: 5, step: 0.5 },
-          { name: 'nodeScale', min: 0, max: 50, step: 0.1 },
-          { name: 'gravity', min: 0, max: 1, step: 0.1 }
-        ].forEach(function({ name, min, max, step }) {
-
-          const uniforms = fdg.getUniforms();
-          const obj = uniforms[name];
-
-          gui.add(obj, 'value', min, max, step).name(name).onChange(reset);
-
-        });
-
-        gui.add(fdg.getUniforms().sizeAttenuation, 'value')
-          .name('sizeAttenuation').onChange(reset);
-        gui.add(fdg.getUniforms().is2D, 'value').name('2D').onChange(reset);
-        gui.add({ blending: THREE.NormalBlending }, 'blending', BLEND_MODES)
-          .onChange(function(v) {
-            fdg.setBlendMode(v);
-            reset();
-          });
-        gui.addColor(fdg.getUniforms().pointColor, 'value').name('pointColor')
-        gui.addColor(fdg.getUniforms().linkColor, 'value').name('linkColor');
-
-        scene.add(fdg);
+        let fdg, gui;
 
         setup();
 
         function setup() {
+
+          gui = new GUI();
+          fdg = new ForceDirectedGraph(renderer, data);
+
+          gui.close();
+
+          [
+            { name: 'decay', min: 0, max: 1, step: 0.001 },
+            { name: 'maxSpeed', min: 0, max: 25, step: 1 },
+            { name: 'timeStep', min: 0, max: 2, step: 0.1 },
+            { name: 'damping', min: 0, max: 1, step: 0.1 },
+            { name: 'repulsion', min: -2, max: 2, step: 0.1 },
+            { name: 'springLength', min: 0, max: 10, step: 0.5 },
+            { name: 'stiffness', min: 0, max: 1, step: 0.1 },
+            { name: 'nodeRadius', min: 0, max: 5, step: 0.5 },
+            { name: 'nodeScale', min: 0, max: 50, step: 0.1 },
+            { name: 'gravity', min: 0, max: 1, step: 0.1 }
+          ].forEach(function({ name, min, max, step }) {
+
+            const uniforms = fdg.getUniforms();
+            const obj = uniforms[name];
+
+            gui.add(obj, 'value', min, max, step).name(name).onChange(reset);
+
+          });
+
+          gui.add(fdg.getUniforms().sizeAttenuation, 'value')
+            .name('sizeAttenuation').onChange(reset);
+          gui.add(fdg.getUniforms().is2D, 'value').name('2D').onChange(reset);
+          gui.add({ blending: THREE.NormalBlending }, 'blending', BLEND_MODES)
+            .onChange(function(v) {
+              fdg.setBlendMode(v);
+              reset();
+            });
+          gui.addColor(fdg.getUniforms().pointColor, 'value').name('pointColor')
+          gui.addColor(fdg.getUniforms().linkColor, 'value').name('linkColor');
+
+          scene.add(fdg);
+
           updateStats();
+
           renderer.setClearColor('#fff');
           document.querySelector('#stage').appendChild(renderer.domElement);
           window.addEventListener('resize', resize, false);
+
           resize();
+
           renderer.setAnimationLoop(render);
+
         }
 
         function resize() {
