@@ -17,6 +17,7 @@ const positionsFragment = `
 `;
 
 const velocitiesFragment = `
+  uniform float alpha;
   uniform float is2D;
   uniform float size;
   uniform float time;
@@ -168,7 +169,7 @@ const velocitiesFragment = `
     vec3 acceleration = a + b + c + d;
 
     // Calculate Velocity
-    vec3 velocity = ( v1 + ( acceleration * timeStep ) ) * damping;
+    vec3 velocity = ( v1 + ( acceleration * timeStep ) ) * damping * alpha;
     velocity = clamp( velocity, - maxSpeed, maxSpeed );
     velocity.z *= 1.0 - is2D;
 

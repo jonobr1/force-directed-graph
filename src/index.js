@@ -20,6 +20,8 @@ class ForceDirectedGraph extends Group {
     const gpgpu = new GPUComputationRenderer(size, size, renderer);
 
     const uniforms = {
+      decay: { value: 1 },
+      alpha: { value: 1 },
       is2D: { value: false },
       time: { value: 0 },
       size: { value: size },
@@ -112,6 +114,7 @@ class ForceDirectedGraph extends Group {
     variables.positions.material.uniforms.is2D = uniforms.is2D;
     variables.positions.material.uniforms.timeStep = uniforms.timeStep;
 
+    variables.velocities.material.uniforms.alpha = uniforms.alpha;
     variables.velocities.material.uniforms.is2D = uniforms.is2D;
     variables.velocities.material.uniforms.size = uniforms.size;
     variables.velocities.material.uniforms.time = uniforms.time;
@@ -154,7 +157,9 @@ class ForceDirectedGraph extends Group {
 
   update(time) {
 
-    const { gpgpu, variables } = this.userData;
+    const { gpgpu, variables, uniforms } = this.userData;
+
+    uniforms.alpha.value *= uniforms.decay.value;
 
     variables.velocities.material.uniforms.time.value = time / 1000;
     gpgpu.compute();

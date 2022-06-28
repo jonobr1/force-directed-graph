@@ -18484,6 +18484,7 @@ var positionsFragment = `
   }
 `;
 var velocitiesFragment = `
+  uniform float alpha;
   uniform float is2D;
   uniform float size;
   uniform float time;
@@ -18635,7 +18636,7 @@ var velocitiesFragment = `
     vec3 acceleration = a + b + c + d;
 
     // Calculate Velocity
-    vec3 velocity = ( v1 + ( acceleration * timeStep ) ) * damping;
+    vec3 velocity = ( v1 + ( acceleration * timeStep ) ) * damping * alpha;
     velocity = clamp( velocity, - maxSpeed, maxSpeed );
     velocity.z *= 1.0 - is2D;
 
@@ -18806,6 +18807,8 @@ var ForceDirectedGraph = class extends Group {
     const size = getPotSize(Math.max(data.nodes.length, data.edges.length));
     const gpgpu = new GPUComputationRenderer(size, size, renderer);
     const uniforms = {
+      decay: { value: 1 },
+      alpha: { value: 1 },
       is2D: { value: false },
       time: { value: 0 },
       size: { value: size },
@@ -18872,6 +18875,7 @@ var ForceDirectedGraph = class extends Group {
     gpgpu.setVariableDependencies(variables.velocities, [variables.velocities, variables.positions]);
     variables.positions.material.uniforms.is2D = uniforms.is2D;
     variables.positions.material.uniforms.timeStep = uniforms.timeStep;
+    variables.velocities.material.uniforms.alpha = uniforms.alpha;
     variables.velocities.material.uniforms.is2D = uniforms.is2D;
     variables.velocities.material.uniforms.size = uniforms.size;
     variables.velocities.material.uniforms.time = uniforms.time;
@@ -18903,7 +18907,8 @@ var ForceDirectedGraph = class extends Group {
     this.userData.variables = variables;
   }
   update(time) {
-    const { gpgpu, variables } = this.userData;
+    const { gpgpu, variables, uniforms } = this.userData;
+    uniforms.alpha.value *= uniforms.decay.value;
     variables.velocities.material.uniforms.time.value = time / 1e3;
     gpgpu.compute();
     const texture = this.getTexture("positions");
