@@ -756,24 +756,24 @@ var ColorManagement = {
   set workingColorSpace(colorSpace) {
     console.warn("THREE.ColorManagement: .workingColorSpace is readonly.");
   },
-  convert: function(color, sourceColorSpace, targetColorSpace) {
+  convert: function(color2, sourceColorSpace, targetColorSpace) {
     if (this.legacyMode || sourceColorSpace === targetColorSpace || !sourceColorSpace || !targetColorSpace) {
-      return color;
+      return color2;
     }
     if (FN[sourceColorSpace] && FN[sourceColorSpace][targetColorSpace] !== void 0) {
       const fn = FN[sourceColorSpace][targetColorSpace];
-      color.r = fn(color.r);
-      color.g = fn(color.g);
-      color.b = fn(color.b);
-      return color;
+      color2.r = fn(color2.r);
+      color2.g = fn(color2.g);
+      color2.b = fn(color2.b);
+      return color2;
     }
     throw new Error("Unsupported color space conversion.");
   },
-  fromWorkingColorSpace: function(color, targetColorSpace) {
-    return this.convert(color, this.workingColorSpace, targetColorSpace);
+  fromWorkingColorSpace: function(color2, targetColorSpace) {
+    return this.convert(color2, this.workingColorSpace, targetColorSpace);
   },
-  toWorkingColorSpace: function(color, sourceColorSpace) {
-    return this.convert(color, sourceColorSpace, this.workingColorSpace);
+  toWorkingColorSpace: function(color2, sourceColorSpace) {
+    return this.convert(color2, sourceColorSpace, this.workingColorSpace);
   }
 };
 var _colorKeywords = {
@@ -1016,36 +1016,36 @@ var Color = class {
     }
     let m;
     if (m = /^((?:rgb|hsl)a?)\(([^\)]*)\)/.exec(style)) {
-      let color;
+      let color2;
       const name = m[1];
       const components = m[2];
       switch (name) {
         case "rgb":
         case "rgba":
-          if (color = /^\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*(\d*\.?\d+)\s*)?$/.exec(components)) {
-            this.r = Math.min(255, parseInt(color[1], 10)) / 255;
-            this.g = Math.min(255, parseInt(color[2], 10)) / 255;
-            this.b = Math.min(255, parseInt(color[3], 10)) / 255;
+          if (color2 = /^\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*(\d*\.?\d+)\s*)?$/.exec(components)) {
+            this.r = Math.min(255, parseInt(color2[1], 10)) / 255;
+            this.g = Math.min(255, parseInt(color2[2], 10)) / 255;
+            this.b = Math.min(255, parseInt(color2[3], 10)) / 255;
             ColorManagement.toWorkingColorSpace(this, colorSpace);
-            handleAlpha(color[4]);
+            handleAlpha(color2[4]);
             return this;
           }
-          if (color = /^\s*(\d+)\%\s*,\s*(\d+)\%\s*,\s*(\d+)\%\s*(?:,\s*(\d*\.?\d+)\s*)?$/.exec(components)) {
-            this.r = Math.min(100, parseInt(color[1], 10)) / 100;
-            this.g = Math.min(100, parseInt(color[2], 10)) / 100;
-            this.b = Math.min(100, parseInt(color[3], 10)) / 100;
+          if (color2 = /^\s*(\d+)\%\s*,\s*(\d+)\%\s*,\s*(\d+)\%\s*(?:,\s*(\d*\.?\d+)\s*)?$/.exec(components)) {
+            this.r = Math.min(100, parseInt(color2[1], 10)) / 100;
+            this.g = Math.min(100, parseInt(color2[2], 10)) / 100;
+            this.b = Math.min(100, parseInt(color2[3], 10)) / 100;
             ColorManagement.toWorkingColorSpace(this, colorSpace);
-            handleAlpha(color[4]);
+            handleAlpha(color2[4]);
             return this;
           }
           break;
         case "hsl":
         case "hsla":
-          if (color = /^\s*(\d*\.?\d+)\s*,\s*(\d+)\%\s*,\s*(\d+)\%\s*(?:,\s*(\d*\.?\d+)\s*)?$/.exec(components)) {
-            const h = parseFloat(color[1]) / 360;
-            const s = parseInt(color[2], 10) / 100;
-            const l = parseInt(color[3], 10) / 100;
-            handleAlpha(color[4]);
+          if (color2 = /^\s*(\d*\.?\d+)\s*,\s*(\d+)\%\s*,\s*(\d+)\%\s*(?:,\s*(\d*\.?\d+)\s*)?$/.exec(components)) {
+            const h = parseFloat(color2[1]) / 360;
+            const s = parseInt(color2[2], 10) / 100;
+            const l = parseInt(color2[3], 10) / 100;
+            handleAlpha(color2[4]);
             return this.setHSL(h, s, l, colorSpace);
           }
           break;
@@ -1084,22 +1084,22 @@ var Color = class {
   clone() {
     return new this.constructor(this.r, this.g, this.b);
   }
-  copy(color) {
-    this.r = color.r;
-    this.g = color.g;
-    this.b = color.b;
+  copy(color2) {
+    this.r = color2.r;
+    this.g = color2.g;
+    this.b = color2.b;
     return this;
   }
-  copySRGBToLinear(color) {
-    this.r = SRGBToLinear(color.r);
-    this.g = SRGBToLinear(color.g);
-    this.b = SRGBToLinear(color.b);
+  copySRGBToLinear(color2) {
+    this.r = SRGBToLinear(color2.r);
+    this.g = SRGBToLinear(color2.g);
+    this.b = SRGBToLinear(color2.b);
     return this;
   }
-  copyLinearToSRGB(color) {
-    this.r = LinearToSRGB(color.r);
-    this.g = LinearToSRGB(color.g);
-    this.b = LinearToSRGB(color.b);
+  copyLinearToSRGB(color2) {
+    this.r = LinearToSRGB(color2.r);
+    this.g = LinearToSRGB(color2.g);
+    this.b = LinearToSRGB(color2.b);
     return this;
   }
   convertSRGBToLinear() {
@@ -1170,10 +1170,10 @@ var Color = class {
     this.setHSL(_hslA.h, _hslA.s, _hslA.l);
     return this;
   }
-  add(color) {
-    this.r += color.r;
-    this.g += color.g;
-    this.b += color.b;
+  add(color2) {
+    this.r += color2.r;
+    this.g += color2.g;
+    this.b += color2.b;
     return this;
   }
   addColors(color1, color2) {
@@ -1188,16 +1188,16 @@ var Color = class {
     this.b += s;
     return this;
   }
-  sub(color) {
-    this.r = Math.max(0, this.r - color.r);
-    this.g = Math.max(0, this.g - color.g);
-    this.b = Math.max(0, this.b - color.b);
+  sub(color2) {
+    this.r = Math.max(0, this.r - color2.r);
+    this.g = Math.max(0, this.g - color2.g);
+    this.b = Math.max(0, this.b - color2.b);
     return this;
   }
-  multiply(color) {
-    this.r *= color.r;
-    this.g *= color.g;
-    this.b *= color.b;
+  multiply(color2) {
+    this.r *= color2.r;
+    this.g *= color2.g;
+    this.b *= color2.b;
     return this;
   }
   multiplyScalar(s) {
@@ -1206,10 +1206,10 @@ var Color = class {
     this.b *= s;
     return this;
   }
-  lerp(color, alpha) {
-    this.r += (color.r - this.r) * alpha;
-    this.g += (color.g - this.g) * alpha;
-    this.b += (color.b - this.b) * alpha;
+  lerp(color2, alpha) {
+    this.r += (color2.r - this.r) * alpha;
+    this.g += (color2.g - this.g) * alpha;
+    this.b += (color2.b - this.b) * alpha;
     return this;
   }
   lerpColors(color1, color2, alpha) {
@@ -1218,9 +1218,9 @@ var Color = class {
     this.b = color1.b + (color2.b - color1.b) * alpha;
     return this;
   }
-  lerpHSL(color, alpha) {
+  lerpHSL(color2, alpha) {
     this.getHSL(_hslA);
-    color.getHSL(_hslB);
+    color2.getHSL(_hslB);
     const h = lerp(_hslA.h, _hslB.h, alpha);
     const s = lerp(_hslA.s, _hslB.s, alpha);
     const l = lerp(_hslA.l, _hslB.l, alpha);
@@ -5499,14 +5499,14 @@ var BufferAttribute = class {
     const array = this.array;
     let offset = 0;
     for (let i = 0, l = colors.length; i < l; i++) {
-      let color = colors[i];
-      if (color === void 0) {
+      let color2 = colors[i];
+      if (color2 === void 0) {
         console.warn("THREE.BufferAttribute.copyColorsArray(): color is undefined", i);
-        color = new Color();
+        color2 = new Color();
       }
-      array[offset++] = color.r;
-      array[offset++] = color.g;
-      array[offset++] = color.b;
+      array[offset++] = color2.r;
+      array[offset++] = color2.g;
+      array[offset++] = color2.b;
     }
     return this;
   }
@@ -7028,11 +7028,11 @@ var WebGLCubeRenderTarget = class extends WebGLRenderTarget {
     mesh.material.dispose();
     return this;
   }
-  clear(renderer, color, depth, stencil) {
+  clear(renderer, color2, depth, stencil) {
     const currentRenderTarget = renderer.getRenderTarget();
     for (let i = 0; i < 6; i++) {
       renderer.setRenderTarget(this, i);
-      renderer.clear(color, depth, stencil);
+      renderer.clear(color2, depth, stencil);
     }
     renderer.setRenderTarget(currentRenderTarget);
   }
@@ -8174,15 +8174,15 @@ function WebGLBackground(renderer, cubemaps, state, objects, alpha, premultiplie
       renderList.unshift(planeMesh, planeMesh.geometry, planeMesh.material, 0, 0, null);
     }
   }
-  function setClear(color, alpha2) {
-    state.buffers.color.setClear(color.r, color.g, color.b, alpha2, premultipliedAlpha);
+  function setClear(color2, alpha2) {
+    state.buffers.color.setClear(color2.r, color2.g, color2.b, alpha2, premultipliedAlpha);
   }
   return {
     getClearColor: function() {
       return clearColor;
     },
-    setClearColor: function(color, alpha2 = 1) {
-      clearColor.set(color);
+    setClearColor: function(color2, alpha2 = 1) {
+      clearColor.set(color2);
       clearAlpha = alpha2;
       setClear(clearColor, clearAlpha);
     },
@@ -11801,14 +11801,14 @@ function WebGLLights(extensions, capabilities) {
     const scaleFactor = physicallyCorrectLights !== true ? Math.PI : 1;
     for (let i = 0, l = lights.length; i < l; i++) {
       const light = lights[i];
-      const color = light.color;
+      const color2 = light.color;
       const intensity = light.intensity;
       const distance = light.distance;
       const shadowMap = light.shadow && light.shadow.map ? light.shadow.map.texture : null;
       if (light.isAmbientLight) {
-        r += color.r * intensity * scaleFactor;
-        g += color.g * intensity * scaleFactor;
-        b += color.b * intensity * scaleFactor;
+        r += color2.r * intensity * scaleFactor;
+        g += color2.g * intensity * scaleFactor;
+        b += color2.b * intensity * scaleFactor;
       } else if (light.isLightProbe) {
         for (let j = 0; j < 9; j++) {
           state.probe[j].addScaledVector(light.sh.coefficients[j], intensity);
@@ -11833,7 +11833,7 @@ function WebGLLights(extensions, capabilities) {
       } else if (light.isSpotLight) {
         const uniforms = cache.get(light);
         uniforms.position.setFromMatrixPosition(light.matrixWorld);
-        uniforms.color.copy(color).multiplyScalar(intensity * scaleFactor);
+        uniforms.color.copy(color2).multiplyScalar(intensity * scaleFactor);
         uniforms.distance = distance;
         uniforms.coneCos = Math.cos(light.angle);
         uniforms.penumbraCos = Math.cos(light.angle * (1 - light.penumbra));
@@ -11854,7 +11854,7 @@ function WebGLLights(extensions, capabilities) {
         spotLength++;
       } else if (light.isRectAreaLight) {
         const uniforms = cache.get(light);
-        uniforms.color.copy(color).multiplyScalar(intensity);
+        uniforms.color.copy(color2).multiplyScalar(intensity);
         uniforms.halfWidth.set(light.width * 0.5, 0, 0);
         uniforms.halfHeight.set(0, light.height * 0.5, 0);
         state.rectArea[rectAreaLength] = uniforms;
@@ -12307,7 +12307,7 @@ function WebGLState(gl, extensions, capabilities) {
   const isWebGL2 = capabilities.isWebGL2;
   function ColorBuffer() {
     let locked = false;
-    const color = new Vector4();
+    const color2 = new Vector4();
     let currentColorMask = null;
     const currentColorClear = new Vector4(0, 0, 0, 0);
     return {
@@ -12326,10 +12326,10 @@ function WebGLState(gl, extensions, capabilities) {
           g *= a;
           b *= a;
         }
-        color.set(r, g, b, a);
-        if (currentColorClear.equals(color) === false) {
+        color2.set(r, g, b, a);
+        if (currentColorClear.equals(color2) === false) {
           gl.clearColor(r, g, b, a);
-          currentColorClear.copy(color);
+          currentColorClear.copy(color2);
         }
       },
       reset: function() {
@@ -15375,9 +15375,9 @@ function WebGLRenderer(parameters = {}) {
   this.setClearAlpha = function() {
     background.setClearAlpha.apply(background, arguments);
   };
-  this.clear = function(color = true, depth = true, stencil = true) {
+  this.clear = function(color2 = true, depth = true, stencil = true) {
     let bits = 0;
-    if (color)
+    if (color2)
       bits |= 16384;
     if (depth)
       bits |= 256;
@@ -18653,6 +18653,7 @@ var points = {
     uniform float nodeScale;
     uniform sampler2D texturePositions;
 
+    varying vec3 vColor;
     varying vec2 vUv;
     varying float zDist;
 
@@ -18668,6 +18669,7 @@ var points = {
       gl_PointSize *= mix( 1.0, frustumSize / - mvPosition.z, sizeAttenuation );
 
       zDist = 1.0 / - mvPosition.z;
+      vColor = color;
 
       gl_Position = projectionMatrix * mvPosition;
 
@@ -18681,6 +18683,7 @@ var points = {
 
     varying vec2 vUv;
     varying float zDist;
+    varying vec3 vColor;
 
     float circle( vec2 uv, vec2 pos, float rad ) {
 
@@ -18701,7 +18704,7 @@ var points = {
       float t = circle( uv, vec2( 0.0, 0.0 ), 0.5 );
       float id = size * vUv.x + ( size * size * vUv.y );
 
-      gl_FragColor = vec4( color, t );
+      gl_FragColor = vec4( vColor * color, t );
 
     }
   `
@@ -18711,37 +18714,55 @@ var links = {
     uniform float is2D;
     uniform sampler2D texturePositions;
 
+    varying vec3 vColor;
+
     void main() {
 
       vec4 texel = texture2D( texturePositions, position.xy );
       vec3 vPosition = texel.xyz;
       vPosition.z *= 1.0 - is2D;
 
+      vColor = color;
+
       gl_Position = projectionMatrix * modelViewMatrix * vec4( vPosition, 1.0 );
 
     }
   `,
   fragmentShader: `
+    uniform float inheritColors;
     uniform vec3 color;
+    uniform float opacity;
+
+    varying vec3 vColor;
 
     void main() {
-      gl_FragColor = vec4( color.rgb, 1.0 );
+      gl_FragColor = vec4( mix( vec3( 1.0 ), vColor, inheritColors ) * color, opacity );
     }
   `
 };
 
 // src/points.js
+var color = new Color();
 var Points2 = class extends Points {
   constructor(size, { data, uniforms }) {
     const vertices = [];
+    const colors = [];
     for (let i = 0; i < data.nodes.length; i++) {
+      const node = data.nodes[i];
       const x = i % size / size;
       const y = Math.floor(i / size) / size;
       const z = 0;
       vertices.push(x, y, z);
+      if (node.color) {
+        color.set(node.color);
+        colors.push(color.r, color.g, color.b);
+      } else {
+        colors.push(1, 1, 1);
+      }
     }
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new Float32BufferAttribute(vertices, 3));
+    geometry.setAttribute("color", new Float32BufferAttribute(vertices, 3));
     const material = new ShaderMaterial({
       uniforms: {
         is2D: uniforms.is2D,
@@ -18751,17 +18772,20 @@ var Points2 = class extends Points {
         nodeScale: uniforms.nodeScale,
         texturePositions: { value: null },
         size: { value: size },
+        opacity: uniforms.opacity,
         color: uniforms.pointColor
       },
       vertexShader: points.vertexShader,
       fragmentShader: points.fragmentShader,
       transparent: true,
       depthWrite: false,
-      depthTest: false
+      depthTest: false,
+      vertexColors: true
     });
     super(geometry, material);
     this.frustumCulled = false;
     this.userData.vertices = vertices;
+    this.userData.colors = colors;
   }
 };
 
@@ -18770,30 +18794,43 @@ var Links = class extends LineSegments {
   constructor(points2, { data, uniforms }) {
     const geometry = new BufferGeometry();
     const vertices = [];
+    const colors = [];
     for (let i = 0; i < data.links.length; i++) {
       const l = data.links[i];
-      const a = 3 * l.sourceIndex;
-      const b = 3 * l.targetIndex;
-      let x = points2.userData.vertices[a + 0];
-      let y = points2.userData.vertices[a + 1];
-      let z = points2.userData.vertices[a + 2];
+      const si = 3 * l.sourceIndex;
+      const ti = 3 * l.targetIndex;
+      let x = points2.userData.vertices[si + 0];
+      let y = points2.userData.vertices[si + 1];
+      let z = points2.userData.vertices[si + 2];
+      let r = points2.userData.colors[si + 0];
+      let g = points2.userData.colors[si + 1];
+      let b = points2.userData.colors[si + 2];
       vertices.push(x, y, z);
-      x = points2.userData.vertices[b + 0];
-      y = points2.userData.vertices[b + 1];
-      z = points2.userData.vertices[b + 2];
+      colors.push(r, g, b);
+      x = points2.userData.vertices[ti + 0];
+      y = points2.userData.vertices[ti + 1];
+      z = points2.userData.vertices[ti + 2];
+      r = points2.userData.colors[ti + 0];
+      g = points2.userData.colors[ti + 1];
+      b = points2.userData.colors[ti + 2];
       vertices.push(x, y, z);
+      colors.push(r, g, b);
     }
     geometry.setAttribute("position", new Float32BufferAttribute(vertices, 3));
+    geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
     const material = new ShaderMaterial({
       uniforms: {
         is2D: uniforms.is2D,
+        inheritColors: uniforms.linksInheritColor,
+        opacity: uniforms.opacity,
         texturePositions: { value: null },
         color: uniforms.linkColor
       },
       vertexShader: links.vertexShader,
       fragmentShader: links.fragmentShader,
       transparent: true,
-      depthWrite: false
+      depthWrite: false,
+      vertexColors: true
     });
     super(geometry, material);
     this.frustumCulled = false;
@@ -18840,8 +18877,10 @@ var ForceDirectedGraph = class extends Group {
       nodeScale: { value: 8 },
       sizeAttenuation: { value: true },
       frustumSize: { value: 100 },
+      linksInheritColor: { value: false },
       pointColor: { value: new Color(0.3, 0.3, 0.3) },
-      linkColor: { value: new Color(0.9, 0.9, 0.9) }
+      linkColor: { value: new Color(0.9, 0.9, 0.9) },
+      opacity: { value: 1 }
     };
     const textures = {
       positions: gpgpu.createTexture(),
