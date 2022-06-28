@@ -175,9 +175,16 @@
         };
 
         for (let i = 0; i < amount; i++) {
-          data.nodes.push({ id: i });
+
+          const red = Math.floor(Math.random() * 255);
+          const green = Math.floor(Math.random() * 255);
+          const blue = Math.floor(Math.random() * 255);
+
+          data.nodes.push({ id: i, color: `rgb(${red}, ${green}, ${blue})` });
+
           const target = Math.floor(Math.random() * i);
           const source = i;
+
           if (i > 0 && Math.random() > 0.5) {
             data.links.push({ target: i, source: i - 1 });
           } else if (target !== source) {
@@ -186,6 +193,7 @@
               source
             });
           }
+
         }
 
         let fdg, gui;
@@ -209,7 +217,8 @@
             { name: 'stiffness', min: 0, max: 1, step: 0.1 },
             { name: 'nodeRadius', min: 0, max: 5, step: 0.5 },
             { name: 'nodeScale', min: 0, max: 50, step: 0.1 },
-            { name: 'gravity', min: 0, max: 1, step: 0.1 }
+            { name: 'gravity', min: 0, max: 1, step: 0.1 },
+            { name: 'opacity', min: 0, max: 1, step: 0.1 }
           ].forEach(function({ name, min, max, step }) {
 
             const uniforms = fdg.getUniforms();
@@ -227,7 +236,8 @@
               fdg.setBlendMode(v);
               reset();
             });
-          gui.addColor(fdg.getUniforms().pointColor, 'value').name('pointColor')
+          gui.add(fdg.getUniforms().linksInheritColor, 'value').name('linksInheritColor');
+          gui.addColor(fdg.getUniforms().pointColor, 'value').name('pointColor');
           gui.addColor(fdg.getUniforms().linkColor, 'value').name('linkColor');
 
           scene.add(fdg);

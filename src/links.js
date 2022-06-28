@@ -12,40 +12,56 @@ class Links extends LineSegments {
 
     const geometry = new BufferGeometry();
     const vertices = [];
+    const colors = [];
 
     for (let i = 0; i < data.links.length; i++) {
 
       const l = data.links[i];
 
-      const a = 3 * l.sourceIndex;
-      const b = 3 * l.targetIndex;
+      const si = 3 * l.sourceIndex;
+      const ti = 3 * l.targetIndex;
 
-      let x = points.userData.vertices[a + 0];
-      let y = points.userData.vertices[a + 1];
-      let z = points.userData.vertices[a + 2];
+      let x = points.userData.vertices[si + 0];
+      let y = points.userData.vertices[si + 1];
+      let z = points.userData.vertices[si + 2];
 
-      vertices.push(x, y, z);
-
-      x = points.userData.vertices[b + 0];
-      y = points.userData.vertices[b + 1];
-      z = points.userData.vertices[b + 2];
+      let r = points.userData.colors[si + 0];
+      let g = points.userData.colors[si + 1];
+      let b = points.userData.colors[si + 2];
 
       vertices.push(x, y, z);
+      colors.push(r, g, b);
+
+      x = points.userData.vertices[ti + 0];
+      y = points.userData.vertices[ti + 1];
+      z = points.userData.vertices[ti + 2];
+
+      r = points.userData.colors[ti + 0];
+      g = points.userData.colors[ti + 1];
+      b = points.userData.colors[ti + 2];
+
+      vertices.push(x, y, z);
+      colors.push(r, g, b);
 
     }
     geometry.setAttribute('position',
       new Float32BufferAttribute(vertices, 3));
+    geometry.setAttribute('color',
+      new Float32BufferAttribute(colors, 3));
 
     const material = new ShaderMaterial({
       uniforms: {
         is2D: uniforms.is2D,
+        inheritColors: uniforms.linksInheritColor,
+        opacity: uniforms.opacity,
         texturePositions: { value: null },
         color: uniforms.linkColor
       },
       vertexShader: shader.vertexShader,
       fragmentShader: shader.fragmentShader,
       transparent: true,
-      depthWrite: false
+      depthWrite: false,
+      vertexColors: true
     });
 
     super(geometry, material);

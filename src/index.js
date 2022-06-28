@@ -38,8 +38,10 @@ class ForceDirectedGraph extends Group {
       nodeScale: { value: 8 },
       sizeAttenuation: { value: true },
       frustumSize: { value: 100 },
+      linksInheritColor: { value: false },
       pointColor: { value: new Color(0.3, 0.3, 0.3) },
-      linkColor: { value: new Color(0.9, 0.9, 0.9) }
+      linkColor: { value: new Color(0.9, 0.9, 0.9) },
+      opacity: { value: 1 }
     };
 
     const textures = {
