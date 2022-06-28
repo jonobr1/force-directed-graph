@@ -133,6 +133,13 @@
       <script src="./build/fdg.js"></script>
       <script>
 
+        const BLEND_MODES = {
+          Normal: THREE.NormalBlending,
+          Additive: THREE.AdditiveBlending,
+          Subtractive: THREE.SubtractiveBlending,
+          Multiply: THREE.MultiplyBlending
+        };
+
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera();
@@ -190,6 +197,11 @@
         gui.add(fdg.getUniforms().sizeAttenuation, 'value')
           .name('sizeAttenuation').onChange(reset);
         gui.add(fdg.getUniforms().is2D, 'value').name('2D').onChange(reset);
+        gui.add({ blending: THREE.NormalBlending }, 'blending', BLEND_MODES)
+          .onChange(function(v) {
+            fdg.setBlendMode(v);
+            reset();
+          });
         gui.addColor(fdg.getUniforms().pointColor, 'value').name('pointColor')
         gui.addColor(fdg.getUniforms().linkColor, 'value').name('linkColor');
 
