@@ -168,8 +168,9 @@
         gui.close();
 
         [
+          { name: 'decay', min: 0, max: 1, step: 0.001 },
           { name: 'maxSpeed', min: 0, max: 25, step: 1 },
-          { name: 'timeStep', min: 0, max: 1, step: 0.1 },
+          { name: 'timeStep', min: 0, max: 2, step: 0.1 },
           { name: 'damping', min: 0, max: 1, step: 0.1 },
           { name: 'repulsion', min: -2, max: 2, step: 0.1 },
           { name: 'springLength', min: 0, max: 10, step: 0.5 },
@@ -178,13 +179,17 @@
           { name: 'nodeScale', min: 0, max: 50, step: 0.1 },
           { name: 'gravity', min: 0, max: 1, step: 0.1 }
         ].forEach(function({ name, min, max, step }) {
+
           const uniforms = fdg.getUniforms();
           const obj = uniforms[name];
-          gui.add(obj, 'value', min, max, step).name(name);
+
+          gui.add(obj, 'value', min, max, step).name(name).onChange(reset);
+
         });
 
-        gui.add(fdg.getUniforms().sizeAttenuation, 'value').name('sizeAttenuation');
-        gui.add(fdg.getUniforms().is2D, 'value').name('2D');
+        gui.add(fdg.getUniforms().sizeAttenuation, 'value')
+          .name('sizeAttenuation').onChange(reset);
+        gui.add(fdg.getUniforms().is2D, 'value').name('2D').onChange(reset);
         gui.addColor(fdg.getUniforms().pointColor, 'value').name('pointColor')
         gui.addColor(fdg.getUniforms().linkColor, 'value').name('linkColor');
 
@@ -216,6 +221,11 @@
           controls.update();
           fdg.update(elapsed);
           renderer.render(scene, camera);
+        }
+
+        function reset() {
+          const uniforms = fdg.getUniforms();
+          uniforms.alpha.value = 1;
         }
 
         function updateStats() {
