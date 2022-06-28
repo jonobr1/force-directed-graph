@@ -18499,65 +18499,11 @@ var velocitiesFragment = `
     return ( random( vec2( index, time ) ) - 0.5 ) * 0.000001;
   }
 
-  vec3 collide( float i, int id1, vec3 p1, vec3 v1 ) {
-
-    float r  = 2.0 * nodeRadius;
-    float r2 = nodeRadius * nodeRadius;
-
-    vec3 p = p1 + v1;
-    vec3 result = vec3( 0.0 );
-
-    float uvx = mod( i, size ) / size;
-    float uvy = floor( i / size ) / size;
-
-    vec2 uv2 = vec2( uvx, uvy );
-
-    int id2 = getIndex( uv2 );
-
-    vec3 v2 = getVelocity( uv2 );
-    vec3 p2 = getPosition( uv2 );
-
-    if ( id2 != id1 ) {
-
-      vec3 diff = p - ( p2 + v2 );
-      vec3 mag = abs( diff );
-      float dist = length( diff );
-      float seed = float( id1 + id2 );
-
-      if ( dist < r2 ) {
-
-        if ( mag.x <= 0.1 ) {
-          diff.x = jiggle( seed );
-          dist += diff.x * diff.x;
-        }
-        if ( mag.y <= 0.1 ) {
-          diff.y = jiggle( seed );
-          dist += diff.y * diff.y;
-        }
-        if ( mag.z <= 0.1 && is2D <= 0.0 ) {
-          diff.z = jiggle( seed );
-          dist += diff.z * diff.z;
-        }
-
-        result += ( diff *= dist ) * r;
-
-      }
-    }
-
-    result.z *= ( 1.0 - is2D );
-
-    return result;
-
-  }
-
-  vec3 link( float i, int id1, vec3 p1, vec3 v1 ) {
+  vec3 link( float i, int id1, vec3 p1, vec3 v1, vec2 uv2 ) {
 
     vec3 result = vec3( 0.0 );
 
-    float uvx = mod( i, size ) / size;
-    float uvy = floor( i / size ) / size;
-
-    vec4 edge = texture2D( textureEdges, vec2( uvx, uvy ) );
+    vec4 edge = texture2D( textureEdges, uv2 );
 
     vec2 source = edge.xy;
     vec2 target = edge.zw;
@@ -18596,17 +18542,9 @@ var velocitiesFragment = `
 
   }
 
-  vec3 charge( float i, int id1, vec3 p1, vec3 v1 ) {
+  vec3 charge( float i, int id1, vec3 p1, vec3 v1, int id2, vec3 v2, vec3 p2 ) {
 
-  vec3 result = vec3( 0.0 );
-
-    float uvx = mod( i, size ) / size;
-    float uvy = floor( i / size ) / size;
-
-    vec2 uv2 = vec2( uvx, uvy );
-    int id2 = getIndex( uv2 );
-    vec3 v2 = getVelocity( uv2 );
-    vec3 p2 = getPosition( uv2 );
+    vec3 result = vec3( 0.0 );
 
     vec3 diff = ( p2 + v2 ) - ( p1 + v1 );
     diff.z *= 1.0 - is2D;
@@ -18644,24 +18582,28 @@ var velocitiesFragment = `
 
     for ( float i = 0.0; i < max( nodeAmount, edgeAmount ); i += 1.0 ) {
 
-      // 1.
-      if ( i < nodeAmount ) {
-        a += collide( i, id1, p1, v1 );
-      }
+      float uvx = mod( i, size ) / size;
+      float uvy = floor( i / size ) / size;
+
+      vec2 uv2 = vec2( uvx, uvy );
+
+      int id2 = getIndex( uv2 );
+      vec3 v2 = getVelocity( uv2 );
+      vec3 p2 = getPosition( uv2 );
 
       // 2.
       if ( i < edgeAmount ) {
-        b += link( i, id1, p1, v1 );
+        b += link( i, id1, p1, v1, uv2 );
       }
 
       // 3.
       if ( i < nodeAmount) {
-        c += charge( i, id1, p1, v1 );
+        c += charge( i, id1, p1, v1, id2, p2, v2 );
       }
 
     }
 
-    a *= 1.0 - step( nodeAmount, float( id1 ) );
+    // a *= 1.0 - step( nodeAmount, float( id1 ) );
     b *= 1.0 - step( edgeAmount, float( id1 ) );
     c *= 1.0 - step( nodeAmount, float( id1 ) );
 
@@ -18866,11 +18808,9 @@ var ForceDirectedGraph = class extends Group {
     let k = 0;
     for (let i = 0; i < textures.positions.image.data.length; i += 4) {
       const v = 0;
-      const radius = uniforms.frustumSize.value * 0.01 * Math.sqrt(0.5 + k);
-      const theta = k / 100 * Math.PI * 2;
-      const x = radius * Math.cos(theta);
-      const y = radius * Math.sin(theta);
-      const z = 0;
+      const x = Math.random() * 2 - 1;
+      const y = Math.random() * 2 - 1;
+      const z = Math.random() * 2 - 1;
       if (k < data.nodes.length) {
         textures.positions.image.data[i + 0] = x;
         textures.positions.image.data[i + 1] = y;

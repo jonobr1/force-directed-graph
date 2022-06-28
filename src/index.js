@@ -48,12 +48,10 @@ class ForceDirectedGraph extends Group {
     for (let i = 0; i < textures.positions.image.data.length; i+=4) {
 
       const v = 0;
-      const radius = uniforms.frustumSize.value * 0.01 * Math.sqrt(0.5 + k);
-      const theta = (k / 100) * Math.PI * 2;
 
-      const x = radius * Math.cos(theta);
-      const y = radius * Math.sin(theta);
-      const z = 0;
+      const x = Math.random() * 2 - 1;
+      const y = Math.random() * 2 - 1;
+      const z = Math.random() * 2 - 1;
 
       if (k < data.nodes.length) {
 
