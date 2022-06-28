@@ -187,6 +187,7 @@ const points = {
     uniform float nodeScale;
     uniform sampler2D texturePositions;
 
+    varying vec3 vColor;
     varying vec2 vUv;
     varying float zDist;
 
@@ -202,6 +203,7 @@ const points = {
       gl_PointSize *= mix( 1.0, frustumSize / - mvPosition.z, sizeAttenuation );
 
       zDist = 1.0 / - mvPosition.z;
+      vColor = color;
 
       gl_Position = projectionMatrix * mvPosition;
 
@@ -215,6 +217,7 @@ const points = {
 
     varying vec2 vUv;
     varying float zDist;
+    varying vec3 vColor;
 
     float circle( vec2 uv, vec2 pos, float rad ) {
 
@@ -235,7 +238,7 @@ const points = {
       float t = circle( uv, vec2( 0.0, 0.0 ), 0.5 );
       float id = size * vUv.x + ( size * size * vUv.y );
 
-      gl_FragColor = vec4( color, t );
+      gl_FragColor = vec4( vColor * color, t );
 
     }
   `
@@ -246,21 +249,29 @@ const links = {
     uniform float is2D;
     uniform sampler2D texturePositions;
 
+    varying vec3 vColor;
+
     void main() {
 
       vec4 texel = texture2D( texturePositions, position.xy );
       vec3 vPosition = texel.xyz;
       vPosition.z *= 1.0 - is2D;
 
+      vColor = color;
+
       gl_Position = projectionMatrix * modelViewMatrix * vec4( vPosition, 1.0 );
 
     }
   `,
   fragmentShader: `
+    uniform float inheritColors;
     uniform vec3 color;
+    uniform float opacity;
+
+    varying vec3 vColor;
 
     void main() {
-      gl_FragColor = vec4( color.rgb, 1.0 );
+      gl_FragColor = vec4( mix( vec3( 1.0 ), vColor, inheritColors ) * color, opacity );
     }
   `
 };
