@@ -31,7 +31,7 @@ const velocitiesFragment = `
   uniform float springLength;
   uniform float stiffness;
   uniform float gravity;
-  uniform sampler2D textureEdges;
+  uniform sampler2D textureLinks;
 
   vec3 getPosition( vec2 uv ) {
     return texture2D( texturePositions, uv ).xyz;
@@ -60,7 +60,7 @@ const velocitiesFragment = `
 
     vec3 result = vec3( 0.0 );
 
-    vec4 edge = texture2D( textureEdges, uv2 );
+    vec4 edge = texture2D( textureLinks, uv2 );
 
     vec2 source = edge.xy;
     vec2 target = edge.zw;

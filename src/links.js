@@ -13,12 +13,12 @@ class Links extends LineSegments {
     const geometry = new BufferGeometry();
     const vertices = [];
 
-    for (let i = 0; i < data.edges.length; i++) {
+    for (let i = 0; i < data.links.length; i++) {
 
-      const l = data.edges[i];
+      const l = data.links[i];
 
-      const a = 3 * l.source;
-      const b = 3 * l.target;
+      const a = 3 * l.sourceIndex;
+      const b = 3 * l.targetIndex;
 
       let x = points.userData.vertices[a + 0];
       let y = points.userData.vertices[a + 1];

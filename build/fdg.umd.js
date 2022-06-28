@@ -18498,7 +18498,7 @@ var velocitiesFragment = `
   uniform float springLength;
   uniform float stiffness;
   uniform float gravity;
-  uniform sampler2D textureEdges;
+  uniform sampler2D textureLinks;
 
   vec3 getPosition( vec2 uv ) {
     return texture2D( texturePositions, uv ).xyz;
@@ -18527,7 +18527,7 @@ var velocitiesFragment = `
 
     vec3 result = vec3( 0.0 );
 
-    vec4 edge = texture2D( textureEdges, uv2 );
+    vec4 edge = texture2D( textureLinks, uv2 );
 
     vec2 source = edge.xy;
     vec2 target = edge.zw;
@@ -18770,10 +18770,10 @@ var Links = class extends LineSegments {
   constructor(points2, { data, uniforms }) {
     const geometry = new BufferGeometry();
     const vertices = [];
-    for (let i = 0; i < data.edges.length; i++) {
-      const l = data.edges[i];
-      const a = 3 * l.source;
-      const b = 3 * l.target;
+    for (let i = 0; i < data.links.length; i++) {
+      const l = data.links[i];
+      const a = 3 * l.sourceIndex;
+      const b = 3 * l.targetIndex;
       let x = points2.userData.vertices[a + 0];
       let y = points2.userData.vertices[a + 1];
       let z = points2.userData.vertices[a + 2];
@@ -18800,11 +18800,28 @@ var Links = class extends LineSegments {
   }
 };
 
+// src/registry.js
+var Registry = class {
+  map = {};
+  constructor(list) {
+    for (let i = 0; i < list.length; i++) {
+      const item = list[i];
+      if (item.id !== "undefined") {
+        this.map[item.id] = i;
+      }
+    }
+  }
+  get(id) {
+    return this.map[id];
+  }
+};
+
 // src/index.js
 var ForceDirectedGraph = class extends Group {
   constructor(renderer, data) {
     super();
-    const size = getPotSize(Math.max(data.nodes.length, data.edges.length));
+    const registry = new Registry(data.nodes);
+    const size = getPotSize(Math.max(data.nodes.length, data.links.length));
     const gpgpu = new GPUComputationRenderer(size, size, renderer);
     const uniforms = {
       decay: { value: 1 },
@@ -18829,7 +18846,7 @@ var ForceDirectedGraph = class extends Group {
     const textures = {
       positions: gpgpu.createTexture(),
       velocities: gpgpu.createTexture(),
-      edges: gpgpu.createTexture()
+      links: gpgpu.createTexture()
     };
     let k = 0;
     for (let i = 0; i < textures.positions.image.data.length; i += 4) {
@@ -18843,27 +18860,29 @@ var ForceDirectedGraph = class extends Group {
         textures.positions.image.data[i + 2] = z;
         textures.positions.image.data[i + 3] = 0;
       } else {
-        textures.positions.image.data[i + 0] = uniforms.frustumSize.value * 2;
-        textures.positions.image.data[i + 1] = uniforms.frustumSize.value * 2;
-        textures.positions.image.data[i + 2] = uniforms.frustumSize.value * 2;
-        textures.positions.image.data[i + 3] = uniforms.frustumSize.value * 2;
+        textures.positions.image.data[i + 0] = uniforms.frustumSize.value * 10;
+        textures.positions.image.data[i + 1] = uniforms.frustumSize.value * 10;
+        textures.positions.image.data[i + 2] = uniforms.frustumSize.value * 10;
+        textures.positions.image.data[i + 3] = uniforms.frustumSize.value * 10;
       }
       textures.velocities.image.data[i + 0] = v;
       textures.velocities.image.data[i + 1] = v;
       textures.velocities.image.data[i + 2] = 0;
       textures.velocities.image.data[i + 3] = 0;
       let i1, i2, uvx, uvy;
-      if (k < data.edges.length) {
-        i1 = +data.edges[k].source;
-        i2 = +data.edges[k].target;
+      if (k < data.links.length) {
+        i1 = registry.get(data.links[k].source);
+        i2 = registry.get(data.links[k].target);
+        data.links[k].sourceIndex = i1;
+        data.links[k].targetIndex = i2;
         uvx = i1 % size / size;
         uvy = Math.floor(i1 / size) / size;
-        textures.edges.image.data[i + 0] = uvx;
-        textures.edges.image.data[i + 1] = uvy;
+        textures.links.image.data[i + 0] = uvx;
+        textures.links.image.data[i + 1] = uvy;
         uvx = i2 % size / size;
         uvy = Math.floor(i2 / size) / size;
-        textures.edges.image.data[i + 2] = uvx;
-        textures.edges.image.data[i + 3] = uvy;
+        textures.links.image.data[i + 2] = uvx;
+        textures.links.image.data[i + 3] = uvy;
       }
       k++;
     }
@@ -18881,12 +18900,12 @@ var ForceDirectedGraph = class extends Group {
     variables.velocities.material.uniforms.time = uniforms.time;
     variables.velocities.material.uniforms.nodeRadius = uniforms.nodeRadius;
     variables.velocities.material.uniforms.nodeAmount = { value: data.nodes.length };
-    variables.velocities.material.uniforms.edgeAmount = { value: data.edges.length };
+    variables.velocities.material.uniforms.edgeAmount = { value: data.links.length };
     variables.velocities.material.uniforms.maxSpeed = uniforms.maxSpeed;
     variables.velocities.material.uniforms.timeStep = uniforms.timeStep;
     variables.velocities.material.uniforms.damping = uniforms.damping;
     variables.velocities.material.uniforms.repulsion = uniforms.repulsion;
-    variables.velocities.material.uniforms.textureEdges = { value: textures.edges };
+    variables.velocities.material.uniforms.textureLinks = { value: textures.links };
     variables.velocities.material.uniforms.springLength = uniforms.springLength;
     variables.velocities.material.uniforms.stiffness = uniforms.stiffness;
     variables.velocities.material.uniforms.gravity = uniforms.gravity;
