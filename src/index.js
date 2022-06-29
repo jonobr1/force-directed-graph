@@ -61,10 +61,15 @@ class ForceDirectedGraph extends Group {
 
       if (k < data.nodes.length) {
 
-        textures.positions.image.data[i + 0] = x;
-        textures.positions.image.data[i + 1] = y;
-        textures.positions.image.data[i + 2] = z;
-        textures.positions.image.data[i + 3] = 0; // Used for differentiating "root" nodes
+        const node = data.nodes[k];
+
+        textures.positions.image.data[i + 0] =
+          typeof node.x !== 'undefined' ? node.x : x;
+        textures.positions.image.data[i + 1] =
+          typeof node.y !== 'undefined' ? node.y : y;
+        textures.positions.image.data[i + 2] =
+          typeof node.z !== 'undefined' ? node.z : z;
+        textures.positions.image.data[i + 3] = node.isStatic ? 1 : 0;
 
       } else {
 

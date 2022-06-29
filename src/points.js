@@ -39,7 +39,7 @@ class Points extends BasePoints {
     geometry.setAttribute(
       'position', new Float32BufferAttribute(vertices, 3));
     geometry.setAttribute(
-      'color', new Float32BufferAttribute(vertices, 3));
+      'color', new Float32BufferAttribute(colors, 3));
 
     const material = new ShaderMaterial({
       uniforms: { ...UniformsLib['fog'], ...{
