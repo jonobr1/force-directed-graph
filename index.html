@@ -178,11 +178,7 @@
 
         for (let i = 0; i < amount; i++) {
 
-          const red = Math.floor(Math.random() * 255);
-          const green = Math.floor(Math.random() * 255);
-          const blue = Math.floor(Math.random() * 255);
-
-          data.nodes.push({ id: i, color: `rgb(${red}, ${green}, ${blue})` });
+          data.nodes.push({ id: i });
 
           const target = Math.floor(Math.random() * i);
           const source = i;
