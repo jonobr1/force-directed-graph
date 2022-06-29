@@ -3,7 +3,6 @@ import {
   BufferGeometry,
   Float32BufferAttribute,
   ShaderMaterial,
-  UniformsUtils,
   UniformsLib
 } from 'three';
 import { links as shader } from './shaders.js';
@@ -52,16 +51,13 @@ class Links extends LineSegments {
       new Float32BufferAttribute(colors, 3));
 
     const material = new ShaderMaterial({
-      uniforms: UniformsUtils.merge([
-        UniformsLib['fog'],
-        {
-          is2D: uniforms.is2D,
-          inheritColors: uniforms.linksInheritColor,
-          opacity: uniforms.opacity,
-          texturePositions: { value: null },
-          color: uniforms.linkColor
-        }
-      ]),
+      uniforms: { ...UniformsLib['fog'], ...{
+        is2D: uniforms.is2D,
+        inheritColors: uniforms.linksInheritColor,
+        opacity: uniforms.opacity,
+        texturePositions: { value: null },
+        color: uniforms.linkColor
+      } },
       vertexShader: shader.vertexShader,
       fragmentShader: shader.fragmentShader,
       transparent: true,
