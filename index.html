@@ -163,7 +163,9 @@
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera();
         const controls = new OrbitControls(camera, renderer.domElement);
+        const fog = new THREE.Fog(0xffffff, 200, 750);
 
+        scene.fog = fog;
         controls.enableDamping = true;
         camera.position.z = 250;
 
