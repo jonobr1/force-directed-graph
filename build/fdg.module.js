@@ -18592,19 +18592,16 @@ var velocitiesFragment = `
       vec3 v2 = getVelocity( uv2 );
       vec3 p2 = getPosition( uv2 );
 
-      // 2.
       if ( i < edgeAmount ) {
         b += link( i, id1, p1, v1, uv2 );
       }
 
-      // 3.
       if ( i < nodeAmount) {
         c += charge( i, id1, p1, v1, id2, p2, v2 );
       }
 
     }
 
-    // a *= 1.0 - step( nodeAmount, float( id1 ) );
     b *= 1.0 - step( edgeAmount, float( id1 ) );
     c *= 1.0 - step( nodeAmount, float( id1 ) );
 
@@ -18634,7 +18631,6 @@ var points = {
 
     varying vec3 vColor;
     varying vec2 vUv;
-    varying float zDist;
 
     void main() {
 
@@ -18647,7 +18643,6 @@ var points = {
       gl_PointSize = nodeRadius * nodeScale;
       gl_PointSize *= mix( 1.0, frustumSize / - mvPosition.z, sizeAttenuation );
 
-      zDist = 1.0 / - mvPosition.z;
       vColor = color;
 
       gl_Position = projectionMatrix * mvPosition;
@@ -18662,9 +18657,9 @@ var points = {
     uniform float frustumSize;
     uniform vec3 color;
     uniform float size;
+    uniform float opacity;
 
     varying vec2 vUv;
-    varying float zDist;
     varying vec3 vColor;
 
     float circle( vec2 uv, vec2 pos, float rad ) {
@@ -18672,7 +18667,7 @@ var points = {
       float d = length( pos - uv ) - rad;
       float t = clamp( d, 0.0, 1.0 );
 
-      float viewRange = smoothstep( 0.0, frustumSize * 0.001, abs( zDist ) );
+      float viewRange = smoothstep( 0.0, frustumSize * 0.001, abs( 1.0 / vFogDepth ) );
       float taper = 0.15 * viewRange + 0.015;
       taper = mix( taper, 0.15, sizeAttenuation );
 
@@ -18686,7 +18681,7 @@ var points = {
       float t = circle( uv, vec2( 0.0, 0.0 ), 0.5 );
       float id = size * vUv.x + ( size * size * vUv.y );
 
-      gl_FragColor = vec4( vColor * color, t );
+      gl_FragColor = vec4( vColor * color, opacity * t );
       #include <fog_fragment>
 
     }
@@ -18754,20 +18749,17 @@ var Points2 = class extends Points {
     geometry.setAttribute("position", new Float32BufferAttribute(vertices, 3));
     geometry.setAttribute("color", new Float32BufferAttribute(vertices, 3));
     const material = new ShaderMaterial({
-      uniforms: UniformsUtils.merge([
-        UniformsLib["fog"],
-        {
-          is2D: uniforms.is2D,
-          sizeAttenuation: uniforms.sizeAttenuation,
-          frustumSize: uniforms.frustumSize,
-          nodeRadius: uniforms.nodeRadius,
-          nodeScale: uniforms.nodeScale,
-          texturePositions: { value: null },
-          size: { value: size },
-          opacity: uniforms.opacity,
-          color: uniforms.pointColor
-        }
-      ]),
+      uniforms: { ...UniformsLib["fog"], ...{
+        is2D: uniforms.is2D,
+        sizeAttenuation: uniforms.sizeAttenuation,
+        frustumSize: uniforms.frustumSize,
+        nodeRadius: uniforms.nodeRadius,
+        nodeScale: uniforms.nodeScale,
+        texturePositions: { value: null },
+        size: { value: size },
+        opacity: uniforms.opacity,
+        color: uniforms.pointColor
+      } },
       vertexShader: points.vertexShader,
       fragmentShader: points.fragmentShader,
       transparent: true,
@@ -18813,16 +18805,13 @@ var Links = class extends LineSegments {
     geometry.setAttribute("position", new Float32BufferAttribute(vertices, 3));
     geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
     const material = new ShaderMaterial({
-      uniforms: UniformsUtils.merge([
-        UniformsLib["fog"],
-        {
-          is2D: uniforms.is2D,
-          inheritColors: uniforms.linksInheritColor,
-          opacity: uniforms.opacity,
-          texturePositions: { value: null },
-          color: uniforms.linkColor
-        }
-      ]),
+      uniforms: { ...UniformsLib["fog"], ...{
+        is2D: uniforms.is2D,
+        inheritColors: uniforms.linksInheritColor,
+        opacity: uniforms.opacity,
+        texturePositions: { value: null },
+        color: uniforms.linkColor
+      } },
       vertexShader: links.vertexShader,
       fragmentShader: links.fragmentShader,
       transparent: true,
