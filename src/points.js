@@ -3,7 +3,9 @@ import {
   BufferGeometry,
   Float32BufferAttribute,
   ShaderMaterial,
-  Color
+  Color,
+  UniformsUtils,
+  UniformsLib
 } from 'three';
 import { points as shader } from './shaders.js';
 
@@ -41,23 +43,27 @@ class Points extends BasePoints {
       'color', new Float32BufferAttribute(vertices, 3));
 
     const material = new ShaderMaterial({
-      uniforms: {
-        is2D: uniforms.is2D,
-        sizeAttenuation: uniforms.sizeAttenuation,
-        frustumSize: uniforms.frustumSize,
-        nodeRadius: uniforms.nodeRadius,
-        nodeScale: uniforms.nodeScale,
-        texturePositions: { value: null },
-        size: { value: size },
-        opacity: uniforms.opacity,
-        color: uniforms.pointColor
-      },
+      uniforms: UniformsUtils.merge([
+        UniformsLib['fog'],
+        {
+          is2D: uniforms.is2D,
+          sizeAttenuation: uniforms.sizeAttenuation,
+          frustumSize: uniforms.frustumSize,
+          nodeRadius: uniforms.nodeRadius,
+          nodeScale: uniforms.nodeScale,
+          texturePositions: { value: null },
+          size: { value: size },
+          opacity: uniforms.opacity,
+          color: uniforms.pointColor
+        },
+      ]),
       vertexShader: shader.vertexShader,
       fragmentShader: shader.fragmentShader,
       transparent: true,
       depthWrite: false,
       depthTest: false,
-      vertexColors: true
+      vertexColors: true,
+      fog: true
     });
 
     super(geometry, material);

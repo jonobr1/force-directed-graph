@@ -180,6 +180,8 @@ const velocitiesFragment = `
 
 const points = {
   vertexShader: `
+    #include <fog_pars_vertex>
+
     uniform float sizeAttenuation;
     uniform float frustumSize;
     uniform float is2D;
@@ -206,10 +208,13 @@ const points = {
       vColor = color;
 
       gl_Position = projectionMatrix * mvPosition;
+      #include <fog_vertex>
 
     }
   `,
   fragmentShader: `
+    #include <fog_pars_fragment>
+
     uniform float sizeAttenuation;
     uniform float frustumSize;
     uniform vec3 color;
@@ -239,6 +244,7 @@ const points = {
       float id = size * vUv.x + ( size * size * vUv.y );
 
       gl_FragColor = vec4( vColor * color, t );
+      #include <fog_fragment>
 
     }
   `
@@ -246,6 +252,8 @@ const points = {
 
 const links = {
   vertexShader: `
+    #include <fog_pars_vertex>
+
     uniform float is2D;
     uniform sampler2D texturePositions;
 
@@ -257,13 +265,17 @@ const links = {
       vec3 vPosition = texel.xyz;
       vPosition.z *= 1.0 - is2D;
 
+      vec4 mvPosition = modelViewMatrix * vec4( vPosition, 1.0 );
       vColor = color;
 
-      gl_Position = projectionMatrix * modelViewMatrix * vec4( vPosition, 1.0 );
+      gl_Position = projectionMatrix * mvPosition;
+      #include <fog_vertex>
 
     }
   `,
   fragmentShader: `
+    #include <fog_pars_fragment>
+
     uniform float inheritColors;
     uniform vec3 color;
     uniform float opacity;
@@ -272,6 +284,7 @@ const links = {
 
     void main() {
       gl_FragColor = vec4( mix( vec3( 1.0 ), vColor, inheritColors ) * color, opacity );
+      #include <fog_fragment>
     }
   `
 };
