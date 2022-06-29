@@ -18624,6 +18624,8 @@
 `;
   var points = {
     vertexShader: `
+    #include <fog_pars_vertex>
+
     uniform float sizeAttenuation;
     uniform float frustumSize;
     uniform float is2D;
@@ -18650,10 +18652,13 @@
       vColor = color;
 
       gl_Position = projectionMatrix * mvPosition;
+      #include <fog_vertex>
 
     }
   `,
     fragmentShader: `
+    #include <fog_pars_fragment>
+
     uniform float sizeAttenuation;
     uniform float frustumSize;
     uniform vec3 color;
@@ -18683,12 +18688,15 @@
       float id = size * vUv.x + ( size * size * vUv.y );
 
       gl_FragColor = vec4( vColor * color, t );
+      #include <fog_fragment>
 
     }
   `
   };
   var links = {
     vertexShader: `
+    #include <fog_pars_vertex>
+
     uniform float is2D;
     uniform sampler2D texturePositions;
 
@@ -18700,13 +18708,17 @@
       vec3 vPosition = texel.xyz;
       vPosition.z *= 1.0 - is2D;
 
+      vec4 mvPosition = modelViewMatrix * vec4( vPosition, 1.0 );
       vColor = color;
 
-      gl_Position = projectionMatrix * modelViewMatrix * vec4( vPosition, 1.0 );
+      gl_Position = projectionMatrix * mvPosition;
+      #include <fog_vertex>
 
     }
   `,
     fragmentShader: `
+    #include <fog_pars_fragment>
+
     uniform float inheritColors;
     uniform vec3 color;
     uniform float opacity;
@@ -18715,6 +18727,7 @@
 
     void main() {
       gl_FragColor = vec4( mix( vec3( 1.0 ), vColor, inheritColors ) * color, opacity );
+      #include <fog_fragment>
     }
   `
   };
@@ -18742,23 +18755,27 @@
       geometry.setAttribute("position", new Float32BufferAttribute(vertices, 3));
       geometry.setAttribute("color", new Float32BufferAttribute(vertices, 3));
       const material = new ShaderMaterial({
-        uniforms: {
-          is2D: uniforms.is2D,
-          sizeAttenuation: uniforms.sizeAttenuation,
-          frustumSize: uniforms.frustumSize,
-          nodeRadius: uniforms.nodeRadius,
-          nodeScale: uniforms.nodeScale,
-          texturePositions: { value: null },
-          size: { value: size },
-          opacity: uniforms.opacity,
-          color: uniforms.pointColor
-        },
+        uniforms: UniformsUtils.merge([
+          UniformsLib["fog"],
+          {
+            is2D: uniforms.is2D,
+            sizeAttenuation: uniforms.sizeAttenuation,
+            frustumSize: uniforms.frustumSize,
+            nodeRadius: uniforms.nodeRadius,
+            nodeScale: uniforms.nodeScale,
+            texturePositions: { value: null },
+            size: { value: size },
+            opacity: uniforms.opacity,
+            color: uniforms.pointColor
+          }
+        ]),
         vertexShader: points.vertexShader,
         fragmentShader: points.fragmentShader,
         transparent: true,
         depthWrite: false,
         depthTest: false,
-        vertexColors: true
+        vertexColors: true,
+        fog: true
       });
       super(geometry, material);
       this.frustumCulled = false;
@@ -18797,18 +18814,22 @@
       geometry.setAttribute("position", new Float32BufferAttribute(vertices, 3));
       geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
       const material = new ShaderMaterial({
-        uniforms: {
-          is2D: uniforms.is2D,
-          inheritColors: uniforms.linksInheritColor,
-          opacity: uniforms.opacity,
-          texturePositions: { value: null },
-          color: uniforms.linkColor
-        },
+        uniforms: UniformsUtils.merge([
+          UniformsLib["fog"],
+          {
+            is2D: uniforms.is2D,
+            inheritColors: uniforms.linksInheritColor,
+            opacity: uniforms.opacity,
+            texturePositions: { value: null },
+            color: uniforms.linkColor
+          }
+        ]),
         vertexShader: links.vertexShader,
         fragmentShader: links.fragmentShader,
         transparent: true,
         depthWrite: false,
-        vertexColors: true
+        vertexColors: true,
+        fog: true
       });
       super(geometry, material);
       this.frustumCulled = false;
