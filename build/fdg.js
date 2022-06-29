@@ -18452,12 +18452,14 @@
   void main() {
 
     vec2 uv = gl_FragCoord.xy / resolution.xy;
-    vec3 position = texture2D( texturePositions, uv ).xyz;
+    vec4 texel = texture2D( texturePositions, uv );
+    vec3 position = texel.xyz;
     vec3 velocity = texture2D( textureVelocities, uv ).xyz;
+    float isStatic = texel.w;
 
-    vec3 result = position + velocity * timeStep;
+    vec3 result = position + velocity * timeStep * ( 1.0 - isStatic );
 
-    gl_FragColor = vec4( result.xyz, 0.0 );
+    gl_FragColor = vec4( result.xyz, isStatic );
 
   }
 `;
@@ -18748,7 +18750,7 @@
       }
       const geometry = new BufferGeometry();
       geometry.setAttribute("position", new Float32BufferAttribute(vertices, 3));
-      geometry.setAttribute("color", new Float32BufferAttribute(vertices, 3));
+      geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
       const material = new ShaderMaterial({
         uniforms: { ...UniformsLib["fog"], ...{
           is2D: uniforms.is2D,
@@ -18882,10 +18884,11 @@
         const y = Math.random() * 2 - 1;
         const z = Math.random() * 2 - 1;
         if (k < data.nodes.length) {
-          textures.positions.image.data[i + 0] = x;
-          textures.positions.image.data[i + 1] = y;
-          textures.positions.image.data[i + 2] = z;
-          textures.positions.image.data[i + 3] = 0;
+          const node = data.nodes[k];
+          textures.positions.image.data[i + 0] = typeof node.x !== "undefined" ? node.x : x;
+          textures.positions.image.data[i + 1] = typeof node.y !== "undefined" ? node.y : y;
+          textures.positions.image.data[i + 2] = typeof node.z !== "undefined" ? node.z : z;
+          textures.positions.image.data[i + 3] = node.isStatic ? 1 : 0;
         } else {
           textures.positions.image.data[i + 0] = uniforms.frustumSize.value * 10;
           textures.positions.image.data[i + 1] = uniforms.frustumSize.value * 10;
