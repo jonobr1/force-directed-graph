@@ -18890,8 +18890,8 @@
         vertexShader: points.vertexShader,
         fragmentShader: points.fragmentShader,
         transparent: true,
-        depthWrite: true,
-        depthTest: true,
+        depthWrite: false,
+        depthTest: false,
         vertexColors: true,
         fog: true
       });
