@@ -45,9 +45,6 @@ This example creates 512 nodes and links them randomly like big snakes.
     </script>
     <script type="module">
 
-      import * as THREE from 'three';
-      import { ForceDirectedGraph } from '@jonobr1/force-directed-graph';
-
       const renderer = new THREE.WebGLRenderer({ antialias: true });
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera();
@@ -57,19 +54,18 @@ This example creates 512 nodes and links them randomly like big snakes.
       // Generate some fake data
       const amount = 512;
       const data = {
-        nodes: [],  // Required, each element should be an object
-        edges: []   // Required, each element should be an object
-                    // with source and target properties that are
-                    // indices of their connecting nodes
+      nodes: [],  // Required, each element should be an object
+      links: []   // Required, each element should be an object
+                  // with source and target properties that are
+                  // indices of their connecting nodes
       };
 
       for (let i = 0; i < amount; i++) {
 
-        const target = Math.floor(Math.random() * amount);
-        const source = Math.floor(Math.random() * target);
-
         data.nodes.push({ id: i });
-        data.edges.push({ target: Math.floor(Math.random() * i), source: i });
+        if (i > 0) {
+          data.links.push({ target: Math.floor(Math.random() * i), source: i });
+        }
 
       }
 
