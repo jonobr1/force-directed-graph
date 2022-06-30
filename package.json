@@ -2,8 +2,8 @@
   "name": "@jonobr1/force-directed-graph",
   "version": "1.12.0",
   "description": "GPU supercharged attraction-graph visualizations for the web built on top of Three.js",
-  "main": "src/index.js",
-  "module": "src/index.js",
+  "main": "build/fdg.js",
+  "module": "build/fdg.module.js",
   "types": "types.d.ts",
   "scripts": {
     "dev": "esbuild --servedir=. --serve=8080",
