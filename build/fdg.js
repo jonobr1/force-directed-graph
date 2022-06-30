@@ -18633,7 +18633,9 @@
     uniform sampler2D texturePositions;
 
     varying vec3 vColor;
-    varying vec2 vUv;
+    varying float vImageKey;
+
+    attribute float imageKey;
 
     void main() {
 
@@ -18647,6 +18649,7 @@
       gl_PointSize *= mix( 1.0, frustumSize / - mvPosition.z, sizeAttenuation );
 
       vColor = color;
+      vImageKey = imageKey;
 
       gl_Position = projectionMatrix * mvPosition;
       #include <fog_vertex>
@@ -18661,18 +18664,22 @@
     uniform vec3 color;
     uniform float size;
     uniform float opacity;
+    uniform float imageDimensions;
+    uniform sampler2D textureAtlas;
 
-    varying vec2 vUv;
     varying vec3 vColor;
+    varying float vImageKey;
 
     float circle( vec2 uv, vec2 pos, float rad ) {
 
-      float d = length( pos - uv ) - rad;
+      float limit = 0.02;
+      float limit2 = limit * 2.0;
+      float d = length( pos - uv ) - ( rad - limit );
       float t = clamp( d, 0.0, 1.0 );
 
       float viewRange = smoothstep( 0.0, frustumSize * 0.001, abs( 1.0 / vFogDepth ) );
-      float taper = 0.15 * viewRange + 0.015;
-      taper = mix( taper, 0.15, sizeAttenuation );
+      float taper = limit2 * viewRange + limit;
+      taper = mix( taper, limit2, sizeAttenuation );
 
       return smoothstep( 0.5 - taper, 0.5 + taper, 1.0 - t );
 
@@ -18682,9 +18689,25 @@
 
       vec2 uv = 2.0 * vec2( gl_PointCoord ) - 1.0;
       float t = circle( uv, vec2( 0.0, 0.0 ), 0.5 );
-      float id = size * vUv.x + ( size * size * vUv.y );
 
-      gl_FragColor = vec4( vColor * color, opacity * t );
+      float col = mod( vImageKey, imageDimensions );
+      float row = floor( vImageKey / imageDimensions );
+
+      uv = vec2( 0.0 );
+      uv.x = mix( 0.0, 1.0 / imageDimensions, gl_PointCoord.x );
+      uv.y = mix( 0.0, 1.0 / imageDimensions, gl_PointCoord.y );
+
+      uv = vec2( gl_PointCoord ) / imageDimensions;
+      uv.x += col / imageDimensions;
+      uv.y += row / imageDimensions;
+
+      vec4 texel = texture2D( textureAtlas, uv );
+      float useImage = step( 0.0, vImageKey );
+
+      t = mix( t, texel.a, useImage );
+      vec3 layer = mix( vec3( 1.0 ), texel.rgb, useImage );
+
+      gl_FragColor = vec4( layer * vColor * color, opacity * t );
       #include <fog_fragment>
 
     }
@@ -18701,8 +18724,7 @@
 
     void main() {
 
-      vec4 texel = texture2D( texturePositions, position.xy );
-      vec3 vPosition = texel.xyz;
+      vec3 vPosition = texture2D( texturePositions, position.xy ).xyz;
       vPosition.z *= 1.0 - is2D;
 
       vec4 mvPosition = modelViewMatrix * vec4( vPosition, 1.0 );
@@ -18729,12 +18751,103 @@
   `
   };
 
+  // src/texture-atlas.js
+  var anchor = document.createElement("a");
+  var _TextureAtlas = class extends Texture {
+    map = [];
+    dimensions = 1;
+    isTextureAtlas = true;
+    constructor() {
+      super(document.createElement("canvas"));
+      this.flipY = false;
+    }
+    static getAbsoluteURL(path) {
+      anchor.href = path;
+      return anchor.href;
+    }
+    add(src) {
+      const scope = this;
+      let img, index;
+      if (typeof src === "string") {
+        index = this.indexOf(src);
+        if (index >= 0) {
+          img = this.map[index];
+          if (img.complete) {
+            onLoad();
+          } else {
+            img.addEventListener("load", onLoad, false);
+          }
+        } else {
+          img = document.createElement("img");
+          img.addEventListener("load", onLoad, false);
+          img.src = src;
+          index = this.map.length;
+          this.map.push(img);
+        }
+      } else if (typeof src === "object" && "src" in src) {
+        img = src;
+        src = img.src;
+        index = this.indexOf(src);
+        if (index >= 0) {
+          img = this.map[index];
+        } else {
+          index = this.map.length;
+          this.map.push(img);
+        }
+        if (img.complete) {
+          onLoad();
+        } else {
+          img.addEventListener("load", onLoad, false);
+        }
+      }
+      this.dimensions = Math.ceil(Math.sqrt(this.map.length));
+      return index;
+      function onLoad() {
+        img.removeEventListener("load", onLoad, false);
+        scope.update();
+      }
+    }
+    update() {
+      const { image } = this;
+      const ctx = image.getContext("2d");
+      image.width = _TextureAtlas.Resolution;
+      image.height = _TextureAtlas.Resolution;
+      const dims = this.dimensions = Math.ceil(Math.sqrt(this.map.length));
+      const width = image.width / dims;
+      const height = image.height / dims;
+      ctx.clearRect(0, 0, image.width, image.height);
+      for (let i = 0; i < this.map.length; i++) {
+        const col = i % dims;
+        const row = Math.floor(i / dims);
+        const img = this.map[i];
+        const x = col / dims * image.width;
+        const y = row / dims * image.height;
+        ctx.drawImage(img, x, y, width, height);
+      }
+      this.needsUpdate = true;
+    }
+    indexOf(src) {
+      const uri = _TextureAtlas.getAbsoluteURL(src);
+      for (let i = 0; i < this.map.length; i++) {
+        const img = this.map[i];
+        if (uri === img.src) {
+          return i;
+        }
+      }
+      return -1;
+    }
+  };
+  var TextureAtlas = _TextureAtlas;
+  __publicField(TextureAtlas, "Resolution", 1024);
+
   // src/points.js
   var color = new Color();
   var Points2 = class extends Points {
     constructor(size, { data, uniforms }) {
+      const atlas = new TextureAtlas();
       const vertices = [];
       const colors = [];
+      const imageKeys = [];
       for (let i = 0; i < data.nodes.length; i++) {
         const node = data.nodes[i];
         const x = i % size / size;
@@ -18747,10 +18860,16 @@
         } else {
           colors.push(1, 1, 1);
         }
+        if (node.image) {
+          imageKeys.push(atlas.add(node.image));
+        } else {
+          imageKeys.push(-1);
+        }
       }
       const geometry = new BufferGeometry();
       geometry.setAttribute("position", new Float32BufferAttribute(vertices, 3));
       geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
+      geometry.setAttribute("imageKey", new Float32BufferAttribute(imageKeys, 1));
       const material = new ShaderMaterial({
         uniforms: { ...UniformsLib["fog"], ...{
           is2D: uniforms.is2D,
@@ -18758,7 +18877,9 @@
           frustumSize: uniforms.frustumSize,
           nodeRadius: uniforms.nodeRadius,
           nodeScale: uniforms.nodeScale,
+          imageDimensions: { value: atlas.dimensions },
           texturePositions: { value: null },
+          textureAtlas: { value: atlas },
           size: { value: size },
           opacity: uniforms.opacity,
           color: uniforms.pointColor
@@ -18766,8 +18887,8 @@
         vertexShader: points.vertexShader,
         fragmentShader: points.fragmentShader,
         transparent: true,
-        depthWrite: false,
-        depthTest: false,
+        depthWrite: true,
+        depthTest: true,
         vertexColors: true,
         fog: true
       });

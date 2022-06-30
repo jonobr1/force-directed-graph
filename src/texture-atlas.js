@@ -75,7 +75,7 @@ class TextureAtlas extends Texture {
 
     }
 
-    this.dimensions = Math.ceil(Math.sqrt(this.map.length))
+    this.dimensions = Math.ceil(Math.sqrt(this.map.length));
 
     return index;
 
