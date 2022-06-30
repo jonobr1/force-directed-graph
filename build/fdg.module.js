@@ -18633,6 +18633,7 @@ var points = {
 
     varying vec3 vColor;
     varying float vImageKey;
+    varying float vDistance;
 
     attribute float imageKey;
 
@@ -18647,6 +18648,7 @@ var points = {
       gl_PointSize = nodeRadius * nodeScale;
       gl_PointSize *= mix( 1.0, frustumSize / - mvPosition.z, sizeAttenuation );
 
+      vDistance = 1.0 / - mvPosition.z;
       vColor = color;
       vImageKey = imageKey;
 
@@ -18668,6 +18670,7 @@ var points = {
 
     varying vec3 vColor;
     varying float vImageKey;
+    varying float vDistance;
 
     float circle( vec2 uv, vec2 pos, float rad ) {
 
@@ -18676,7 +18679,7 @@ var points = {
       float d = length( pos - uv ) - ( rad - limit );
       float t = clamp( d, 0.0, 1.0 );
 
-      float viewRange = smoothstep( 0.0, frustumSize * 0.001, abs( 1.0 / vFogDepth ) );
+      float viewRange = smoothstep( 0.0, frustumSize * 0.001, abs( vDistance ) );
       float taper = limit2 * viewRange + limit;
       taper = mix( taper, limit2, sizeAttenuation );
 
