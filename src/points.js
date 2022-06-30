@@ -7,6 +7,7 @@ import {
   UniformsLib
 } from 'three';
 import { points as shader } from './shaders.js';
+import { TextureAtlas } from './texture-atlas.js';
 
 const color = new Color();
 
@@ -14,8 +15,10 @@ class Points extends BasePoints {
 
   constructor(size, { data, uniforms }) {
 
+    const atlas = new TextureAtlas();
     const vertices = [];
     const colors = [];
+    const imageKeys = [];
 
     for (let i = 0; i < data.nodes.length; i++) {
 
@@ -33,6 +36,12 @@ class Points extends BasePoints {
         colors.push(1, 1, 1);
       }
 
+      if (node.image) {
+        imageKeys.push(atlas.add(node.image));
+      } else {
+        imageKeys.push(-1);
+      }
+
     }
 
     const geometry = new BufferGeometry();
@@ -40,6 +49,8 @@ class Points extends BasePoints {
       'position', new Float32BufferAttribute(vertices, 3));
     geometry.setAttribute(
       'color', new Float32BufferAttribute(colors, 3));
+    geometry.setAttribute(
+      'imageKey', new Float32BufferAttribute(imageKeys, 1));
 
     const material = new ShaderMaterial({
       uniforms: { ...UniformsLib['fog'], ...{
@@ -48,7 +59,9 @@ class Points extends BasePoints {
         frustumSize: uniforms.frustumSize,
         nodeRadius: uniforms.nodeRadius,
         nodeScale: uniforms.nodeScale,
+        imageDimensions: { value: atlas.dimensions},
         texturePositions: { value: null },
+        textureAtlas: { value: atlas },
         size: { value: size },
         opacity: uniforms.opacity,
         color: uniforms.pointColor
@@ -56,8 +69,8 @@ class Points extends BasePoints {
       vertexShader: shader.vertexShader,
       fragmentShader: shader.fragmentShader,
       transparent: true,
-      depthWrite: false,
-      depthTest: false,
+      depthWrite: true,
+      depthTest: true,
       vertexColors: true,
       fog: true
     });
