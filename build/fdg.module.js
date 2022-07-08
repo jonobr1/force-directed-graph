@@ -18709,7 +18709,13 @@ var points = {
       t = mix( t, texel.a, useImage );
       vec3 layer = mix( vec3( 1.0 ), texel.rgb, useImage );
 
-      gl_FragColor = vec4( layer * vColor * color, opacity * t );
+      float alpha = opacity * t;
+
+      if ( alpha <= 0.0 ) {
+        discard;
+      }
+
+      gl_FragColor = vec4( layer * vColor * color, alpha );
       #include <fog_fragment>
 
     }
@@ -18889,8 +18895,6 @@ var Points2 = class extends Points {
       vertexShader: points.vertexShader,
       fragmentShader: points.fragmentShader,
       transparent: true,
-      depthWrite: false,
-      depthTest: false,
       vertexColors: true,
       fog: true
     });
