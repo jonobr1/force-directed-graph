@@ -69,8 +69,6 @@ class Points extends BasePoints {
       vertexShader: shader.vertexShader,
       fragmentShader: shader.fragmentShader,
       transparent: true,
-      depthWrite: false,
-      depthTest: false,
       vertexColors: true,
       fog: true
     });

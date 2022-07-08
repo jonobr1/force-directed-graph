@@ -266,7 +266,13 @@ const points = {
       t = mix( t, texel.a, useImage );
       vec3 layer = mix( vec3( 1.0 ), texel.rgb, useImage );
 
-      gl_FragColor = vec4( layer * vColor * color, opacity * t );
+      float alpha = opacity * t;
+
+      if ( alpha <= 0.0 ) {
+        discard;
+      }
+
+      gl_FragColor = vec4( layer * vColor * color, alpha );
       #include <fog_fragment>
 
     }
