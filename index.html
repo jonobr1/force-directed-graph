@@ -248,6 +248,7 @@
               fdg.setBlendMode(v);
               reset();
             });
+          gui.add(fdg.getUniforms().pointsInheritColor, 'value').name('pointsInheritColor');
           gui.add(fdg.getUniforms().linksInheritColor, 'value').name('linksInheritColor');
           gui.addColor(fdg.getUniforms().pointColor, 'value').name('pointColor');
           gui.addColor(fdg.getUniforms().linkColor, 'value').name('linkColor');
