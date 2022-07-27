@@ -224,6 +224,7 @@ const points = {
     uniform float opacity;
     uniform float imageDimensions;
     uniform sampler2D textureAtlas;
+    uniform float inheritColors;
 
     varying vec3 vColor;
     varying float vImageKey;
@@ -272,7 +273,7 @@ const points = {
         discard;
       }
 
-      gl_FragColor = vec4( layer * vColor * color, alpha );
+      gl_FragColor = vec4( layer * mix( vec3( 1.0 ), vColor, inheritColors ) * color, alpha );
       #include <fog_fragment>
 
     }

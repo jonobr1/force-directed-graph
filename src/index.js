@@ -39,6 +39,7 @@ class ForceDirectedGraph extends Group {
       sizeAttenuation: { value: true },
       frustumSize: { value: 100 },
       linksInheritColor: { value: false },
+      pointsInheritColor: { value: true },
       pointColor: { value: new Color(0.3, 0.3, 0.3) },
       linkColor: { value: new Color(0.9, 0.9, 0.9) },
       opacity: { value: 1 }
