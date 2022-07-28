@@ -1,12 +1,12 @@
 # Force Directed Graph
 
-GPU supercharged attraction-graph visualizations for the web built on top of [Three.js](http://threejs.org). Importable as an ES6 module or a fully declarative ~~React Component~~.
+GPU supercharged attraction-graph visualizations for the web built on top of [Three.js](http://threejs.org). Importable as an ES6 module.
 
 1. [x] Simulation computed on GPU via render targets
 2. [x] Accepts thousands of nodes and links
 3. [x] Configurable point and link colors
 4. [x] Single library dependent (Three.js)
-5. [x] Simple data schema to populate compatible with d3.js
+5. [x] Simple data schema to populate compatible with d3.js JSON samples
 6. [x] 2d & 3d simulation modes
 
 Visit the hosted [project page](https://jonobr1.com/force-directed-graph/) for a running demo.
