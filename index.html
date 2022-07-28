@@ -118,7 +118,7 @@
           <a href="https://npmjs.com/package/@jonobr1/force-directed-graph">NPM</a> &middot; <a href="http://github.com/jonobr1/force-directed-graph">Source Code</a> &middot; <a href="https://github.com/jonobr1/force-directed-graph/blob/master/LICENSE" target="_blank">MIT</a>
         </p>
       <p>
-        GPU supercharged attraction-graph visualizations for the web built on top of <a href="http://threejs.org">Three.js</a>. Importable as an ES6 module or a fully declarative <s>React Component</s><sup>Pending</sup>. In this demo you can click and drag the visualization to rotate the camera.
+        GPU supercharged attraction-graph visualizations for the web built on top of <a href="http://threejs.org">Three.js</a>. Importable as an ES6 module. In this demo you can click and drag the visualization to rotate the camera.
       </p>
       <p>
         Check out this demo with different particle counts:
@@ -217,6 +217,9 @@
           gui = new GUI();
           fdg = new ForceDirectedGraph(renderer, data);
 
+          fdg.pointColor.setRGB(0.3, 0.3, 0.3);
+          fdg.linkColor.setRGB(0.9, 0.9, 0.9);
+
           gui.close();
 
           [
@@ -233,19 +236,15 @@
             { name: 'opacity', min: 0, max: 1, step: 0.1 }
           ].forEach(function({ name, min, max, step }) {
 
-            const uniforms = fdg.getUniforms();
-            const obj = uniforms[name];
-
-            gui.add(obj, 'value', min, max, step).name(name).onChange(reset);
+            gui.add(fdg, name, min, max, step).name(name).onChange(reset);
 
           });
 
-          gui.add(fdg.getUniforms().sizeAttenuation, 'value')
-            .name('sizeAttenuation').onChange(reset);
-          gui.add(fdg.getUniforms().is2D, 'value').name('2D').onChange(reset);
+          gui.add(fdg, 'sizeAttenuation').onChange(reset);
+          gui.add(fdg, 'is2D').name('2D').onChange(reset);
           gui.add({ blending: THREE.NormalBlending }, 'blending', BLEND_MODES)
             .onChange(function(v) {
-              fdg.setBlendMode(v);
+              fdg.blending = v;
               reset();
             });
 
@@ -254,13 +253,13 @@
             links: gui.addFolder('Links')
           };
 
-          folders.points.add(fdg.children[0], 'visible').name('visible');
-          folders.points.add(fdg.getUniforms().pointsInheritColor, 'value').name('inheritColors');
-          folders.points.addColor(fdg.getUniforms().pointColor, 'value').name('color');
+          folders.points.add(fdg.points, 'visible').name('visible');
+          folders.points.add(fdg, 'pointsInheritColor').name('inheritColors');
+          folders.points.addColor(fdg, 'pointColor').name('color');
 
-          folders.links.add(fdg.children[1], 'visible').name('visible');
-          folders.links.add(fdg.getUniforms().linksInheritColor, 'value').name('inheritColor');
-          folders.links.addColor(fdg.getUniforms().linkColor, 'value').name('color');
+          folders.links.add(fdg.links, 'visible').name('visible');
+          folders.links.add(fdg, 'linksInheritColor').name('inheritColor');
+          folders.links.addColor(fdg, 'linkColor').name('color');
 
           scene.add(fdg);
 
@@ -294,8 +293,7 @@
         }
 
         function reset() {
-          const uniforms = fdg.getUniforms();
-          uniforms.alpha.value = 1;
+          fdg.alpha = 1;
         }
 
         function updateStats() {

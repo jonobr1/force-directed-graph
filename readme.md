@@ -6,9 +6,8 @@ GPU supercharged attraction-graph visualizations for the web built on top of [Th
 2. [x] Accepts thousands of nodes and links
 3. [x] Configurable point and link colors
 4. [x] Single library dependent (Three.js)
-5. [x] React component is a single line declaration
-6. [x] Simple data schema to populate
-7. [x] 2d & 3d simulation and rendering modes
+5. [x] Simple data schema to populate compatible with d3.js
+6. [x] 2d & 3d simulation modes
 
 Visit the hosted [project page](https://jonobr1.com/force-directed-graph/) for a running demo.
 

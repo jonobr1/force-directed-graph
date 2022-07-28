@@ -40,8 +40,8 @@ class ForceDirectedGraph extends Group {
       frustumSize: { value: 100 },
       linksInheritColor: { value: false },
       pointsInheritColor: { value: true },
-      pointColor: { value: new Color(0.3, 0.3, 0.3) },
-      linkColor: { value: new Color(0.9, 0.9, 0.9) },
+      pointColor: { value: new Color(1, 1, 1) },
+      linkColor: { value: new Color(1, 1, 1) },
       opacity: { value: 1 }
     };
 
@@ -167,6 +167,12 @@ class ForceDirectedGraph extends Group {
   }
 
   static getPotSize = getPotSize;
+  static Properties = [
+    'decay', 'alpha', 'is2D', 'time', 'size', 'maxSpeed', 'timeStep',
+    'damping', 'repulsion', 'springLength','stiffness', 'gravity', 'nodeRadius',
+    'nodeScale', 'sizeAttenuation', 'frustumSize', 'linksInheritColor',
+    'pointsInheritColor', 'pointColor', 'linkColor', 'opacity', 'blending'
+  ];
 
   update(time) {
 
@@ -188,40 +194,165 @@ class ForceDirectedGraph extends Group {
 
   }
 
-  // Getters / Setters
-
-  getUniforms() {
-    return this.userData.uniforms;
-  }
-
   getTexture(name) {
     const { gpgpu, variables } = this.userData;
     return gpgpu.getCurrentRenderTarget(variables[name]).texture;
   }
 
-  getSize() {
-    return this.userData.size;
+  // Getters / Setters
+
+  get decay() {
+    return this.userData.uniforms.decay.value;
+  }
+  set decay(v) {
+    this.userData.uniforms.decay.value = v;
+  }
+  get alpha() {
+    return this.userData.uniforms.alpha.value;
+  }
+  set alpha(v) {
+    this.userData.uniforms.alpha.value = v;
+  }
+  get is2D() {
+    return this.userData.uniforms.is2D.value;
+  }
+  set is2D(v) {
+    this.userData.uniforms.is2D.value = v;
+  }
+  get time() {
+    return this.userData.uniforms.time.value;
+  }
+  set time(v) {
+    this.userData.uniforms.time.value = v;
+  }
+  get size() {
+    return this.userData.uniforms.size.value;
+  }
+  set size(v) {
+    this.userData.uniforms.size.value = v;
+  }
+  get maxSpeed() {
+    return this.userData.uniforms.maxSpeed.value;
+  }
+  set maxSpeed(v) {
+    this.userData.uniforms.maxSpeed.value = v;
+  }
+  get timeStep() {
+    return this.userData.uniforms.timeStep.value;
+  }
+  set timeStep(v) {
+    this.userData.uniforms.timeStep.value = v;
+  }
+  get damping() {
+    return this.userData.uniforms.damping.value;
+  }
+  set damping(v) {
+    this.userData.uniforms.damping.value = v;
+  }
+  get repulsion() {
+    return this.userData.uniforms.repulsion.value;
+  }
+  set repulsion(v) {
+    this.userData.uniforms.repulsion.value = v;
+  }
+  get springLength() {
+    return this.userData.uniforms.springLength.value;
+  }
+  set springLength(v) {
+    this.userData.uniforms.springLength.value = v;
+  }
+  get stiffness() {
+    return this.userData.uniforms.stiffness.value;
+  }
+  set stiffness(v) {
+    this.userData.uniforms.stiffness.value = v;
+  }
+  get gravity() {
+    return this.userData.uniforms.gravity.value;
+  }
+  set gravity(v) {
+    this.userData.uniforms.gravity.value = v;
+  }
+  get nodeRadius() {
+    return this.userData.uniforms.nodeRadius.value;
+  }
+  set nodeRadius(v) {
+    this.userData.uniforms.nodeRadius.value = v;
+  }
+  get nodeScale() {
+    return this.userData.uniforms.nodeScale.value;
+  }
+  set nodeScale(v) {
+    this.userData.uniforms.nodeScale.value = v;
+  }
+  get sizeAttenuation() {
+    return this.userData.uniforms.sizeAttenuation.value;
+  }
+  set sizeAttenuation(v) {
+    this.userData.uniforms.sizeAttenuation.value = v;
+  }
+  get frustumSize() {
+    return this.userData.uniforms.frustumSize.value;
+  }
+  set frustumSize(v) {
+    this.userData.uniforms.frustumSize.value = v;
+  }
+  get linksInheritColor() {
+    return this.userData.uniforms.linksInheritColor.value;
+  }
+  set linksInheritColor(v) {
+    this.userData.uniforms.linksInheritColor.value = v;
+  }
+  get pointsInheritColor() {
+    return this.userData.uniforms.pointsInheritColor.value;
+  }
+  set pointsInheritColor(v) {
+    this.userData.uniforms.pointsInheritColor.value = v;
+  }
+  get pointColor() {
+    return this.userData.uniforms.pointColor.value;
+  }
+  set pointColor(v) {
+    this.userData.uniforms.pointColor.value = v;
+  }
+  get linkColor() {
+    return this.userData.uniforms.linkColor.value;
+  }
+  set linkColor(v) {
+    this.userData.uniforms.linkColor.value = v;
+  }
+  get opacity() {
+    return this.userData.uniforms.opacity.value;
+  }
+  set opacity(v) {
+    this.userData.uniforms.opacity.value = v;
+  }
+  get blending() {
+    return this.children[0].material.blending;
+  }
+  set blending(v) {
+    for (let i = 0; i < this.children.length; i++) {
+      const child = this.children[i];
+      child.material.blending = v;
+    }
   }
 
-  setFrustumSize(size) {
-    this.userData.frustumSize.value = size;
+  get points() {
+    return this.children[0];
   }
-
-  getNodeCount() {
+  get links() {
+    return this.children[1];
+  }
+  get uniforms() {
+    return this.userData.uniforms;
+  }
+  get nodeCount() {
     const { variables } = this.userData;
     return variables.velocities.material.uniforms.nodeAmount.value;
   }
-
-  getEdgeCount() {
+  get edgeCount() {
     const { variables } = this.userData;
     return variables.velocities.material.uniforms.edgeAmount.value;
-  }
-
-  setBlendMode(mode) {
-    for (let i = 0; i < this.children.length; i++) {
-      const child = this.children[i];
-      child.material.blending = mode;
-    }
   }
 
 }
