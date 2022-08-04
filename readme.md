@@ -14,7 +14,7 @@ Visit the hosted [project page](https://jonobr1.com/force-directed-graph/) for a
 ## Usage
 
 ```
-npm install --save @jonobr1/force-directed-graph
+npm install --save three @jonobr1/force-directed-graph
 ```
 
 ### Import in ES6 environment

@@ -61,7 +61,6 @@ class Links extends LineSegments {
       vertexShader: shader.vertexShader,
       fragmentShader: shader.fragmentShader,
       transparent: true,
-      depthWrite: false,
       vertexColors: true,
       fog: true
     });
