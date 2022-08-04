@@ -64,7 +64,7 @@ class Points extends BasePoints {
         textureAtlas: { value: atlas },
         size: { value: size },
         opacity: uniforms.opacity,
-        color: uniforms.pointColor,
+        uColor: uniforms.pointColor,
         inheritColors: uniforms.pointsInheritColor
       } },
       vertexShader: shader.vertexShader,

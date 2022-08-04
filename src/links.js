@@ -56,7 +56,7 @@ class Links extends LineSegments {
         inheritColors: uniforms.linksInheritColor,
         opacity: uniforms.opacity,
         texturePositions: { value: null },
-        color: uniforms.linkColor
+        uColor: uniforms.linkColor
       } },
       vertexShader: shader.vertexShader,
       fragmentShader: shader.fragmentShader,

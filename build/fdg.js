@@ -248,7 +248,7 @@
 
     uniform float sizeAttenuation;
     uniform float frustumSize;
-    uniform vec3 color;
+    uniform vec3 uColor;
     uniform float size;
     uniform float opacity;
     uniform float imageDimensions;
@@ -302,7 +302,7 @@
         discard;
       }
 
-      gl_FragColor = vec4( layer * mix( vec3( 1.0 ), vColor, inheritColors ) * color, alpha );
+      gl_FragColor = vec4( layer * mix( vec3( 1.0 ), vColor, inheritColors ) * uColor, alpha );
       #include <fog_fragment>
 
     }
@@ -334,13 +334,13 @@
     #include <fog_pars_fragment>
 
     uniform float inheritColors;
-    uniform vec3 color;
+    uniform vec3 uColor;
     uniform float opacity;
 
     varying vec3 vColor;
 
     void main() {
-      gl_FragColor = vec4( mix( vec3( 1.0 ), vColor, inheritColors ) * color, opacity );
+      gl_FragColor = vec4( mix( vec3( 1.0 ), vColor, inheritColors ) * uColor, opacity );
       #include <fog_fragment>
     }
   `
@@ -481,7 +481,7 @@
           textureAtlas: { value: atlas },
           size: { value: size },
           opacity: uniforms.opacity,
-          color: uniforms.pointColor,
+          uColor: uniforms.pointColor,
           inheritColors: uniforms.pointsInheritColor
         } },
         vertexShader: points.vertexShader,
@@ -533,7 +533,7 @@
           inheritColors: uniforms.linksInheritColor,
           opacity: uniforms.opacity,
           texturePositions: { value: null },
-          color: uniforms.linkColor
+          uColor: uniforms.linkColor
         } },
         vertexShader: links.vertexShader,
         fragmentShader: links.fragmentShader,

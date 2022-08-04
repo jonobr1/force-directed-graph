@@ -219,7 +219,7 @@ const points = {
 
     uniform float sizeAttenuation;
     uniform float frustumSize;
-    uniform vec3 color;
+    uniform vec3 uColor;
     uniform float size;
     uniform float opacity;
     uniform float imageDimensions;
@@ -273,7 +273,7 @@ const points = {
         discard;
       }
 
-      gl_FragColor = vec4( layer * mix( vec3( 1.0 ), vColor, inheritColors ) * color, alpha );
+      gl_FragColor = vec4( layer * mix( vec3( 1.0 ), vColor, inheritColors ) * uColor, alpha );
       #include <fog_fragment>
 
     }
@@ -306,13 +306,13 @@ const links = {
     #include <fog_pars_fragment>
 
     uniform float inheritColors;
-    uniform vec3 color;
+    uniform vec3 uColor;
     uniform float opacity;
 
     varying vec3 vColor;
 
     void main() {
-      gl_FragColor = vec4( mix( vec3( 1.0 ), vColor, inheritColors ) * color, opacity );
+      gl_FragColor = vec4( mix( vec3( 1.0 ), vColor, inheritColors ) * uColor, opacity );
       #include <fog_fragment>
     }
   `
