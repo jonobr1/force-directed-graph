@@ -7,6 +7,7 @@ es.buildSync({
   entryPoints,
   bundle: true,
   platform: 'node',
+  external: ['three'],
   outfile: path.resolve(__dirname, '../build/fdg.umd.js')
 });
 
@@ -14,12 +15,14 @@ es.buildSync({
   entryPoints,
   bundle: true,
   platform: 'neutral',
+  external: ['three'],
   outfile: path.resolve(__dirname, '../build/fdg.module.js')
 });
 
 es.buildSync({
   entryPoints,
   bundle: true,
+  external: ['three'],
   outfile: path.resolve(__dirname, '../build/fdg.js')
 });
 

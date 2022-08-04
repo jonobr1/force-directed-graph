@@ -3,7 +3,7 @@
   "version": "1.17.0",
   "description": "GPU supercharged attraction-graph visualizations for the web built on top of Three.js",
   "main": "build/fdg.js",
-  "module": "src/index.js",
+  "module": "build/fdg.module.js",
   "types": "types.d.ts",
   "scripts": {
     "dev": "esbuild --servedir=. --serve=8080",
