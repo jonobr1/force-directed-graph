@@ -238,7 +238,6 @@ const points = {
     uniform float sizeAttenuation;
     uniform float frustumSize;
     uniform vec3 uColor;
-    uniform float size;
     uniform float opacity;
     uniform float imageDimensions;
     uniform sampler2D textureAtlas;
@@ -311,8 +310,8 @@ const hit = {
       vDistance = 1.0 / - mvPosition.z;
 
       float r = mod( position.z, 255.0 ) / 255.0;
-      float g = mod( floor( position.x / 255.0 ), 255.0 );
-      float b = mod( floor( floor( position.x / 255.0 ) / 255.0 ), 255.0 );
+      float g = mod( floor( position.z / 255.0 ), 255.0 );
+      float b = mod( floor( floor( position.z / 255.0 ) / 255.0 ), 255.0 );
       vColor = vec3( r, g, b );
 
       gl_Position = projectionMatrix * mvPosition;
@@ -322,7 +321,6 @@ const hit = {
   fragmentShader: `
     uniform float sizeAttenuation;
     uniform float frustumSize;
-    uniform float size;
 
     varying vec3 vColor;
     varying float vDistance;
