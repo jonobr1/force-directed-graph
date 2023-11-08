@@ -14,6 +14,7 @@ import { Registry } from './registry.js';
 import { Hit } from "./hit.js";
 
 const size = new Vector2();
+const buffer = new Uint8ClampedArray(4);
 
 class ForceDirectedGraph extends Group {
 
@@ -195,29 +196,23 @@ class ForceDirectedGraph extends Group {
 
   }
 
-  intersect(pointer, camera) {
+  intersect(pointer, scene, camera) {
 
     const { hit, renderer } = this.userData;
+
     renderer.getSize(size);
 
     hit.setSize(size.x, size.y);
-    hit.render(camera);
+    hit.compute(renderer, scene, camera);
 
-    if (pointer) {
+    const x = hit.ratio * size.x * clamp(pointer.x, 0, 1);
+    const y = hit.ratio * size.y * (1 - clamp(pointer.y, 0, 1));
 
-      const gl = hit.renderer.getContext();
-      const buffer = new Uint8Array(4);
-      const s = 1;
-      const x = clamp(pointer.x, 0, 1) * hit.ratio * size.width - s * 0.5;
-      const y = clamp(pointer.y, 0, 1) * hit.ratio * size.height - s * 0.5;
+    renderer.readRenderTargetPixels(
+      hit.renderTarget, x - 0.5, y - 0.5, 1, 1, buffer
+    );
 
-      gl.readPixels(x, y, s, s,
-        gl.RGBA, gl.UNSIGNED_BYTE, buffer);
-
-      // TODO: Use buffer to calculate index
-      // console.log(buffer);
-
-    }
+    console.log(buffer.toString());
 
   }
 

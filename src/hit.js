@@ -1,66 +1,75 @@
 import {
-  Points,
   ShaderMaterial,
-  WebGLRenderer,
-  Scene,
-  Vector2
+  WebGLRenderTarget,
+  Sprite,
+  SpriteMaterial
 } from "three";
 import { hit as shader } from "./shaders.js";
-
-const size = new Vector2();
 
 export class Hit {
 
   parent = null;
-  renderer = new WebGLRenderer();
-  scene = new Scene();
-  ratio = 0.25;
+
+  renderTarget = new WebGLRenderTarget(1, 1);
+  width = 1;
+  height = 1;
+  ratio = 1;
+
+  material = null;
+  helper = null;
 
   constructor(fdg) {
 
     this.parent = fdg;
+    this.helper = new Sprite(new SpriteMaterial({
+      map: this.renderTarget.texture
+    }));
 
     const points = fdg.points;
-    const material = new ShaderMaterial({
+
+    this.material = new ShaderMaterial({
       uniforms: points.material.uniforms,
       vertexShader: shader.vertexShader,
       fragmentShader: shader.fragmentShader,
       transparent: true
     });
 
-    const object = new Points(points.geometry, material);
-    object.frustumCulled = false;
-    object.matrixAutoUpdate = false;
-    object.matrixWorldAutoUpdate = false;
-
-    this.scene.add(object);
-
   }
 
   setSize(width, height) {
 
-    const { ratio, renderer } = this;
-
-    renderer.getSize(size);
+    const { helper, ratio, renderTarget } = this;
 
     const w = width * ratio;
     const h = height * ratio;
 
-    if (size.x !== w || size.y !== h) {
-      this.renderer.setSize(w, h);
+    if (this.width !== width || this.height !== height) {
+      this.width = width;
+      this.height = height;
+      renderTarget.setSize(w, h);
+      helper.scale.set(w, h, 1);
     }
 
   }
 
-  render(camera) {
+  compute(renderer, scene, camera) {
 
-    const { renderer, scene, parent } = this;
+    const { parent } = this;
+    const renderTarget = renderer.getRenderTarget();
 
-    const child = scene.children[0];
-    child.matrix.copy(parent.matrix);
-    child.matrixWorld.copy(parent.matrixWorld);
+    renderer.setRenderTarget(this.renderTarget);
 
+    const material = parent.points.material;
+    const visible = parent.links.visible;
+
+    parent.points.material = this.material;
+    parent.links.visible = false;
     renderer.render(scene, camera);
+
+    parent.points.material = material;
+    parent.links.visible = visible;
+
+    renderer.setRenderTarget(renderTarget);
 
   }
 

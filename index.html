@@ -266,19 +266,9 @@
           renderer.domElement.addEventListener('pointermove', pointermove, false);
 
           resize();
-          debugHitTest();
 
           renderer.setAnimationLoop(render);
 
-        }
-
-        function debugHitTest() {
-          const domElement = fdg.userData.hit.renderer.domElement;
-          domElement.style.position = 'fixed';
-          domElement.style.top = 0;
-          domElement.style.left = 0;
-          domElement.style.pointerEvents = 'none';
-          document.querySelector('#stage').appendChild(domElement);
         }
 
         function resize() {
@@ -301,7 +291,7 @@
         function render(elapsed) {
           controls.update();
           fdg.update(elapsed);
-          fdg.intersect(mouse, camera);
+          fdg.intersect(mouse, scene, camera);
           renderer.render(scene, camera);
         }
 
