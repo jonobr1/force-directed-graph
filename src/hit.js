@@ -20,7 +20,7 @@ export class Hit {
 
     this.parent = fdg;
 
-    const points = fdg.children[0];
+    const points = fdg.points;
     const material = new ShaderMaterial({
       uniforms: points.material.uniforms,
       vertexShader: shader.vertexShader,
@@ -34,8 +34,6 @@ export class Hit {
     object.matrixWorldAutoUpdate = false;
 
     this.scene.add(object);
-
-    // this.renderer.setClearColor(0x000000, 0);
 
   }
 
@@ -58,11 +56,7 @@ export class Hit {
 
     const { renderer, scene, parent } = this;
 
-    // TODO: Apply modelViewMatrix / projectionMatrix from this.parent
-    // TODO: Use pointer.x, pointer.y to get pixel color
-
     const child = scene.children[0];
-
     child.matrix.copy(parent.matrix);
     child.matrixWorld.copy(parent.matrixWorld);
 
