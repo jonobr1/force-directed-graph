@@ -25,7 +25,7 @@ class Points extends BasePoints {
       const node = data.nodes[i];
       const x = (i % size) / size;
       const y = Math.floor(i / size) / size;
-      const z = i; // Index used to calculate hit color identifier
+      const z = i + 1; // Index used to calculate hit color identifier
 
       vertices.push(x, y, z);
 
