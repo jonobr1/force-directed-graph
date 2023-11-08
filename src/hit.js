@@ -25,9 +25,7 @@ export class Hit {
       uniforms: points.material.uniforms,
       vertexShader: shader.vertexShader,
       fragmentShader: shader.fragmentShader,
-      transparent: true,
-      vertexColors: true,
-      fog: true
+      transparent: true
     });
 
     const object = new Points(points.geometry, material);
