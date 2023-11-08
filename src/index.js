@@ -1,7 +1,8 @@
 import {
   Group,
   Color,
-  RepeatWrapping
+  RepeatWrapping,
+  Vector2
 } from 'three';
 import { GPUComputationRenderer } from 'three/examples/jsm/misc/GPUComputationRenderer.js';
 import { getPotSize } from './math.js';
@@ -10,6 +11,9 @@ import { positionsFragment, velocitiesFragment } from './shaders.js';
 import { Points } from './points.js';
 import { Links } from './links.js';
 import { Registry } from './registry.js';
+import { Hit } from "./hit.js";
+
+const size = new Vector2();
 
 class ForceDirectedGraph extends Group {
 
@@ -54,8 +58,6 @@ class ForceDirectedGraph extends Group {
     let k = 0;
     for (let i = 0; i < textures.positions.image.data.length; i+=4) {
 
-      const v = 0;
-
       const x = Math.random() * 2 - 1;
       const y = Math.random() * 2 - 1;
       const z = Math.random() * 2 - 1;
@@ -81,11 +83,6 @@ class ForceDirectedGraph extends Group {
         textures.positions.image.data[i + 3] = uniforms.frustumSize.value * 10;
 
       }
-
-      textures.velocities.image.data[i + 0] = v;
-      textures.velocities.image.data[i + 1] = v;
-      textures.velocities.image.data[i + 2] = 0;
-      textures.velocities.image.data[i + 3] = 0;
 
       let i1, i2, uvx, uvy;
 
@@ -159,10 +156,14 @@ class ForceDirectedGraph extends Group {
 
     points.renderOrder = links.renderOrder + 1;
 
+    const hit = new Hit(this);
+
     this.userData.gpgpu = gpgpu;
     this.userData.uniforms = uniforms;
     this.userData.textures = textures;
     this.userData.variables = variables;
+    this.userData.hit = hit;
+    this.userData.renderer = renderer;
 
   }
 
@@ -191,6 +192,32 @@ class ForceDirectedGraph extends Group {
     }
 
     return this;
+
+  }
+
+  intersect(pointer, camera) {
+
+    const { hit, renderer } = this.userData;
+    renderer.getSize(size);
+
+    hit.setSize(size.x, size.y);
+    hit.render(camera);
+
+    if (pointer) {
+
+      const gl = hit.renderer.getContext();
+      const buffer = new Uint8Array(4);
+      const s = 1;
+      const x = clamp(pointer.x, 0, 1) * hit.ratio * size.width - s * 0.5;
+      const y = clamp(pointer.y, 0, 1) * hit.ratio * size.height - s * 0.5;
+
+      gl.readPixels(x, y, s, s,
+        gl.RGBA, gl.UNSIGNED_BYTE, buffer);
+
+      // TODO: Use buffer to calculate index
+      // console.log(buffer);
+
+    }
 
   }
 
@@ -355,6 +382,10 @@ class ForceDirectedGraph extends Group {
     return variables.velocities.material.uniforms.edgeAmount.value;
   }
 
+}
+
+function clamp(x, min, max) {
+  return Math.min(Math.max(x, min), max);
 }
 
 export { ForceDirectedGraph };

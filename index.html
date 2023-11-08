@@ -148,7 +148,7 @@
             "three/examples/jsm/misc/GPUComputationRenderer.js": "https://cdn.jsdelivr.net/npm/three/examples/jsm/misc/GPUComputationRenderer.js",
             "three/examples/jsm/controls/OrbitControls.js": "https://cdn.jsdelivr.net/npm/three/examples/jsm/controls/OrbitControls.js",
             "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui/dist/lil-gui.esm.js",
-            "@jonobr1/force-directed-graph": "./build/fdg.module.js"
+            "@jonobr1/force-directed-graph": "./src/index.js"
           }
         }
       </script>
@@ -171,6 +171,7 @@
         const camera = new THREE.PerspectiveCamera();
         const controls = new OrbitControls(camera, renderer.domElement);
         const fog = new THREE.Fog(0xffffff, 200, 750);
+        const mouse = new THREE.Vector2(-2, -2);
 
         scene.fog = fog;
         controls.enableDamping = true;
@@ -262,10 +263,22 @@
           document.querySelector('#stage').appendChild(renderer.domElement);
           window.addEventListener('resize', resize, false);
 
+          renderer.domElement.addEventListener('pointermove', pointermove, false);
+
           resize();
+          debugHitTest();
 
           renderer.setAnimationLoop(render);
 
+        }
+
+        function debugHitTest() {
+          const domElement = fdg.userData.hit.renderer.domElement;
+          domElement.style.position = 'fixed';
+          domElement.style.top = 0;
+          domElement.style.left = 0;
+          domElement.style.pointerEvents = 'none';
+          document.querySelector('#stage').appendChild(domElement);
         }
 
         function resize() {
@@ -279,9 +292,16 @@
 
         }
 
+        function pointermove(e) {
+          const x = e.clientX / window.innerWidth;
+          const y = e.clientY / window.innerHeight;
+          mouse.set(x, y);
+        }
+
         function render(elapsed) {
           controls.update();
           fdg.update(elapsed);
+          fdg.intersect(mouse, camera);
           renderer.render(scene, camera);
         }
 

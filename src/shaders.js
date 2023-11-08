@@ -1,3 +1,21 @@
+const partials = {
+  circle: `
+  float circle( vec2 uv, vec2 pos, float rad ) {
+
+    float limit = 0.02;
+    float limit2 = limit * 2.0;
+    float d = length( pos - uv ) - ( rad - limit );
+    float t = clamp( d, 0.0, 1.0 );
+
+    float viewRange = smoothstep( 0.0, frustumSize * 0.001, abs( vDistance ) );
+    float taper = limit2 * viewRange + limit;
+    taper = mix( taper, limit2, sizeAttenuation );
+
+    return smoothstep( 0.5 - taper, 0.5 + taper, 1.0 - t );
+
+  }
+  `
+};
 
 const positionsFragment = `
   uniform float is2D;
@@ -230,20 +248,7 @@ const points = {
     varying float vImageKey;
     varying float vDistance;
 
-    float circle( vec2 uv, vec2 pos, float rad ) {
-
-      float limit = 0.02;
-      float limit2 = limit * 2.0;
-      float d = length( pos - uv ) - ( rad - limit );
-      float t = clamp( d, 0.0, 1.0 );
-
-      float viewRange = smoothstep( 0.0, frustumSize * 0.001, abs( vDistance ) );
-      float taper = limit2 * viewRange + limit;
-      taper = mix( taper, limit2, sizeAttenuation );
-
-      return smoothstep( 0.5 - taper, 0.5 + taper, 1.0 - t );
-
-    }
+    ${partials.circle}
 
     void main() {
 
@@ -276,6 +281,58 @@ const points = {
       gl_FragColor = vec4( layer * mix( vec3( 1.0 ), vColor, inheritColors ) * uColor, alpha );
       #include <fog_fragment>
 
+    }
+  `
+};
+
+const hit = {
+  vertexShader: `
+    uniform float sizeAttenuation;
+    uniform float frustumSize;
+    uniform float is2D;
+    uniform float nodeRadius;
+    uniform float nodeScale;
+    uniform sampler2D texturePositions;
+
+    varying vec3 vColor;
+    varying float vDistance;
+
+    void main() {
+
+      vec4 texel = texture2D( texturePositions, position.xy );
+      vec3 vPosition = texel.xyz;
+      vPosition.z *= 1.0 - is2D;
+
+      vec4 mvPosition = modelViewMatrix * vec4( vPosition, 1.0 );
+
+      gl_PointSize = nodeRadius * nodeScale;
+      gl_PointSize *= mix( 1.0, frustumSize / - mvPosition.z, sizeAttenuation );
+
+      vDistance = 1.0 / - mvPosition.z;
+
+      float r = mod( position.z, 255.0 ) / 255.0;
+      float g = mod( floor( position.x / 255.0 ), 255.0 );
+      float b = mod( floor( floor( position.x / 255.0 ) / 255.0 ), 255.0 );
+      vColor = vec3( r, g, b );
+
+      gl_Position = projectionMatrix * mvPosition;
+
+    }
+  `,
+  fragmentShader: `
+    uniform float sizeAttenuation;
+    uniform float frustumSize;
+    uniform float size;
+
+    varying vec3 vColor;
+    varying float vDistance;
+
+    ${partials.circle}
+
+    void main() {
+      vec2 uv = 2.0 * vec2( gl_PointCoord ) - 1.0;
+      float t = circle( uv, vec2( 0.0, 0.0 ), 0.5 );
+      gl_FragColor = vec4( vColor, t );
     }
   `
 };
@@ -318,4 +375,4 @@ const links = {
   `
 };
 
-export { links, points, positionsFragment, velocitiesFragment };
+export { links, points, hit, positionsFragment, velocitiesFragment };
