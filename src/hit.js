@@ -4,7 +4,7 @@ import {
   Sprite,
   SpriteMaterial
 } from "three";
-import { hit as shader } from "./shaders.js";
+import shader from "./shaders/hit.js";
 
 export class Hit {
 

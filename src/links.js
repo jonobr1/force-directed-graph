@@ -5,7 +5,7 @@ import {
   ShaderMaterial,
   UniformsLib
 } from 'three';
-import { links as shader } from './shaders.js';
+import shader from './shaders/links.js';
 
 class Links extends LineSegments {
 

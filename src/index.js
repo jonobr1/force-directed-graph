@@ -6,7 +6,7 @@ import {
 } from 'three';
 import { GPUComputationRenderer } from 'three/examples/jsm/misc/GPUComputationRenderer.js';
 import { getPotSize } from './math.js';
-import { positionsFragment, velocitiesFragment } from './shaders.js';
+import simulation from './shaders/simulation.js';
 
 import { Points } from './points.js';
 import { Links } from './links.js';
@@ -115,8 +115,8 @@ class ForceDirectedGraph extends Group {
     }
 
     const variables = {
-      positions: gpgpu.addVariable('texturePositions', positionsFragment, textures.positions),
-      velocities: gpgpu.addVariable('textureVelocities', velocitiesFragment, textures.velocities)
+      positions: gpgpu.addVariable('texturePositions', simulation.positions, textures.positions),
+      velocities: gpgpu.addVariable('textureVelocities', simulation.velocities, textures.velocities)
     };
 
     gpgpu.setVariableDependencies(variables.positions, [variables.positions, variables.velocities]);

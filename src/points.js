@@ -6,7 +6,7 @@ import {
   Color,
   UniformsLib
 } from 'three';
-import { points as shader } from './shaders.js';
+import shader from './shaders/points.js';
 import { TextureAtlas } from './texture-atlas.js';
 
 const color = new Color();
