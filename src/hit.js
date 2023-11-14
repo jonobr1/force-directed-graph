@@ -25,11 +25,8 @@ export class Hit {
       map: this.renderTarget.texture
     }));
 
-    const points = fdg.points;
-
     this.material = new ShaderMaterial({
       uniforms: {
-        ...points.material.uniforms,
         hitScale: { value: 2 }
       },
       vertexShader: shader.vertexShader,
@@ -37,6 +34,13 @@ export class Hit {
       transparent: true
     });
 
+  }
+
+  inherit(mesh) {
+    this.material.uniforms = {
+      ...this.material.uniforms,
+      ...mesh.material.uniforms
+    };
   }
 
   setSize(width, height) {
@@ -73,6 +77,24 @@ export class Hit {
     parent.links.visible = visible;
 
     renderer.setRenderTarget(renderTarget);
+
+  }
+
+  dispose() {
+
+    this.parent = null;
+
+    this.renderTarget = new WebGLRenderTarget(1, 1);
+    this.width = 1;
+    this.height = 1;
+    this.ratio = 1;
+  
+    this.material.dispose();
+    this.helper.geometry.dispose();
+    this.helper.material.dispose();
+
+    this.material = null;
+    this.helper = null;
 
   }
 

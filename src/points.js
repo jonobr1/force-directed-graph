@@ -82,6 +82,12 @@ class Points extends BasePoints {
 
   }
 
+  dispose() {
+    super.dispose();
+    delete this.userData.vertices;
+    delete this.userData.colors;
+  }
+
 }
 
 export { Points };

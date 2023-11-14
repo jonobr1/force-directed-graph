@@ -172,6 +172,9 @@
         const controls = new OrbitControls(camera, renderer.domElement);
         const fog = new THREE.Fog(0xffffff, 200, 750);
         const mouse = new THREE.Vector2(-2, -2);
+        const fdg = new ForceDirectedGraph(renderer);
+
+        window.fdg = fdg;
 
         scene.fog = fog;
         controls.enableDamping = true;
@@ -202,14 +205,13 @@
 
         }
 
-        let fdg, gui;
+        let gui;
 
-        setup();
+        fdg.set(data).then(setup);
 
         function setup() {
 
           gui = new GUI();
-          fdg = new ForceDirectedGraph(renderer, data);
 
           fdg.pointColor.setRGB(0.3, 0.3, 0.3);
           fdg.linkColor.setRGB(0.9, 0.9, 0.9);
