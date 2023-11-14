@@ -28,7 +28,10 @@ export class Hit {
     const points = fdg.points;
 
     this.material = new ShaderMaterial({
-      uniforms: points.material.uniforms,
+      uniforms: {
+        ...points.material.uniforms,
+        hitScale: { value: 2 }
+      },
       vertexShader: shader.vertexShader,
       fragmentShader: shader.fragmentShader,
       transparent: true

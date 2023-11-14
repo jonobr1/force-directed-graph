@@ -291,6 +291,7 @@ const hit = {
     uniform float is2D;
     uniform float nodeRadius;
     uniform float nodeScale;
+    uniform float hitScale;
     uniform sampler2D texturePositions;
 
     varying vec3 vColor;
@@ -306,6 +307,7 @@ const hit = {
 
       gl_PointSize = nodeRadius * nodeScale;
       gl_PointSize *= mix( 1.0, frustumSize / - mvPosition.z, sizeAttenuation );
+      gl_PointSize *= hitScale;
 
       vDistance = 1.0 / - mvPosition.z;
 
