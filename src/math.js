@@ -55,7 +55,7 @@ export function each(list, func, step, max) {
       let i = start;
 
       while (i < limit) {
-        func(i, list[i]);
+        func(list[i], i);
         i += step;
       }
 

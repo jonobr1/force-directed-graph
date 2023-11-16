@@ -132,7 +132,7 @@ class ForceDirectedGraph extends Group {
       });
 
     function register() {
-      return each(data.nodes, (i, node) => {
+      return each(data.nodes, (node, i) => {
         registry.set(i, node);
       });
     }
@@ -140,7 +140,7 @@ class ForceDirectedGraph extends Group {
     function fill() {
 
       let k = 0;
-      return each(textures.positions.image.data, (i) => {
+      return each(textures.positions.image.data, (v, i) => {
 
         const x = Math.random() * 2 - 1;
         const y = Math.random() * 2 - 1;
