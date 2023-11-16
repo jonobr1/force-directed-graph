@@ -31,7 +31,7 @@ class ForceDirectedGraph extends Group {
       alpha: { value: 1 },
       is2D: { value: false },
       time: { value: 0 },
-      size: { value: size },
+      size: { value: 64 },
       maxSpeed: { value: 10 },
       timeStep: { value: 1 },
       damping: { value: 0.7 },
@@ -105,6 +105,7 @@ class ForceDirectedGraph extends Group {
 
     // Initialize new properties
     const size = getPotSize(Math.max(data.nodes.length, data.links.length));
+    uniforms.size.value = size;
     gpgpu = new GPUComputationRenderer(size, size, renderer);
 
     const textures = {
