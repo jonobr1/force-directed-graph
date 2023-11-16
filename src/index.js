@@ -141,7 +141,7 @@ class ForceDirectedGraph extends Group {
     function fill() {
 
       let k = 0;
-      return each(textures.positions.image.data, (v, i) => {
+      return each(textures.positions.image.data, (_, i) => {
 
         const x = Math.random() * 2 - 1;
         const y = Math.random() * 2 - 1;
@@ -240,22 +240,20 @@ class ForceDirectedGraph extends Group {
     }
 
     function generate() {
-      return new Promise((resolve) => {
-        requestAnimationFrame(() => {
 
-          const params = { uniforms, data };
-          const points = new Points(size, params);
-          const links = new Links(points, params);
-      
+      let points;
+
+      return Points.parse(size, data)
+        .then((geometry) => {
+          points = new Points(geometry, uniforms);
+        })
+        .then(() => Links.parse(points, data))
+        .then((geometry) => {
+          const links = new Links(geometry, uniforms);
           scope.add(points, links);
           points.renderOrder = links.renderOrder + 1;
-      
           scope.userData.hit.inherit(points);
-
-          resolve();
-
         });
-      });
     }
 
     function complete() {
