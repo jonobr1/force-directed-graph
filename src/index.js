@@ -319,6 +319,8 @@ class ForceDirectedGraph extends Group {
     const index = rgbToIndex({ r, g, b }) - 1;
     return {
       // TODO: Add intersection point information
+      // which you can get from the texturePositions
+      // value based on its texture position.
       data: this.userData.data.nodes[index]
     };
 
