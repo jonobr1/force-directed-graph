@@ -69,3 +69,24 @@ export function each(list, func, step, max) {
   });
 
 }
+
+/**
+ * 
+ * @param {Number} i - index to turn into color
+ * @returns {Object} - with `r`, `g`, `b` properties between 0 and 255
+ */
+export function indexToRGB(i) {
+  const r = i % 255;
+  const g = Math.floor(i / 255) % 255;
+  const b = Math.floor(i / Math.pow(255, 2)) % 255;
+  return { r, g, b };
+}
+
+/**
+ * 
+ * @param {Object} params - object with properties `r`, `g`, `b` between 0 and 255 
+ * @returns {Number} - the corresponding index
+ */
+export function rgbToIndex({ r, g, b }) {
+  return r + g * 255 + b * Math.pow(255, 2);
+}

@@ -293,7 +293,6 @@
         function render(elapsed) {
           controls.update();
           fdg.update(elapsed);
-          fdg.intersect(mouse, scene, camera);
           renderer.render(scene, camera);
         }
 

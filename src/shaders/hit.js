@@ -32,8 +32,8 @@ const hit = {
       vDistance = 1.0 / - mvPosition.z;
 
       float r = mod( position.z, 255.0 ) / 255.0;
-      float g = mod( floor( position.z / 255.0 ), 255.0 );
-      float b = mod( floor( floor( position.z / 255.0 ) / 255.0 ), 255.0 );
+      float g = mod( floor( position.z / 255.0 ), 255.0 ) / 255.0;
+      float b = mod( floor( position.z / pow( 255.0, 2.0 ) ), 255.0 ) / 255.0;
       vColor = vec3( r, g, b );
 
       gl_Position = projectionMatrix * mvPosition;
@@ -51,7 +51,7 @@ const hit = {
 
     void main() {
       vec2 uv = 2.0 * vec2( gl_PointCoord ) - 1.0;
-      float t = circle( uv, vec2( 0.0, 0.0 ), 0.5 );
+      float t = circle( uv, vec2( 0.0, 0.0 ), 0.5, 0.0 );
       gl_FragColor = vec4( vColor, t );
     }
   `

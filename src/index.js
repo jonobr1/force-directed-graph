@@ -5,7 +5,7 @@ import {
   Vector2
 } from 'three';
 import { GPUComputationRenderer } from 'three/examples/jsm/misc/GPUComputationRenderer.js';
-import { clamp, each, getPotSize } from './math.js';
+import { clamp, each, getPotSize, rgbToIndex } from './math.js';
 import simulation from './shaders/simulation.js';
 
 import { Points } from './points.js';
@@ -71,6 +71,7 @@ class ForceDirectedGraph extends Group {
     let { gpgpu, registry, renderer, uniforms } = this.userData;
 
     this.ready = false;
+    this.userData.data = data;
 
     // Reset all properties
     registry.clear();
@@ -296,7 +297,7 @@ class ForceDirectedGraph extends Group {
     renderer.getSize(size);
 
     hit.setSize(size.x, size.y);
-    hit.compute(renderer, scene, camera);
+    hit.compute(renderer, camera);
 
     const x = hit.ratio * size.x * clamp(pointer.x, 0, 1);
     const y = hit.ratio * size.y * (1 - clamp(pointer.y, 0, 1));
@@ -305,8 +306,21 @@ class ForceDirectedGraph extends Group {
       hit.renderTarget, x - 0.5, y - 0.5, 1, 1, buffer
     );
 
-    // console.log(buffer.toString());
-    // TODO: Return index
+    const [r, g, b, a] = buffer;
+    const z = 0;
+    const w = 255;
+    const isBlack = r === z && g === z && b === z && a === z;
+    const isWhite = r === w && g === w && b === w && a === w;
+
+    if (isBlack || isWhite) {
+      return null;
+    }
+
+    const index = rgbToIndex({ r, g, b }) - 1;
+    return {
+      // TODO: Add intersection point information
+      data: this.userData.data.nodes[index]
+    };
 
   }
 

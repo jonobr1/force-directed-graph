@@ -59,7 +59,7 @@ export class Hit {
 
   }
 
-  compute(renderer, scene, camera) {
+  compute(renderer, camera) {
 
     const { parent } = this;
     const renderTarget = renderer.getRenderTarget();
@@ -71,7 +71,7 @@ export class Hit {
 
     parent.points.material = this.material;
     parent.links.visible = false;
-    renderer.render(scene, camera);
+    renderer.render(parent, camera);
 
     parent.points.material = material;
     parent.links.visible = visible;

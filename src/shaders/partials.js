@@ -4,7 +4,7 @@
  * - float sizeAttenuation: 0, 1
  */
 export const circle = `
-float circle( vec2 uv, vec2 pos, float rad ) {
+float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
 
   float limit = 0.02;
   float limit2 = limit * 2.0;
@@ -15,7 +15,10 @@ float circle( vec2 uv, vec2 pos, float rad ) {
   float taper = limit2 * viewRange + limit;
   taper = mix( taper, limit2, sizeAttenuation );
 
-  return smoothstep( 0.5 - taper, 0.5 + taper, 1.0 - t );
+  float a = step( 0.5, 1.0 - t );
+  float aa = smoothstep( 0.5 - taper, 0.5 + taper, 1.0 - t );;
+
+  return mix( a, aa, isSmooth );
 
 }
 `;

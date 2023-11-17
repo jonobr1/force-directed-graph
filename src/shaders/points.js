@@ -61,7 +61,7 @@ const points = {
     void main() {
 
       vec2 uv = 2.0 * vec2( gl_PointCoord ) - 1.0;
-      float t = circle( uv, vec2( 0.0, 0.0 ), 0.5 );
+      float t = circle( uv, vec2( 0.0, 0.0 ), 0.5, 1.0 );
 
       float col = mod( vImageKey, imageDimensions );
       float row = floor( vImageKey / imageDimensions );
