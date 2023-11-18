@@ -2,7 +2,8 @@ import {
   Color,
   Group,
   RepeatWrapping,
-  Vector2
+  Vector2,
+  Vector3
 } from 'three';
 import { GPUComputationRenderer } from 'three/examples/jsm/misc/GPUComputationRenderer.js';
 import { clamp, each, getPotSize, rgbToIndex } from './math.js';
@@ -13,8 +14,12 @@ import { Links } from './links.js';
 import { Registry } from './registry.js';
 import { Hit } from "./hit.js";
 
+const position = new Vector3();
 const size = new Vector2();
-const buffer = new Uint8ClampedArray(4);
+const buffers = {
+  int: new Uint8ClampedArray(4),
+  float: new Float32Array(4)
+};
 
 class ForceDirectedGraph extends Group {
 
@@ -130,7 +135,7 @@ class ForceDirectedGraph extends Group {
       .then(generate)
       .then(complete)
       .catch((error) => {
-        console.warn('Force Directed Graph', error);
+        console.warn('Force Directed Graph:', error);
       });
 
     function register() {
@@ -303,10 +308,10 @@ class ForceDirectedGraph extends Group {
     const y = hit.ratio * size.y * (1 - clamp(pointer.y, 0, 1));
 
     renderer.readRenderTargetPixels(
-      hit.renderTarget, x - 0.5, y - 0.5, 1, 1, buffer
+      hit.renderTarget, x - 0.5, y - 0.5, 1, 1, buffers.int
     );
 
-    const [r, g, b, a] = buffer;
+    const [r, g, b, a] = buffers.int;
     const z = 0;
     const w = 255;
     const isBlack = r === z && g === z && b === z && a === z;
@@ -317,10 +322,9 @@ class ForceDirectedGraph extends Group {
     }
 
     const index = rgbToIndex({ r, g, b }) - 1;
+    const point = this.getPositionFromIndex(index);
     return {
-      // TODO: Add intersection point information
-      // which you can get from the texturePositions
-      // value based on its texture position.
+      point,
       data: this.userData.data.nodes[index]
     };
 
@@ -329,6 +333,36 @@ class ForceDirectedGraph extends Group {
   getTexture(name) {
     const { gpgpu, variables } = this.userData;
     return gpgpu.getCurrentRenderTarget(variables[name]).texture;
+  }
+
+  getPositionFromIndex(i) {
+
+    const { points, size } = this;
+    const { gpgpu, renderer, variables } = this.userData;
+
+    if (!points || !renderer || !size) {
+      console.warn(
+        'Force Directed Graph:',
+        'unable to calculate position without points or renderer.'
+      );
+      return;
+    }
+
+    const index = i * 3;
+    const uvs = points.geometry.attributes.position.array;
+    const uvx = Math.floor(uvs[index + 0] * size);
+    const uvy = Math.floor(uvs[index + 1] * size);
+    const renderTarget = gpgpu.getCurrentRenderTarget(variables.positions);
+
+    renderer.readRenderTargetPixels(
+      renderTarget, uvx, uvy, 1, 1, buffers.float
+    );
+
+    const [x, y, z] = buffers.float;
+    position.set(x, y, z);
+
+    return position;
+
   }
 
   // Getters / Setters
