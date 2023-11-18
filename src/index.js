@@ -290,7 +290,7 @@ class ForceDirectedGraph extends Group {
 
   }
 
-  intersect(pointer, scene, camera) {
+  intersect(pointer, camera) {
 
     const { hit, renderer } = this.userData;
 
