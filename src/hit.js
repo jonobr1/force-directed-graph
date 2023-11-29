@@ -1,10 +1,13 @@
 import {
+  Color,
   ShaderMaterial,
   WebGLRenderTarget,
   Sprite,
   SpriteMaterial
 } from "three";
 import shader from "./shaders/hit.js";
+
+const color = new Color();
 
 export class Hit {
 
@@ -68,15 +71,21 @@ export class Hit {
 
     const material = parent.points.material;
     const visible = parent.links.visible;
+    const alpha = renderer.getClearAlpha();
+
+    renderer.getClearColor(color);
 
     parent.points.material = this.material;
     parent.links.visible = false;
+
+    renderer.setClearColor(0x000000, 0);
     renderer.render(parent, camera);
 
     parent.points.material = material;
     parent.links.visible = visible;
 
     renderer.setRenderTarget(renderTarget);
+    renderer.setClearColor(color, alpha);
 
   }
 

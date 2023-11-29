@@ -14,6 +14,7 @@ import { Links } from './links.js';
 import { Registry } from './registry.js';
 import { Hit } from "./hit.js";
 
+const color = new Color();
 const position = new Vector3();
 const size = new Vector2();
 const buffers = {
@@ -365,6 +366,78 @@ class ForceDirectedGraph extends Group {
 
   }
 
+  setPointColorById(id, css) {
+    const index = this.getIndexById(id);
+    this.setPointColorFromIndex(index, css);
+  }
+
+  setPointColorFromIndex(index, css) {
+
+    const attribute = this.points.geometry.getAttribute('color');
+    const colors = attribute.array;
+
+    color.set(css);
+
+    colors[3 * index + 0] = color.r;
+    colors[3 * index + 1] = color.g;
+    colors[3 * index + 2] = color.b;
+
+    attribute.needsUpdate = true;
+
+  }
+
+  updateLinkColors() {
+
+    const { data } = this.userData;
+    
+    const ref = this.points.geometry.attributes.color.array;
+    const attribute = this.links.geometry.getAttribute('color');
+    const colors = attribute.array;
+
+    return each(data.links, (_, i) => {
+
+      const l = data.links[i];
+      const li = i * 6;
+      const si = 3 * l.sourceIndex;
+      const ti = 3 * l.targetIndex;
+
+      colors[li + 0] = ref[si + 0];
+      colors[li + 1] = ref[si + 1];
+      colors[li + 2] = ref[si + 2];
+
+      colors[li + 3] = ref[ti + 0];
+      colors[li + 4] = ref[ti + 1];
+      colors[li + 5] = ref[ti + 2];
+
+    })
+    .then(() => (attribute.needsUpdate = true));
+
+  }
+
+  getIndexById(id) {
+    const { registry } = this.userData;
+    return registry.get(id);
+  }
+
+  getLinksById(id) {
+    const { data } = this.userData;
+    const index = this.getIndexById(id);
+    const result = [];
+    const promise = each(data.links, (link) => {
+      const { sourceIndex, targetIndex } = link;
+      if (sourceIndex === index || targetIndex === index) {
+        result.push(link);
+      }
+    });
+    return promise.then(() => result);
+  }
+
+  getPointById(id) {
+    const { data } = this.userData;
+    const index = this.getIndexById(id);
+    return data.nodes[index];
+  }
+
   // Getters / Setters
 
   get decay() {
@@ -480,6 +553,12 @@ class ForceDirectedGraph extends Group {
   }
   set pointColor(v) {
     this.userData.uniforms.pointColor.value = v;
+  }
+  get linksColor() {
+    return this.linkColor;
+  }
+  set linksColor(v) {
+    this.linkColor = v;
   }
   get linkColor() {
     return this.userData.uniforms.linkColor.value;
