@@ -386,7 +386,7 @@ class ForceDirectedGraph extends Group {
 
   }
 
-  updateLinkColors() {
+  updateLinksColors() {
 
     const { data } = this.userData;
     
