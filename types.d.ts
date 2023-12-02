@@ -216,14 +216,40 @@ declare module "index" {
     export class ForceDirectedGraph {
         static getPotSize: typeof getPotSize;
         static Properties: string[];
-        constructor(renderer: any, data: any);
+        /**
+         * @param {WebGLRenderer} renderer - the three.js renderer referenced to create the render targets
+         * @param {Object} [data] - optional data to automatically set the data of the graph
+         */
+        constructor(renderer: WebGLRenderer, data?: any);
         ready: boolean;
-        set(data: any, callback: any): Promise<void>;
-        update(time: any): ForceDirectedGraph;
-        intersect(pointer: any, camera: any): {
-            data: any;
-        };
+        /**
+         * @param {Object} data - Object with nodes and links properties based on https://observablehq.com/@d3/force-directed-graph-component
+         * @param {Function} callback
+         * @description Set the data to an instance of force directed graph. Because of the potential large amount of data this function runs on a request animation frame and returns a promise (or a passed callback) to give indication when the graph is ready to be rendered.
+         * @returns {Promise}
+         */
+        set(data: any, callback: Function): Promise<any>;
+        /**
+         * @param {Number} time
+         * @description Function to update the instance meant to be run before three.js's renderer.render method.
+         * @returns {Void}
+         */
+        update(time: number): void;
+        /**
+         * @param {Vector2} pointer - x, y values normalized to the camera's clipspace
+         * @param {Camera} camera - the camera to reference ray casting matrices
+         * @description Check to see if a point in the browser's screenspace intersects with any points in the force directed graph. If none found, then null is returned.
+         * @returns {Object|Null}
+         */
+        intersect(pointer: Vector2, camera: Camera): any | null;
         getTexture(name: any): any;
+        getPositionFromIndex(i: any): any;
+        setPointColorById(id: any, css: any): void;
+        setPointColorFromIndex(index: any, css: any): void;
+        updateLinksColors(): Promise<boolean>;
+        getIndexById(id: any): any;
+        getLinksById(id: any): Promise<any[]>;
+        getPointById(id: any): any;
         set decay(arg: any);
         get decay(): any;
         set alpha(arg: any);
@@ -262,6 +288,8 @@ declare module "index" {
         get pointsInheritColor(): any;
         set pointColor(arg: any);
         get pointColor(): any;
+        set linksColor(arg: any);
+        get linksColor(): any;
         set linkColor(arg: any);
         get linkColor(): any;
         set opacity(arg: any);

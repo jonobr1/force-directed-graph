@@ -26,6 +26,10 @@ class ForceDirectedGraph extends Group {
 
   ready = false;
 
+  /**
+   * @param {WebGLRenderer} renderer - the three.js renderer referenced to create the render targets
+   * @param {Object} [data] - optional data to automatically set the data of the graph
+   */
   constructor(renderer, data) {
 
     super();
@@ -71,6 +75,12 @@ class ForceDirectedGraph extends Group {
     'pointsInheritColor', 'pointColor', 'linkColor', 'opacity', 'blending'
   ];
 
+  /**
+   * @param {Object} data - Object with nodes and links properties based on https://observablehq.com/@d3/force-directed-graph-component
+   * @param {Function} callback 
+   * @description Set the data to an instance of force directed graph. Because of the potential large amount of data this function runs on a request animation frame and returns a promise (or a passed callback) to give indication when the graph is ready to be rendered.
+   * @returns {Promise}
+   */
   set(data, callback) {
 
     const scope = this;
@@ -272,6 +282,11 @@ class ForceDirectedGraph extends Group {
 
   }
 
+  /**
+   * @param {Number} time 
+   * @description Function to update the instance meant to be run before three.js's renderer.render method.
+   * @returns {Void}
+   */
   update(time) {
 
     if (!this.ready) {
@@ -296,6 +311,12 @@ class ForceDirectedGraph extends Group {
 
   }
 
+  /**
+   * @param {Vector2} pointer - x, y values normalized to the camera's clipspace
+   * @param {Camera} camera - the camera to reference ray casting matrices
+   * @description Check to see if a point in the browser's screenspace intersects with any points in the force directed graph. If none found, then null is returned.
+   * @returns {Object|Null}
+   */
   intersect(pointer, camera) {
 
     const { hit, renderer } = this.userData;
