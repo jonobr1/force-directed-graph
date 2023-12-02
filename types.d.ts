@@ -217,10 +217,10 @@ declare module "index" {
         static getPotSize: typeof getPotSize;
         static Properties: string[];
         /**
-         * @param {WebGLRenderer} renderer - the three.js renderer referenced to create the render targets
+         * @param {THREE.WebGLRenderer} renderer - the three.js renderer referenced to create the render targets
          * @param {Object} [data] - optional data to automatically set the data of the graph
          */
-        constructor(renderer: WebGLRenderer, data?: any);
+        constructor(renderer: THREE.WebGLRenderer, data?: any);
         ready: boolean;
         /**
          * @param {Object} data - Object with nodes and links properties based on https://observablehq.com/@d3/force-directed-graph-component
@@ -236,12 +236,12 @@ declare module "index" {
          */
         update(time: number): void;
         /**
-         * @param {Vector2} pointer - x, y values normalized to the camera's clipspace
-         * @param {Camera} camera - the camera to reference ray casting matrices
+         * @param {THREE.Vector2} pointer - x, y values normalized to the camera's clipspace
+         * @param {THREE.Camera} camera - the camera to reference ray casting matrices
          * @description Check to see if a point in the browser's screenspace intersects with any points in the force directed graph. If none found, then null is returned.
          * @returns {Object|Null}
          */
-        intersect(pointer: Vector2, camera: Camera): any | null;
+        intersect(pointer: THREE.Vector2, camera: THREE.Camera): any | null;
         getTexture(name: any): any;
         getPositionFromIndex(i: any): any;
         setPointColorById(id: any, css: any): void;

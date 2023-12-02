@@ -27,7 +27,7 @@ class ForceDirectedGraph extends Group {
   ready = false;
 
   /**
-   * @param {WebGLRenderer} renderer - the three.js renderer referenced to create the render targets
+   * @param {THREE.WebGLRenderer} renderer - the three.js renderer referenced to create the render targets
    * @param {Object} [data] - optional data to automatically set the data of the graph
    */
   constructor(renderer, data) {
@@ -312,8 +312,8 @@ class ForceDirectedGraph extends Group {
   }
 
   /**
-   * @param {Vector2} pointer - x, y values normalized to the camera's clipspace
-   * @param {Camera} camera - the camera to reference ray casting matrices
+   * @param {THREE.Vector2} pointer - x, y values normalized to the camera's clipspace
+   * @param {THREE.Camera} camera - the camera to reference ray casting matrices
    * @description Check to see if a point in the browser's screenspace intersects with any points in the force directed graph. If none found, then null is returned.
    * @returns {Object|Null}
    */
