@@ -1,15 +1,22 @@
 class Registry {
   map = {};
   constructor(list) {
-    for (let i = 0; i < list.length; i++) {
-      const item = list[i];
-      if (item.id !== 'undefined') {
-        this.map[item.id] = i;
+    if (list && list.length > 0) {
+      for (let i = 0; i < list.length; i++) {
+        this.set(i, list[i]);
       }
     }
   }
   get(id) {
     return this.map[id];
+  }
+  set(index, item) {
+    if (item.id !== 'undefined') {
+      this.map[item.id] = index;
+    }
+  }
+  clear() {
+    this.map = {};
   }
 }
 

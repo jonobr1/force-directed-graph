@@ -148,7 +148,7 @@
             "three/examples/jsm/misc/GPUComputationRenderer.js": "https://cdn.jsdelivr.net/npm/three/examples/jsm/misc/GPUComputationRenderer.js",
             "three/examples/jsm/controls/OrbitControls.js": "https://cdn.jsdelivr.net/npm/three/examples/jsm/controls/OrbitControls.js",
             "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui/dist/lil-gui.esm.js",
-            "@jonobr1/force-directed-graph": "./build/fdg.module.js"
+            "@jonobr1/force-directed-graph": "./src/index.js"
           }
         }
       </script>
@@ -171,6 +171,8 @@
         const camera = new THREE.PerspectiveCamera();
         const controls = new OrbitControls(camera, renderer.domElement);
         const fog = new THREE.Fog(0xffffff, 200, 750);
+        const mouse = new THREE.Vector2(-2, -2);
+        const fdg = new ForceDirectedGraph(renderer);
 
         scene.fog = fog;
         controls.enableDamping = true;
@@ -201,14 +203,13 @@
 
         }
 
-        let fdg, gui;
+        let gui;
 
-        setup();
+        fdg.set(data).then(setup);
 
         function setup() {
 
           gui = new GUI();
-          fdg = new ForceDirectedGraph(renderer, data);
 
           fdg.pointColor.setRGB(0.3, 0.3, 0.3);
           fdg.linkColor.setRGB(0.9, 0.9, 0.9);
@@ -262,6 +263,8 @@
           document.querySelector('#stage').appendChild(renderer.domElement);
           window.addEventListener('resize', resize, false);
 
+          renderer.domElement.addEventListener('pointermove', pointermove, false);
+
           resize();
 
           renderer.setAnimationLoop(render);
@@ -277,6 +280,12 @@
           camera.aspect = width / height;
           camera.updateProjectionMatrix();
 
+        }
+
+        function pointermove(e) {
+          const x = e.clientX / window.innerWidth;
+          const y = e.clientY / window.innerHeight;
+          mouse.set(x, y);
         }
 
         function render(elapsed) {
