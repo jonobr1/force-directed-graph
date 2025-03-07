@@ -47,11 +47,12 @@
     "url": "https://github.com/jonobr1/force-directed-graph/issues"
   },
   "homepage": "https://github.com/jonobr1/force-directed-graph#readme",
+  "peerDependencies": {
+    "three": "^0.174.0"
+  },
   "devDependencies": {
-    "esbuild": "^0.14.47",
-    "eslint": "^8.18.0",
-    "react": "^18.2.0",
-    "three": "^0.141.0",
-    "typescript": "^4.7.4"
+    "esbuild": "^0.25.0",
+    "eslint": "^9.21.0",
+    "typescript": "^5.8.2"
   }
 }
