@@ -16,7 +16,8 @@
     "src",
     "build",
     "readme.md",
-    "index.html"
+    "index.html",
+    "types.d.ts"
   ],
   "repository": {
     "type": "git",
