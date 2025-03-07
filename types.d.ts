@@ -227,6 +227,20 @@ declare module '@jonobr1/force-directed-graph/registry' {
   }
 }
 declare module '@jonobr1/force-directed-graph' {
+  export type NodeData = {
+    id: string | number;
+    x?: number;
+    y?: number;
+    z?: number;
+    isStatic?: boolean;
+    color?: CSSStyleValue;
+    image?: string;
+  };
+  export type LinkData = { source: number; target: number };
+  export type DataType = {
+    nodes: NodeData[];
+    links: LinkData[];
+  };
   export class ForceDirectedGraph {
     static getPotSize: typeof getPotSize;
     static Properties: string[];
@@ -234,7 +248,7 @@ declare module '@jonobr1/force-directed-graph' {
      * @param {THREE.WebGLRenderer} renderer - the three.js renderer referenced to create the render targets
      * @param {Object} [data] - optional data to automatically set the data of the graph
      */
-    constructor(renderer: THREE.WebGLRenderer, data?: any);
+    constructor(renderer: WebGLRenderer, data?: DataType);
     ready: boolean;
     /**
      * @param {Object} data - Object with nodes and links properties based on https://observablehq.com/@d3/force-directed-graph-component
@@ -242,7 +256,7 @@ declare module '@jonobr1/force-directed-graph' {
      * @description Set the data to an instance of force directed graph. Because of the potential large amount of data this function runs on a request animation frame and returns a promise (or a passed callback) to give indication when the graph is ready to be rendered.
      * @returns {Promise}
      */
-    set(data: any, callback: Function): Promise<any>;
+    set(data: DataType, callback?: () => void): Promise<void>;
     /**
      * @param {Number} time
      * @description Function to update the instance meant to be run before three.js's renderer.render method.
@@ -255,66 +269,100 @@ declare module '@jonobr1/force-directed-graph' {
      * @description Check to see if a point in the browser's screenspace intersects with any points in the force directed graph. If none found, then null is returned.
      * @returns {Object|Null}
      */
-    intersect(pointer: THREE.Vector2, camera: THREE.Camera): any | null;
-    getTexture(name: any): any;
-    getPositionFromIndex(i: any): any;
-    setPointColorById(id: any, css: any): void;
-    setPointColorFromIndex(index: any, css: any): void;
+    intersect(
+      pointer: Vector2,
+      camera: Camera
+    ): { point: Vector3; data: NodeData } | null;
+    getTexture(name: string): Texture;
+    getPositionFromIndex(i: number): Vector3;
+    setPointColorById(id: string | number, css: CSSStyleValue): void;
+    setPointColorFromIndex(index: number, css: CSSStyleValue): void;
     updateLinksColors(): Promise<boolean>;
-    getIndexById(id: any): any;
-    getLinksById(id: any): Promise<any[]>;
-    getPointById(id: any): any;
-    set decay(arg: any);
-    get decay(): any;
-    set alpha(arg: any);
-    get alpha(): any;
-    set is2D(arg: any);
-    get is2D(): any;
-    set time(arg: any);
-    get time(): any;
-    set size(arg: any);
-    get size(): any;
-    set maxSpeed(arg: any);
-    get maxSpeed(): any;
-    set timeStep(arg: any);
-    get timeStep(): any;
-    set damping(arg: any);
-    get damping(): any;
-    set repulsion(arg: any);
-    get repulsion(): any;
-    set springLength(arg: any);
-    get springLength(): any;
-    set stiffness(arg: any);
-    get stiffness(): any;
-    set gravity(arg: any);
-    get gravity(): any;
-    set nodeRadius(arg: any);
-    get nodeRadius(): any;
-    set nodeScale(arg: any);
-    get nodeScale(): any;
-    set sizeAttenuation(arg: any);
-    get sizeAttenuation(): any;
-    set frustumSize(arg: any);
-    get frustumSize(): any;
-    set linksInheritColor(arg: any);
-    get linksInheritColor(): any;
-    set pointsInheritColor(arg: any);
-    get pointsInheritColor(): any;
-    set pointColor(arg: any);
-    get pointColor(): any;
-    set linksColor(arg: any);
-    get linksColor(): any;
-    set linkColor(arg: any);
-    get linkColor(): any;
-    set opacity(arg: any);
-    get opacity(): any;
-    set blending(arg: any);
-    get blending(): any;
-    get points(): any;
-    get links(): any;
+    getIndexById(id: string | number): number;
+    getLinksById(id: string | number): Promise<LinkData[]>;
+    getPointById(id: string | number): NodeData;
+    dispose(): void;
+    set decay(arg: number);
+    get decay(): number;
+    set alpha(arg: number);
+    get alpha(): number;
+    set is2D(arg: boolean);
+    get is2D(): boolean;
+    set time(arg: number);
+    get time(): number;
+    set size(arg: number);
+    get size(): number;
+    set maxSpeed(arg: number);
+    get maxSpeed(): number;
+    set timeStep(arg: number);
+    get timeStep(): number;
+    set damping(arg: number);
+    get damping(): number;
+    set repulsion(arg: number);
+    get repulsion(): number;
+    set springLength(arg: number);
+    get springLength(): number;
+    set stiffness(arg: number);
+    get stiffness(): number;
+    set gravity(arg: number);
+    get gravity(): number;
+    set nodeRadius(arg: number);
+    get nodeRadius(): number;
+    set nodeScale(arg: number);
+    get nodeScale(): number;
+    set sizeAttenuation(arg: number);
+    get sizeAttenuation(): number;
+    set frustumSize(arg: number);
+    get frustumSize(): number;
+    set linksInheritColor(arg: boolean);
+    get linksInheritColor(): boolean;
+    set pointsInheritColor(arg: boolean);
+    get pointsInheritColor(): boolean;
+    set pointColor(arg: Color);
+    get pointColor(): Color;
+    set linksColor(arg: Color);
+    get linksColor(): Color;
+    set linkColor(arg: Color);
+    get linkColor(): Color;
+    set opacity(arg: number);
+    get opacity(): number;
+    set blending(
+      arg:
+        | typeof NoBlending
+        | typeof NormalBlending
+        | typeof AdditiveBlending
+        | typeof SubtractiveBlending
+        | typeof MultiplyBlending
+        | typeof CustomBlending
+    );
+    get blending():
+      | typeof NoBlending
+      | typeof NormalBlending
+      | typeof AdditiveBlending
+      | typeof SubtractiveBlending
+      | typeof MultiplyBlending
+      | typeof CustomBlending;
+    get points(): Points;
+    get links(): Links;
     get uniforms(): any;
-    get nodeCount(): any;
-    get edgeCount(): any;
+    get nodeCount(): number;
+    get edgeCount(): number;
   }
   import { getPotSize } from '@jonobr1/force-directed-graph/math';
+  import { Points } from '@jonobr1/force-directed-graph/points';
+  import { Links } from '@jonobr1/force-directed-graph/links';
+  import {
+    NoBlending,
+    NormalBlending,
+    AdditiveBlending,
+    SubtractiveBlending,
+    MultiplyBlending,
+    CustomBlending,
+    Camera,
+    Color,
+    Texture,
+    WebGLRenderer,
+    Vector2,
+    Vector3,
+  } from 'three';
 }
