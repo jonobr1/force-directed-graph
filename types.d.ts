@@ -167,7 +167,7 @@ declare module '@jonobr1/force-directed-graph/shaders/points' {
   }
 }
 declare module '@jonobr1/force-directed-graph/texture-atlas' {
-  export class TextureAtlas {
+  export class TextureAtlas extends Texture {
     static Resolution: number;
     static getAbsoluteURL(path: any): string;
     map: any[];
@@ -176,12 +176,12 @@ declare module '@jonobr1/force-directed-graph/texture-atlas' {
     flipY: boolean;
     add(src: any): number;
     update(): void;
-    needsUpdate: boolean;
     indexOf(src: any): number;
   }
+  import { Texture } from 'three';
 }
 declare module '@jonobr1/force-directed-graph/points' {
-  export class Points {
+  export class Points extends BasePoints {
     static parse(
       size: any,
       data: any
@@ -202,6 +202,7 @@ declare module '@jonobr1/force-directed-graph/points' {
     frustumCulled: boolean;
   }
   import { TextureAtlas } from '@jonobr1/force-directed-graph/texture-atlas';
+  import { Points as BasePoints } from 'three';
 }
 declare module '@jonobr1/force-directed-graph/shaders/links' {
   export default links;
@@ -211,11 +212,12 @@ declare module '@jonobr1/force-directed-graph/shaders/links' {
   }
 }
 declare module '@jonobr1/force-directed-graph/links' {
-  export class Links {
+  export class Links extends LineSegments {
     static parse(points: any, data: any): Promise<any>;
     constructor(geometry: any, uniforms: any);
     frustumCulled: boolean;
   }
+  import { LineSegments } from 'three';
 }
 declare module '@jonobr1/force-directed-graph/registry' {
   export class Registry {
@@ -241,7 +243,7 @@ declare module '@jonobr1/force-directed-graph' {
     nodes: NodeData[];
     links: LinkData[];
   };
-  export class ForceDirectedGraph {
+  export class ForceDirectedGraph extends Group {
     static getPotSize: typeof getPotSize;
     static Properties: string[];
     /**
@@ -360,6 +362,7 @@ declare module '@jonobr1/force-directed-graph' {
     CustomBlending,
     Camera,
     Color,
+    Group,
     Texture,
     WebGLRenderer,
     Vector2,
