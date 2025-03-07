@@ -1,10 +1,4 @@
-import {
-  Color,
-  Group,
-  RepeatWrapping,
-  Vector2,
-  Vector3
-} from 'three';
+import { Color, Group, RepeatWrapping, Vector2, Vector3 } from 'three';
 import { GPUComputationRenderer } from 'three/examples/jsm/misc/GPUComputationRenderer.js';
 import { clamp, each, getPotSize, rgbToIndex } from './math.js';
 import simulation from './shaders/simulation.js';
@@ -12,18 +6,17 @@ import simulation from './shaders/simulation.js';
 import { Points } from './points.js';
 import { Links } from './links.js';
 import { Registry } from './registry.js';
-import { Hit } from "./hit.js";
+import { Hit } from './hit.js';
 
 const color = new Color();
 const position = new Vector3();
 const size = new Vector2();
 const buffers = {
   int: new Uint8ClampedArray(4),
-  float: new Float32Array(4)
+  float: new Float32Array(4),
 };
 
 class ForceDirectedGraph extends Group {
-
   ready = false;
 
   /**
@@ -31,7 +24,6 @@ class ForceDirectedGraph extends Group {
    * @param {Object} [data] - optional data to automatically set the data of the graph
    */
   constructor(renderer, data) {
-
     super();
 
     this.userData.registry = new Registry();
@@ -45,7 +37,7 @@ class ForceDirectedGraph extends Group {
       maxSpeed: { value: 10 },
       timeStep: { value: 1 },
       damping: { value: 0.7 },
-      repulsion: { value: - 0.3 },
+      repulsion: { value: -0.3 },
       springLength: { value: 2 },
       stiffness: { value: 0.1 },
       gravity: { value: 0.1 },
@@ -57,32 +49,48 @@ class ForceDirectedGraph extends Group {
       pointsInheritColor: { value: true },
       pointColor: { value: new Color(1, 1, 1) },
       linkColor: { value: new Color(1, 1, 1) },
-      opacity: { value: 1 }
+      opacity: { value: 1 },
     };
     this.userData.hit = new Hit(this);
 
     if (data) {
       this.set(data);
     }
-
   }
 
   static getPotSize = getPotSize;
   static Properties = [
-    'decay', 'alpha', 'is2D', 'time', 'size', 'maxSpeed', 'timeStep',
-    'damping', 'repulsion', 'springLength','stiffness', 'gravity', 'nodeRadius',
-    'nodeScale', 'sizeAttenuation', 'frustumSize', 'linksInheritColor',
-    'pointsInheritColor', 'pointColor', 'linkColor', 'opacity', 'blending'
+    'decay',
+    'alpha',
+    'is2D',
+    'time',
+    'size',
+    'maxSpeed',
+    'timeStep',
+    'damping',
+    'repulsion',
+    'springLength',
+    'stiffness',
+    'gravity',
+    'nodeRadius',
+    'nodeScale',
+    'sizeAttenuation',
+    'frustumSize',
+    'linksInheritColor',
+    'pointsInheritColor',
+    'pointColor',
+    'linkColor',
+    'opacity',
+    'blending',
   ];
 
   /**
    * @param {Object} data - Object with nodes and links properties based on https://observablehq.com/@d3/force-directed-graph-component
-   * @param {Function} callback 
+   * @param {Function} callback
    * @description Set the data to an instance of force directed graph. Because of the potential large amount of data this function runs on a request animation frame and returns a promise (or a passed callback) to give indication when the graph is ready to be rendered.
    * @returns {Promise}
    */
   set(data, callback) {
-
     const scope = this;
     let { gpgpu, registry, renderer, uniforms } = this.userData;
 
@@ -94,9 +102,7 @@ class ForceDirectedGraph extends Group {
 
     // Dispose of all previous gpgpu data
     if (gpgpu) {
-
       for (let i = 0; i < gpgpu.variables.length; i++) {
-
         const variable = gpgpu.variables[i];
 
         for (let j = 0; j < variable.renderTargets.length; j++) {
@@ -106,9 +112,7 @@ class ForceDirectedGraph extends Group {
 
         variable.initialValueTexture.dispose();
         variable.material.dispose();
-
       }
-
     }
 
     // Reset points and links
@@ -128,26 +132,36 @@ class ForceDirectedGraph extends Group {
     const textures = {
       positions: gpgpu.createTexture(),
       velocities: gpgpu.createTexture(),
-      links: gpgpu.createTexture()
+      links: gpgpu.createTexture(),
     };
 
     const variables = {
-      positions: gpgpu.addVariable('texturePositions', simulation.positions, textures.positions),
-      velocities: gpgpu.addVariable('textureVelocities', simulation.velocities, textures.velocities)
+      positions: gpgpu.addVariable(
+        'texturePositions',
+        simulation.positions,
+        textures.positions
+      ),
+      velocities: gpgpu.addVariable(
+        'textureVelocities',
+        simulation.velocities,
+        textures.velocities
+      ),
     };
 
     this.userData.gpgpu = gpgpu;
     this.userData.variables = variables;
 
-    return register()
-      .then(fill)
-      // TODO: Add a sort here for future simulation methods
-      .then(setup)
-      .then(generate)
-      .then(complete)
-      .catch((error) => {
-        console.warn('Force Directed Graph:', error);
-      });
+    return (
+      register()
+        .then(fill)
+        // TODO: Add a sort here for future simulation methods
+        .then(setup)
+        .then(generate)
+        .then(complete)
+        .catch((error) => {
+          console.warn('Force Directed Graph:', error);
+        })
+    );
 
     function register() {
       return each(data.nodes, (node, i) => {
@@ -156,108 +170,116 @@ class ForceDirectedGraph extends Group {
     }
 
     function fill() {
-
       let k = 0;
-      return each(textures.positions.image.data, (_, i) => {
+      return each(
+        textures.positions.image.data,
+        (_, i) => {
+          const x = Math.random() * 2 - 1;
+          const y = Math.random() * 2 - 1;
+          const z = Math.random() * 2 - 1;
 
-        const x = Math.random() * 2 - 1;
-        const y = Math.random() * 2 - 1;
-        const z = Math.random() * 2 - 1;
-  
-        if (k < data.nodes.length) {
-  
-          const node = data.nodes[k];
-  
-          textures.positions.image.data[i + 0] =
-            typeof node.x !== 'undefined' ? node.x : x;
-          textures.positions.image.data[i + 1] =
-            typeof node.y !== 'undefined' ? node.y : y;
-          textures.positions.image.data[i + 2] =
-            typeof node.z !== 'undefined' ? node.z : z;
-          textures.positions.image.data[i + 3] = node.isStatic ? 1 : 0;
-  
-        } else {
-  
-          // Throw all outside "extraneous" nodes generated by texture far far away.
-          textures.positions.image.data[i + 0] = uniforms.frustumSize.value * 10;
-          textures.positions.image.data[i + 1] = uniforms.frustumSize.value * 10;
-          textures.positions.image.data[i + 2] = uniforms.frustumSize.value * 10;
-          textures.positions.image.data[i + 3] = uniforms.frustumSize.value * 10;
-  
-        }
-  
-        let i1, i2, uvx, uvy;
-  
-        if (k < data.links.length) {
-  
-          // Calculate uv look up for edge calculations
-          i1 = registry.get(data.links[k].source);
-          i2 = registry.get(data.links[k].target);
-  
-          data.links[k].sourceIndex = i1;
-          data.links[k].targetIndex = i2;
-  
-          uvx = (i1 % size) / size;
-          uvy = Math.floor(i1 / size) / size;
-  
-          textures.links.image.data[i + 0] = uvx;
-          textures.links.image.data[i + 1] = uvy;
-  
-          uvx = (i2 % size) / size;
-          uvy = Math.floor(i2 / size) / size;
-  
-          textures.links.image.data[i + 2] = uvx;
-          textures.links.image.data[i + 3] = uvy;
-  
-        }
-  
-        k++;
+          if (k < data.nodes.length) {
+            const node = data.nodes[k];
 
-      }, 4);
+            textures.positions.image.data[i + 0] =
+              typeof node.x !== 'undefined' ? node.x : x;
+            textures.positions.image.data[i + 1] =
+              typeof node.y !== 'undefined' ? node.y : y;
+            textures.positions.image.data[i + 2] =
+              typeof node.z !== 'undefined' ? node.z : z;
+            textures.positions.image.data[i + 3] = node.isStatic ? 1 : 0;
+          } else {
+            // Throw all outside "extraneous" nodes generated by texture far far away.
+            textures.positions.image.data[i + 0] =
+              uniforms.frustumSize.value * 10;
+            textures.positions.image.data[i + 1] =
+              uniforms.frustumSize.value * 10;
+            textures.positions.image.data[i + 2] =
+              uniforms.frustumSize.value * 10;
+            textures.positions.image.data[i + 3] =
+              uniforms.frustumSize.value * 10;
+          }
+
+          let i1, i2, uvx, uvy;
+
+          if (k < data.links.length) {
+            // Calculate uv look up for edge calculations
+            i1 = registry.get(data.links[k].source);
+            i2 = registry.get(data.links[k].target);
+
+            data.links[k].sourceIndex = i1;
+            data.links[k].targetIndex = i2;
+
+            uvx = (i1 % size) / size;
+            uvy = Math.floor(i1 / size) / size;
+
+            textures.links.image.data[i + 0] = uvx;
+            textures.links.image.data[i + 1] = uvy;
+
+            uvx = (i2 % size) / size;
+            uvy = Math.floor(i2 / size) / size;
+
+            textures.links.image.data[i + 2] = uvx;
+            textures.links.image.data[i + 3] = uvy;
+          }
+
+          k++;
+        },
+        4
+      );
     }
 
     function setup() {
-
       return new Promise((resolve, reject) => {
+        gpgpu.setVariableDependencies(variables.positions, [
+          variables.positions,
+          variables.velocities,
+        ]);
+        gpgpu.setVariableDependencies(variables.velocities, [
+          variables.velocities,
+          variables.positions,
+        ]);
 
-        gpgpu.setVariableDependencies(variables.positions, [variables.positions, variables.velocities]);
-        gpgpu.setVariableDependencies(variables.velocities, [variables.velocities, variables.positions]);
-    
         variables.positions.material.uniforms.is2D = uniforms.is2D;
         variables.positions.material.uniforms.timeStep = uniforms.timeStep;
-    
+
         variables.velocities.material.uniforms.alpha = uniforms.alpha;
         variables.velocities.material.uniforms.is2D = uniforms.is2D;
         variables.velocities.material.uniforms.size = uniforms.size;
         variables.velocities.material.uniforms.time = uniforms.time;
         variables.velocities.material.uniforms.nodeRadius = uniforms.nodeRadius;
-        variables.velocities.material.uniforms.nodeAmount = { value: data.nodes.length };
-        variables.velocities.material.uniforms.edgeAmount = { value: data.links.length };
+        variables.velocities.material.uniforms.nodeAmount = {
+          value: data.nodes.length,
+        };
+        variables.velocities.material.uniforms.edgeAmount = {
+          value: data.links.length,
+        };
         variables.velocities.material.uniforms.maxSpeed = uniforms.maxSpeed;
         variables.velocities.material.uniforms.timeStep = uniforms.timeStep;
         variables.velocities.material.uniforms.damping = uniforms.damping;
         variables.velocities.material.uniforms.repulsion = uniforms.repulsion;
-        variables.velocities.material.uniforms.textureLinks = { value: textures.links };
-        variables.velocities.material.uniforms.springLength = uniforms.springLength;
+        variables.velocities.material.uniforms.textureLinks = {
+          value: textures.links,
+        };
+        variables.velocities.material.uniforms.springLength =
+          uniforms.springLength;
         variables.velocities.material.uniforms.stiffness = uniforms.stiffness;
         variables.velocities.material.uniforms.gravity = uniforms.gravity;
-    
+
         variables.positions.wrapS = variables.positions.wrapT = RepeatWrapping;
-        variables.velocities.wrapS = variables.velocities.wrapT = RepeatWrapping;
-    
+        variables.velocities.wrapS = variables.velocities.wrapT =
+          RepeatWrapping;
+
         const error = gpgpu.init();
         if (error) {
           reject(error);
         } else {
           resolve();
         }
-
       });
-
     }
 
     function generate() {
-
       let points;
 
       return Points.parse(size, data)
@@ -279,16 +301,14 @@ class ForceDirectedGraph extends Group {
         callback();
       }
     }
-
   }
 
   /**
-   * @param {Number} time 
+   * @param {Number} time
    * @description Function to update the instance meant to be run before three.js's renderer.render method.
    * @returns {Void}
    */
   update(time) {
-
     if (!this.ready) {
       return this;
     }
@@ -308,7 +328,6 @@ class ForceDirectedGraph extends Group {
     }
 
     return this;
-
   }
 
   /**
@@ -318,7 +337,6 @@ class ForceDirectedGraph extends Group {
    * @returns {Object|Null}
    */
   intersect(pointer, camera) {
-
     const { hit, renderer } = this.userData;
 
     renderer.getSize(size);
@@ -330,7 +348,12 @@ class ForceDirectedGraph extends Group {
     const y = hit.ratio * size.y * (1 - clamp(pointer.y, 0, 1));
 
     renderer.readRenderTargetPixels(
-      hit.renderTarget, x - 0.5, y - 0.5, 1, 1, buffers.int
+      hit.renderTarget,
+      x - 0.5,
+      y - 0.5,
+      1,
+      1,
+      buffers.int
     );
 
     const [r, g, b, a] = buffers.int;
@@ -347,9 +370,8 @@ class ForceDirectedGraph extends Group {
     const point = this.getPositionFromIndex(index);
     return {
       point,
-      data: this.userData.data.nodes[index]
+      data: this.userData.data.nodes[index],
     };
-
   }
 
   getTexture(name) {
@@ -358,7 +380,6 @@ class ForceDirectedGraph extends Group {
   }
 
   getPositionFromIndex(i) {
-
     const { points, size } = this;
     const { gpgpu, renderer, variables } = this.userData;
 
@@ -377,14 +398,18 @@ class ForceDirectedGraph extends Group {
     const renderTarget = gpgpu.getCurrentRenderTarget(variables.positions);
 
     renderer.readRenderTargetPixels(
-      renderTarget, uvx, uvy, 1, 1, buffers.float
+      renderTarget,
+      uvx,
+      uvy,
+      1,
+      1,
+      buffers.float
     );
 
     const [x, y, z] = buffers.float;
     position.set(x, y, z);
 
     return position;
-
   }
 
   setPointColorById(id, css) {
@@ -393,7 +418,6 @@ class ForceDirectedGraph extends Group {
   }
 
   setPointColorFromIndex(index, css) {
-
     const attribute = this.points.geometry.getAttribute('color');
     const colors = attribute.array;
 
@@ -404,19 +428,16 @@ class ForceDirectedGraph extends Group {
     colors[3 * index + 2] = color.b;
 
     attribute.needsUpdate = true;
-
   }
 
   updateLinksColors() {
-
     const { data } = this.userData;
-    
+
     const ref = this.points.geometry.attributes.color.array;
     const attribute = this.links.geometry.getAttribute('color');
     const colors = attribute.array;
 
     return each(data.links, (_, i) => {
-
       const l = data.links[i];
       const li = i * 6;
       const si = 3 * l.sourceIndex;
@@ -429,10 +450,7 @@ class ForceDirectedGraph extends Group {
       colors[li + 3] = ref[ti + 0];
       colors[li + 4] = ref[ti + 1];
       colors[li + 5] = ref[ti + 2];
-
-    })
-    .then(() => (attribute.needsUpdate = true));
-
+    }).then(() => (attribute.needsUpdate = true));
   }
 
   getIndexById(id) {
@@ -457,6 +475,23 @@ class ForceDirectedGraph extends Group {
     const { data } = this.userData;
     const index = this.getIndexById(id);
     return data.nodes[index];
+  }
+
+  dispose() {
+    const { gpgpu } = this.userData;
+    if (gpgpu) {
+      for (let i = 0; i < gpgpu.variables.length; i++) {
+        const variable = gpgpu.variables[i];
+        variable.material.dispose();
+        variable.initialValueTexture.dispose();
+        for (let j = 0; j < variable.renderTargets.length; j++) {
+          const target = variable.renderTargets[j];
+          target.dispose();
+        }
+      }
+    }
+    this.userData = {};
+    return this;
   }
 
   // Getters / Setters
@@ -620,7 +655,6 @@ class ForceDirectedGraph extends Group {
     const { variables } = this.userData;
     return variables.velocities.material.uniforms.edgeAmount.value;
   }
-
 }
 
 export { ForceDirectedGraph };
