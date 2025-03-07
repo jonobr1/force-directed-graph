@@ -1,17 +1,10 @@
 (() => {
-  var __defProp = Object.defineProperty;
-  var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
   var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
     get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
   }) : x)(function(x) {
-    if (typeof require !== "undefined")
-      return require.apply(this, arguments);
-    throw new Error('Dynamic require of "' + x + '" is not supported');
+    if (typeof require !== "undefined") return require.apply(this, arguments);
+    throw Error('Dynamic require of "' + x + '" is not supported');
   });
-  var __publicField = (obj, key, value) => {
-    __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
-    return value;
-  };
 
   // src/index.js
   var import_three5 = __require("three");
@@ -26,7 +19,10 @@
         return pot[i];
       }
     }
-    console.error("ForceDirectedGraph: Texture size is too big.", "Consider reducing the size of your data.");
+    console.error(
+      "ForceDirectedGraph: Texture size is too big.",
+      "Consider reducing the size of your data."
+    );
   }
   function clamp(x, min, max) {
     return Math.min(Math.max(x, min), max);
@@ -464,7 +460,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
   // src/texture-atlas.js
   var import_three = __require("three");
   var anchor = document.createElement("a");
-  var _TextureAtlas = class extends import_three.Texture {
+  var TextureAtlas = class _TextureAtlas extends import_three.Texture {
     map = [];
     dimensions = 1;
     isTextureAtlas = true;
@@ -472,6 +468,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       super(document.createElement("canvas"));
       this.flipY = false;
     }
+    static Resolution = 1024;
     static getAbsoluteURL(path) {
       anchor.href = path;
       return anchor.href;
@@ -548,8 +545,6 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       return -1;
     }
   };
-  var TextureAtlas = _TextureAtlas;
-  __publicField(TextureAtlas, "Resolution", 1024);
 
   // src/points.js
   var color = new import_three2.Color();
@@ -603,9 +598,18 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
         }
       }).then(() => {
         const geometry = new import_three2.BufferGeometry();
-        geometry.setAttribute("position", new import_three2.Float32BufferAttribute(vertices, 3));
-        geometry.setAttribute("color", new import_three2.Float32BufferAttribute(colors, 3));
-        geometry.setAttribute("imageKey", new import_three2.Float32BufferAttribute(imageKeys, 1));
+        geometry.setAttribute(
+          "position",
+          new import_three2.Float32BufferAttribute(vertices, 3)
+        );
+        geometry.setAttribute(
+          "color",
+          new import_three2.Float32BufferAttribute(colors, 3)
+        );
+        geometry.setAttribute(
+          "imageKey",
+          new import_three2.Float32BufferAttribute(imageKeys, 1)
+        );
         return { atlas, geometry };
       });
     }
@@ -701,8 +705,14 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
         vertices.push(x, y, z);
         colors.push(r, g, b);
       }).then(() => {
-        geometry.setAttribute("position", new import_three3.Float32BufferAttribute(vertices, 3));
-        geometry.setAttribute("color", new import_three3.Float32BufferAttribute(colors, 3));
+        geometry.setAttribute(
+          "position",
+          new import_three3.Float32BufferAttribute(vertices, 3)
+        );
+        geometry.setAttribute(
+          "color",
+          new import_three3.Float32BufferAttribute(colors, 3)
+        );
         return geometry;
       });
     }
@@ -871,6 +881,10 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
   };
   var ForceDirectedGraph =  window.ForceDirectedGraph = class extends import_three5.Group {
     ready = false;
+    /**
+     * @param {THREE.WebGLRenderer} renderer - the three.js renderer referenced to create the render targets
+     * @param {Object} [data] - optional data to automatically set the data of the graph
+     */
     constructor(renderer, data) {
       super();
       this.userData.registry = new Registry();
@@ -903,6 +917,37 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
         this.set(data);
       }
     }
+    static getPotSize = getPotSize;
+    static Properties = [
+      "decay",
+      "alpha",
+      "is2D",
+      "time",
+      "size",
+      "maxSpeed",
+      "timeStep",
+      "damping",
+      "repulsion",
+      "springLength",
+      "stiffness",
+      "gravity",
+      "nodeRadius",
+      "nodeScale",
+      "sizeAttenuation",
+      "frustumSize",
+      "linksInheritColor",
+      "pointsInheritColor",
+      "pointColor",
+      "linkColor",
+      "opacity",
+      "blending"
+    ];
+    /**
+     * @param {Object} data - Object with nodes and links properties based on https://observablehq.com/@d3/force-directed-graph-component
+     * @param {Function} callback
+     * @description Set the data to an instance of force directed graph. Because of the potential large amount of data this function runs on a request animation frame and returns a promise (or a passed callback) to give indication when the graph is ready to be rendered.
+     * @returns {Promise}
+     */
     set(data, callback) {
       const scope = this;
       let { gpgpu, registry, renderer, uniforms } = this.userData;
@@ -936,8 +981,16 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
         links: gpgpu.createTexture()
       };
       const variables = {
-        positions: gpgpu.addVariable("texturePositions", simulation_default.positions, textures.positions),
-        velocities: gpgpu.addVariable("textureVelocities", simulation_default.velocities, textures.velocities)
+        positions: gpgpu.addVariable(
+          "texturePositions",
+          simulation_default.positions,
+          textures.positions
+        ),
+        velocities: gpgpu.addVariable(
+          "textureVelocities",
+          simulation_default.velocities,
+          textures.velocities
+        )
       };
       this.userData.gpgpu = gpgpu;
       this.userData.variables = variables;
@@ -951,44 +1004,54 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       }
       function fill() {
         let k = 0;
-        return each(textures.positions.image.data, (_, i) => {
-          const x = Math.random() * 2 - 1;
-          const y = Math.random() * 2 - 1;
-          const z = Math.random() * 2 - 1;
-          if (k < data.nodes.length) {
-            const node = data.nodes[k];
-            textures.positions.image.data[i + 0] = typeof node.x !== "undefined" ? node.x : x;
-            textures.positions.image.data[i + 1] = typeof node.y !== "undefined" ? node.y : y;
-            textures.positions.image.data[i + 2] = typeof node.z !== "undefined" ? node.z : z;
-            textures.positions.image.data[i + 3] = node.isStatic ? 1 : 0;
-          } else {
-            textures.positions.image.data[i + 0] = uniforms.frustumSize.value * 10;
-            textures.positions.image.data[i + 1] = uniforms.frustumSize.value * 10;
-            textures.positions.image.data[i + 2] = uniforms.frustumSize.value * 10;
-            textures.positions.image.data[i + 3] = uniforms.frustumSize.value * 10;
-          }
-          let i1, i2, uvx, uvy;
-          if (k < data.links.length) {
-            i1 = registry.get(data.links[k].source);
-            i2 = registry.get(data.links[k].target);
-            data.links[k].sourceIndex = i1;
-            data.links[k].targetIndex = i2;
-            uvx = i1 % size2 / size2;
-            uvy = Math.floor(i1 / size2) / size2;
-            textures.links.image.data[i + 0] = uvx;
-            textures.links.image.data[i + 1] = uvy;
-            uvx = i2 % size2 / size2;
-            uvy = Math.floor(i2 / size2) / size2;
-            textures.links.image.data[i + 2] = uvx;
-            textures.links.image.data[i + 3] = uvy;
-          }
-          k++;
-        }, 4);
+        return each(
+          textures.positions.image.data,
+          (_, i) => {
+            const x = Math.random() * 2 - 1;
+            const y = Math.random() * 2 - 1;
+            const z = Math.random() * 2 - 1;
+            if (k < data.nodes.length) {
+              const node = data.nodes[k];
+              textures.positions.image.data[i + 0] = typeof node.x !== "undefined" ? node.x : x;
+              textures.positions.image.data[i + 1] = typeof node.y !== "undefined" ? node.y : y;
+              textures.positions.image.data[i + 2] = typeof node.z !== "undefined" ? node.z : z;
+              textures.positions.image.data[i + 3] = node.isStatic ? 1 : 0;
+            } else {
+              textures.positions.image.data[i + 0] = uniforms.frustumSize.value * 10;
+              textures.positions.image.data[i + 1] = uniforms.frustumSize.value * 10;
+              textures.positions.image.data[i + 2] = uniforms.frustumSize.value * 10;
+              textures.positions.image.data[i + 3] = uniforms.frustumSize.value * 10;
+            }
+            let i1, i2, uvx, uvy;
+            if (k < data.links.length) {
+              i1 = registry.get(data.links[k].source);
+              i2 = registry.get(data.links[k].target);
+              data.links[k].sourceIndex = i1;
+              data.links[k].targetIndex = i2;
+              uvx = i1 % size2 / size2;
+              uvy = Math.floor(i1 / size2) / size2;
+              textures.links.image.data[i + 0] = uvx;
+              textures.links.image.data[i + 1] = uvy;
+              uvx = i2 % size2 / size2;
+              uvy = Math.floor(i2 / size2) / size2;
+              textures.links.image.data[i + 2] = uvx;
+              textures.links.image.data[i + 3] = uvy;
+            }
+            k++;
+          },
+          4
+        );
       }
       function setup() {
         return new Promise((resolve, reject) => {
-          gpgpu.setVariableDependencies(variables.positions, [variables.positions, variables.velocities]);
-          gpgpu.setVariableDependencies(variables.velocities, [variables.velocities, variables.positions]);
+          gpgpu.setVariableDependencies(variables.positions, [
+            variables.positions,
+            variables.velocities
+          ]);
+          gpgpu.setVariableDependencies(variables.velocities, [
+            variables.velocities,
+            variables.positions
+          ]);
           variables.positions.material.uniforms.is2D = uniforms.is2D;
           variables.positions.material.uniforms.timeStep = uniforms.timeStep;
           variables.velocities.material.uniforms.alpha = uniforms.alpha;
@@ -996,13 +1059,19 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
           variables.velocities.material.uniforms.size = uniforms.size;
           variables.velocities.material.uniforms.time = uniforms.time;
           variables.velocities.material.uniforms.nodeRadius = uniforms.nodeRadius;
-          variables.velocities.material.uniforms.nodeAmount = { value: data.nodes.length };
-          variables.velocities.material.uniforms.edgeAmount = { value: data.links.length };
+          variables.velocities.material.uniforms.nodeAmount = {
+            value: data.nodes.length
+          };
+          variables.velocities.material.uniforms.edgeAmount = {
+            value: data.links.length
+          };
           variables.velocities.material.uniforms.maxSpeed = uniforms.maxSpeed;
           variables.velocities.material.uniforms.timeStep = uniforms.timeStep;
           variables.velocities.material.uniforms.damping = uniforms.damping;
           variables.velocities.material.uniforms.repulsion = uniforms.repulsion;
-          variables.velocities.material.uniforms.textureLinks = { value: textures.links };
+          variables.velocities.material.uniforms.textureLinks = {
+            value: textures.links
+          };
           variables.velocities.material.uniforms.springLength = uniforms.springLength;
           variables.velocities.material.uniforms.stiffness = uniforms.stiffness;
           variables.velocities.material.uniforms.gravity = uniforms.gravity;
@@ -1034,6 +1103,11 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
         }
       }
     }
+    /**
+     * @param {Number} time
+     * @description Function to update the instance meant to be run before three.js's renderer.render method.
+     * @returns {Void}
+     */
     update(time) {
       if (!this.ready) {
         return this;
@@ -1049,6 +1123,12 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       }
       return this;
     }
+    /**
+     * @param {THREE.Vector2} pointer - x, y values normalized to the camera's clipspace
+     * @param {THREE.Camera} camera - the camera to reference ray casting matrices
+     * @description Check to see if a point in the browser's screenspace intersects with any points in the force directed graph. If none found, then null is returned.
+     * @returns {Object|Null}
+     */
     intersect(pointer, camera) {
       const { hit: hit2, renderer } = this.userData;
       renderer.getSize(size);
@@ -1056,7 +1136,14 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       hit2.compute(renderer, camera);
       const x = hit2.ratio * size.x * clamp(pointer.x, 0, 1);
       const y = hit2.ratio * size.y * (1 - clamp(pointer.y, 0, 1));
-      renderer.readRenderTargetPixels(hit2.renderTarget, x - 0.5, y - 0.5, 1, 1, buffers.int);
+      renderer.readRenderTargetPixels(
+        hit2.renderTarget,
+        x - 0.5,
+        y - 0.5,
+        1,
+        1,
+        buffers.int
+      );
       const [r, g, b, a] = buffers.int;
       const z = 0;
       const w = 255;
@@ -1080,7 +1167,10 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       const { points: points2, size: size2 } = this;
       const { gpgpu, renderer, variables } = this.userData;
       if (!points2 || !renderer || !size2) {
-        console.warn("Force Directed Graph:", "unable to calculate position without points or renderer.");
+        console.warn(
+          "Force Directed Graph:",
+          "unable to calculate position without points or renderer."
+        );
         return;
       }
       const index = i * 3;
@@ -1088,7 +1178,14 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       const uvx = Math.floor(uvs[index + 0] * size2);
       const uvy = Math.floor(uvs[index + 1] * size2);
       const renderTarget = gpgpu.getCurrentRenderTarget(variables.positions);
-      renderer.readRenderTargetPixels(renderTarget, uvx, uvy, 1, 1, buffers.float);
+      renderer.readRenderTargetPixels(
+        renderTarget,
+        uvx,
+        uvy,
+        1,
+        1,
+        buffers.float
+      );
       const [x, y, z] = buffers.float;
       position.set(x, y, z);
       return position;
@@ -1145,6 +1242,23 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       const index = this.getIndexById(id);
       return data.nodes[index];
     }
+    dispose() {
+      const { gpgpu } = this.userData;
+      if (gpgpu) {
+        for (let i = 0; i < gpgpu.variables.length; i++) {
+          const variable = gpgpu.variables[i];
+          variable.material.dispose();
+          variable.initialValueTexture.dispose();
+          for (let j = 0; j < variable.renderTargets.length; j++) {
+            const target = variable.renderTargets[j];
+            target.dispose();
+          }
+        }
+      }
+      this.userData = {};
+      return this;
+    }
+    // Getters / Setters
     get decay() {
       return this.userData.uniforms.decay.value;
     }
@@ -1304,29 +1418,4 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       return variables.velocities.material.uniforms.edgeAmount.value;
     }
   };
-  __publicField(ForceDirectedGraph, "getPotSize", getPotSize);
-  __publicField(ForceDirectedGraph, "Properties", [
-    "decay",
-    "alpha",
-    "is2D",
-    "time",
-    "size",
-    "maxSpeed",
-    "timeStep",
-    "damping",
-    "repulsion",
-    "springLength",
-    "stiffness",
-    "gravity",
-    "nodeRadius",
-    "nodeScale",
-    "sizeAttenuation",
-    "frustumSize",
-    "linksInheritColor",
-    "pointsInheritColor",
-    "pointColor",
-    "linkColor",
-    "opacity",
-    "blending"
-  ]);
 })();
