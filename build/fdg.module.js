@@ -457,15 +457,16 @@ var points = {
 var points_default = points;
 
 // src/texture-atlas.js
-import {
-  Texture
-} from "three";
-var anchor = document.createElement("a");
+import { Texture } from "three";
+var anchor;
 var TextureAtlas = class _TextureAtlas extends Texture {
   map = [];
   dimensions = 1;
   isTextureAtlas = true;
   constructor() {
+    if (!anchor) {
+      anchor = document.createElement("a");
+    }
     super(document.createElement("canvas"));
     this.flipY = false;
   }

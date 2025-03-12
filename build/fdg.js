@@ -459,12 +459,15 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
 
   // src/texture-atlas.js
   var import_three = __require("three");
-  var anchor = document.createElement("a");
+  var anchor;
   var TextureAtlas = class _TextureAtlas extends import_three.Texture {
     map = [];
     dimensions = 1;
     isTextureAtlas = true;
     constructor() {
+      if (!anchor) {
+        anchor = document.createElement("a");
+      }
       super(document.createElement("canvas"));
       this.flipY = false;
     }
