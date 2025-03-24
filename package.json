@@ -1,6 +1,6 @@
 {
   "name": "@jonobr1/force-directed-graph",
-  "version": "1.21.3",
+  "version": "1.21.4",
   "description": "GPU supercharged attraction-graph visualizations for the web built on top of Three.js",
   "main": "build/fdg.js",
   "module": "build/fdg.module.js",
@@ -47,9 +47,6 @@
     "url": "https://github.com/jonobr1/force-directed-graph/issues"
   },
   "homepage": "https://github.com/jonobr1/force-directed-graph#readme",
-  "peerDependencies": {
-    "three": "^0.173.0"
-  },
   "devDependencies": {
     "esbuild": "^0.25.0",
     "eslint": "^9.21.0",
