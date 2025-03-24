@@ -48,7 +48,7 @@
   },
   "homepage": "https://github.com/jonobr1/force-directed-graph#readme",
   "peerDependencies": {
-    "three": "^0.174.0"
+    "three": "^0.173.0"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",
