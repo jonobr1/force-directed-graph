@@ -7,7 +7,8 @@
   "types": "types.d.ts",
   "scripts": {
     "dev": "esbuild --servedir=. --serve=8080",
-    "build": "node ./utils/build.js",
+    "build:wasm": "asc src/wasm/texture-processor.ts -o build/texture-processor.wasm --optimize",
+    "build": "npm run build:wasm && node ./utils/build.js",
     "lint": "eslint . --fix",
     "types": "tsc --outFile types.d.ts"
   },
@@ -17,7 +18,8 @@
     "build",
     "readme.md",
     "index.html",
-    "types.d.ts"
+    "types.d.ts",
+    "asconfig.json"
   ],
   "repository": {
     "type": "git",
@@ -53,6 +55,8 @@
   "devDependencies": {
     "esbuild": "^0.25.0",
     "eslint": "^9.21.0",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "assemblyscript": "^0.27.0",
+    "@assemblyscript/loader": "^0.27.0"
   }
 }

@@ -7,6 +7,7 @@ import { Points } from './points.js';
 import { Links } from './links.js';
 import { Registry } from './registry.js';
 import { Hit } from './hit.js';
+import { TextureWorkerManager } from './texture-worker-manager.js';
 
 const color = new Color();
 const position = new Vector3();
@@ -52,6 +53,7 @@ class ForceDirectedGraph extends Group {
       opacity: { value: 1 },
     };
     this.userData.hit = new Hit(this);
+    this.userData.workerManager = new TextureWorkerManager();
 
     if (data) {
       this.set(data);
@@ -169,7 +171,58 @@ class ForceDirectedGraph extends Group {
       });
     }
 
-    function fill() {
+    async function fill() {
+      const { workerManager } = scope.userData;
+      
+      // Initialize worker if not already done
+      if (!workerManager.isReady()) {
+        await workerManager.init();
+      }
+      
+      // Try worker-based processing first
+      if (workerManager.isReady()) {
+        try {
+          // Prepare links data with registry lookups
+          const preparedLinks = data.links.map(link => {
+            const sourceIndex = registry.get(link.source);
+            const targetIndex = registry.get(link.target);
+            
+            // Store indices back on the link for later use
+            link.sourceIndex = sourceIndex;
+            link.targetIndex = targetIndex;
+            
+            return {
+              ...link,
+              sourceIndex,
+              targetIndex
+            };
+          });
+          
+          const result = await workerManager.processTextures({
+            nodes: data.nodes,
+            links: preparedLinks,
+            textureSize: size,
+            frustumSize: uniforms.frustumSize.value
+          });
+          
+          // Copy results to texture data
+          textures.positions.image.data.set(result.positions);
+          textures.links.image.data.set(result.links);
+          
+          console.log(`Texture processing completed in ${result.processingTime.toFixed(2)}ms using ${workerManager.isWasmAvailable() ? 'WASM' : 'JavaScript'}`);
+          
+          return Promise.resolve();
+        } catch (error) {
+          console.warn('Worker processing failed, falling back to main thread:', error);
+          // Fall through to main thread processing
+        }
+      }
+      
+      // Fallback to main thread processing
+      return fillMainThread();
+    }
+    
+    function fillMainThread() {
       let k = 0;
       return each(
         textures.positions.image.data,
@@ -478,7 +531,7 @@ class ForceDirectedGraph extends Group {
   }
 
   dispose() {
-    const { gpgpu } = this.userData;
+    const { gpgpu, workerManager } = this.userData;
     if (gpgpu) {
       for (let i = 0; i < gpgpu.variables.length; i++) {
         const variable = gpgpu.variables[i];
@@ -489,6 +542,9 @@ class ForceDirectedGraph extends Group {
           target.dispose();
         }
       }
+    }
+    if (workerManager) {
+      workerManager.dispose();
     }
     this.userData = {};
     return this;
@@ -654,6 +710,38 @@ class ForceDirectedGraph extends Group {
   get edgeCount() {
     const { variables } = this.userData;
     return variables.velocities.material.uniforms.edgeAmount.value;
+  }
+  
+  /**
+   * Get performance information about texture processing
+   * @returns {Object} Performance statistics
+   */
+  getPerformanceInfo() {
+    const { workerManager } = this.userData;
+    return workerManager ? workerManager.getPerformanceInfo() : {
+      workerSupported: false,
+      workerReady: false,
+      wasmReady: false,
+      pendingRequests: 0
+    };
+  }
+  
+  /**
+   * Check if worker-based processing is available
+   * @returns {boolean} True if worker processing is available
+   */
+  isWorkerProcessingAvailable() {
+    const { workerManager } = this.userData;
+    return workerManager && workerManager.isReady();
+  }
+  
+  /**
+   * Check if WASM acceleration is available
+   * @returns {boolean} True if WASM is available
+   */
+  isWasmAccelerationAvailable() {
+    const { workerManager } = this.userData;
+    return workerManager && workerManager.isWasmAvailable();
   }
 }
 
