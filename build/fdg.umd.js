@@ -889,6 +889,490 @@ var Hit = class {
   }
 };
 
+// src/inline-worker-factory.js
+function createWorkerCode(wasmUrl) {
+  return `
+let wasmModule = null;
+let wasmReady = false;
+
+/**
+ * Initialize WASM module using provided URL
+ */
+async function initWasm() {
+  if (wasmReady) return;
+  
+  try {
+    // Load WASM module using the provided URL
+    const wasmResponse = await fetch('${wasmUrl}');
+    if (!wasmResponse.ok) {
+      throw new Error(\`Failed to fetch WASM: \${wasmResponse.status}\`);
+    }
+    const wasmBytes = await wasmResponse.arrayBuffer();
+    
+    // AssemblyScript WASM modules need proper imports based on wasm-objdump output
+    const imports = {
+      env: {
+        // env.seed: () -> f64 (for random number generation)
+        seed: () => Math.random(),
+        
+        // env.abort: (i32, i32, i32, i32) -> nil (for error handling)
+        abort: (message, fileName, line, column) => {
+          const error = new Error(\`AssemblyScript abort: \${message} at \${fileName}:\${line}:\${column}\`);
+          console.error(error);
+          throw error;
+        }
+      },
+      'texture-processor': {
+        // texture-processor.__heap_base: global i32
+        __heap_base: new WebAssembly.Global({ value: 'i32', mutable: false }, 1024)
+      }
+    };
+    
+    const wasmInstance = await WebAssembly.instantiate(wasmBytes, imports);
+    
+    wasmModule = wasmInstance.instance;
+    wasmReady = true;
+    
+    self.postMessage({
+      type: 'wasm-ready',
+      success: true
+    });
+  } catch (error) {
+    console.warn('WASM loading failed:', error);
+    self.postMessage({
+      type: 'wasm-ready',
+      success: false,
+      error: error.message
+    });
+  }
+}
+
+/**
+ * Process texture data using WASM
+ */
+async function processTextures(data) {
+  const {
+    nodes,
+    links,
+    textureSize,
+    frustumSize,
+    requestId
+  } = data;
+  
+  if (!wasmReady) {
+    await initWasm();
+  }
+  
+  if (!wasmReady) {
+    throw new Error('WASM module failed to initialize');
+  }
+  
+  const startTime = performance.now();
+  
+  try {
+    // Calculate memory requirements
+    const totalElements = textureSize * textureSize;
+    const nodesDataSize = nodes.length * 4 * 4;
+    const linksDataSize = links.length * 2 * 4;
+    const positionsSize = totalElements * 4 * 4;
+    const linksTextureSize = totalElements * 4 * 4;
+    
+    // Use simple memory allocation (grow memory as needed)
+    const memory = wasmModule.exports.memory;
+    const memoryNeeded = nodesDataSize + linksDataSize + positionsSize + linksTextureSize;
+    const currentSize = memory.buffer.byteLength;
+    
+    if (currentSize < memoryNeeded) {
+      const pagesNeeded = Math.ceil((memoryNeeded - currentSize) / 65536);
+      memory.grow(pagesNeeded);
+    }
+    
+    // Simple memory layout - allocate sequentially
+    let memoryOffset = 0;
+    const nodesDataPtr = memoryOffset;
+    memoryOffset += nodesDataSize;
+    const linksDataPtr = memoryOffset;
+    memoryOffset += linksDataSize;
+    const positionsPtr = memoryOffset;
+    memoryOffset += positionsSize;
+    const linksTexturePtr = memoryOffset;
+    
+    // Prepare and copy node data
+    const wasmMemory = new Uint8Array(memory.buffer);
+    const nodesFloat32 = new Float32Array(nodes.length * 4);
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      const offset = i * 4;
+      nodesFloat32[offset + 0] = typeof node.x !== 'undefined' ? node.x : NaN;
+      nodesFloat32[offset + 1] = typeof node.y !== 'undefined' ? node.y : NaN;
+      nodesFloat32[offset + 2] = typeof node.z !== 'undefined' ? node.z : NaN;
+      nodesFloat32[offset + 3] = node.isStatic ? 1.0 : 0.0;
+    }
+    wasmMemory.set(new Uint8Array(nodesFloat32.buffer), nodesDataPtr);
+    
+    // Prepare and copy links data
+    const linksInt32 = new Int32Array(links.length * 2);
+    for (let i = 0; i < links.length; i++) {
+      const link = links[i];
+      const offset = i * 2;
+      linksInt32[offset + 0] = link.sourceIndex;
+      linksInt32[offset + 1] = link.targetIndex;
+    }
+    wasmMemory.set(new Uint8Array(linksInt32.buffer), linksDataPtr);
+    
+    // Process textures in WASM (if function exists)
+    if (wasmModule.exports.processTextures) {
+      wasmModule.exports.processTextures(
+        nodesDataPtr,
+        nodes.length,
+        linksDataPtr,
+        links.length,
+        textureSize,
+        positionsPtr,
+        linksTexturePtr,
+        frustumSize
+      );
+    } else {
+      throw new Error('WASM processTextures function not found');
+    }
+    
+    // Extract results
+    const positionsData = new Float32Array(memory.buffer, positionsPtr, totalElements * 4);
+    const linksTextureData = new Float32Array(memory.buffer, linksTexturePtr, totalElements * 4);
+    
+    // Copy results to transferable buffers
+    const positionsResult = new Float32Array(positionsData);
+    const linksResult = new Float32Array(linksTextureData);
+    
+    const processingTime = performance.now() - startTime;
+    
+    // Send results back to main thread
+    self.postMessage({
+      type: 'texture-processed',
+      requestId,
+      success: true,
+      data: {
+        positions: positionsResult,
+        links: linksResult,
+        processingTime,
+        memoryUsage: memory.buffer.byteLength
+      }
+    }, [positionsResult.buffer, linksResult.buffer]);
+    
+  } catch (error) {
+    self.postMessage({
+      type: 'texture-processed',
+      requestId,
+      success: false,
+      error: error.message
+    });
+  }
+}
+
+/**
+ * Fallback processing without WASM
+ */
+function processFallback(data) {
+  const {
+    nodes,
+    links,
+    textureSize,
+    frustumSize,
+    requestId
+  } = data;
+  
+  const startTime = performance.now();
+  
+  try {
+    const totalElements = textureSize * textureSize;
+    const positionsData = new Float32Array(totalElements * 4);
+    const linksData = new Float32Array(totalElements * 4);
+    
+    // Process positions
+    for (let i = 0; i < totalElements; i++) {
+      const baseIndex = i * 4;
+      
+      if (i < nodes.length) {
+        const node = nodes[i];
+        const x = typeof node.x !== 'undefined' ? node.x : (Math.random() * 2 - 1);
+        const y = typeof node.y !== 'undefined' ? node.y : (Math.random() * 2 - 1);
+        const z = typeof node.z !== 'undefined' ? node.z : (Math.random() * 2 - 1);
+        
+        positionsData[baseIndex + 0] = x;
+        positionsData[baseIndex + 1] = y;
+        positionsData[baseIndex + 2] = z;
+        positionsData[baseIndex + 3] = node.isStatic ? 1 : 0;
+      } else {
+        const farAway = frustumSize * 10;
+        positionsData[baseIndex + 0] = farAway;
+        positionsData[baseIndex + 1] = farAway;
+        positionsData[baseIndex + 2] = farAway;
+        positionsData[baseIndex + 3] = 0;
+      }
+    }
+    
+    // Process links
+    for (let i = 0; i < totalElements; i++) {
+      const baseIndex = i * 4;
+      
+      if (i < links.length) {
+        const link = links[i];
+        const sourceIndex = link.sourceIndex;
+        const targetIndex = link.targetIndex;
+        
+        const sourceU = (sourceIndex % textureSize) / textureSize;
+        const sourceV = Math.floor(sourceIndex / textureSize) / textureSize;
+        const targetU = (targetIndex % textureSize) / textureSize;
+        const targetV = Math.floor(targetIndex / textureSize) / textureSize;
+        
+        linksData[baseIndex + 0] = sourceU;
+        linksData[baseIndex + 1] = sourceV;
+        linksData[baseIndex + 2] = targetU;
+        linksData[baseIndex + 3] = targetV;
+      } else {
+        linksData[baseIndex + 0] = 0;
+        linksData[baseIndex + 1] = 0;
+        linksData[baseIndex + 2] = 0;
+        linksData[baseIndex + 3] = 0;
+      }
+    }
+    
+    const processingTime = performance.now() - startTime;
+    
+    self.postMessage({
+      type: 'texture-processed',
+      requestId,
+      success: true,
+      data: {
+        positions: positionsData,
+        links: linksData,
+        processingTime,
+        memoryUsage: 0
+      }
+    }, [positionsData.buffer, linksData.buffer]);
+    
+  } catch (error) {
+    self.postMessage({
+      type: 'texture-processed',
+      requestId,
+      success: false,
+      error: error.message
+    });
+  }
+}
+
+// Message handler
+self.onmessage = function(event) {
+  const { type, data } = event.data;
+  
+  switch (type) {
+    case 'init':
+      initWasm();
+      break;
+      
+    case 'process-textures':
+      if (data.useWasm && wasmReady) {
+        processTextures(data);
+      } else {
+        processFallback(data);
+      }
+      break;
+      
+    case 'check-wasm':
+      self.postMessage({
+        type: 'wasm-status',
+        ready: wasmReady
+      });
+      break;
+      
+    default:
+      self.postMessage({
+        type: 'error',
+        error: \`Unknown message type: \${type}\`
+      });
+  }
+};
+
+// Initialize WASM on worker start
+initWasm();
+`;
+}
+function createInlineWorker(wasmUrl) {
+  const workerCode = createWorkerCode(wasmUrl);
+  const blob = new Blob([workerCode], { type: "application/javascript" });
+  const workerUrl = URL.createObjectURL(blob);
+  const worker = new Worker(workerUrl);
+  worker.addEventListener("error", () => URL.revokeObjectURL(workerUrl));
+  return worker;
+}
+
+// src/texture-worker-manager.js
+var import_meta = {};
+var TextureWorkerManager = class {
+  constructor() {
+    this.worker = null;
+    this.isWorkerReady = false;
+    this.isWasmReady = false;
+    this.requestId = 0;
+    this.pendingRequests = /* @__PURE__ */ new Map();
+    this.workerSupported = typeof Worker !== "undefined";
+  }
+  /**
+   * Resolve WASM URL for different environments
+   * @returns {string} URL to WASM file
+   */
+  resolveWasmUrl() {
+    try {
+      if (typeof import_meta !== "undefined" && import_meta.url) {
+        return new URL("../build/texture-processor.wasm", import_meta.url).href;
+      }
+    } catch (e) {
+    }
+    const devPaths = [
+      "./build/texture-processor.wasm",
+      "../build/texture-processor.wasm",
+      "./texture-processor.wasm"
+    ];
+    return devPaths[0];
+  }
+  /**
+   * Initialize the worker
+   * @returns {Promise<boolean>} True if worker initialized successfully
+   */
+  async init() {
+    if (!this.workerSupported) {
+      return false;
+    }
+    try {
+      const wasmUrl = this.resolveWasmUrl();
+      this.worker = createInlineWorker(wasmUrl);
+      this.worker.onmessage = (event) => {
+        this.handleWorkerMessage(event.data);
+      };
+      this.worker.onerror = (error) => {
+        console.warn("Texture worker error:", error);
+        this.isWorkerReady = false;
+      };
+      await new Promise((resolve) => {
+        const checkReady = () => {
+          if (this.isWorkerReady) {
+            resolve();
+          } else {
+            setTimeout(checkReady, 50);
+          }
+        };
+        this.worker.postMessage({ type: "init" });
+        checkReady();
+      });
+      return true;
+    } catch (error) {
+      console.warn("Failed to initialize texture worker:", error);
+      return false;
+    }
+  }
+  /**
+   * Handle messages from worker
+   * @param {Object} message - Worker message
+   */
+  handleWorkerMessage(message) {
+    const { type, requestId, success, data, error } = message;
+    switch (type) {
+      case "wasm-ready":
+        this.isWasmReady = success;
+        this.isWorkerReady = true;
+        break;
+      case "texture-processed":
+        const request = this.pendingRequests.get(requestId);
+        if (request) {
+          this.pendingRequests.delete(requestId);
+          if (success) {
+            request.resolve(data);
+          } else {
+            request.reject(new Error(error));
+          }
+        }
+        break;
+      case "error":
+        console.error("Worker error:", error);
+        break;
+    }
+  }
+  /**
+   * Process texture data using worker
+   * @param {Object} data - Processing data
+   * @param {Array} data.nodes - Node data
+   * @param {Array} data.links - Link data
+   * @param {number} data.textureSize - Texture size
+   * @param {number} data.frustumSize - Frustum size
+   * @param {boolean} data.useWasm - Whether to use WASM
+   * @returns {Promise<Object>} Processed texture data
+   */
+  async processTextures(data) {
+    if (!this.isWorkerReady) {
+      throw new Error("Worker not ready");
+    }
+    const requestId = ++this.requestId;
+    return new Promise((resolve, reject) => {
+      this.pendingRequests.set(requestId, { resolve, reject });
+      this.worker.postMessage({
+        type: "process-textures",
+        data: {
+          ...data,
+          requestId,
+          useWasm: this.isWasmReady && data.useWasm !== false
+        }
+      });
+      setTimeout(() => {
+        if (this.pendingRequests.has(requestId)) {
+          this.pendingRequests.delete(requestId);
+          reject(new Error("Texture processing timeout"));
+        }
+      }, 3e4);
+    });
+  }
+  /**
+   * Check if worker and WASM are ready
+   * @returns {boolean} True if ready
+   */
+  isReady() {
+    return this.isWorkerReady;
+  }
+  /**
+   * Check if WASM is available
+   * @returns {boolean} True if WASM is ready
+   */
+  isWasmAvailable() {
+    return this.isWasmReady;
+  }
+  /**
+   * Get performance statistics
+   * @returns {Object} Performance info
+   */
+  getPerformanceInfo() {
+    return {
+      workerSupported: this.workerSupported,
+      workerReady: this.isWorkerReady,
+      wasmReady: this.isWasmReady,
+      pendingRequests: this.pendingRequests.size
+    };
+  }
+  /**
+   * Cleanup worker resources
+   */
+  dispose() {
+    if (this.worker) {
+      this.pendingRequests.forEach((request) => {
+        request.reject(new Error("Worker disposed"));
+      });
+      this.pendingRequests.clear();
+      this.worker.terminate();
+      this.worker = null;
+      this.isWorkerReady = false;
+      this.isWasmReady = false;
+    }
+  }
+};
+
 // src/index.js
 var color3 = new import_three5.Color();
 var position = new import_three5.Vector3();
@@ -931,6 +1415,7 @@ var ForceDirectedGraph = class extends import_three5.Group {
       opacity: { value: 1 }
     };
     this.userData.hit = new Hit(this);
+    this.userData.workerManager = new TextureWorkerManager();
     if (data) {
       this.set(data);
     }
@@ -1020,7 +1505,41 @@ var ForceDirectedGraph = class extends import_three5.Group {
         registry.set(i, node);
       });
     }
-    function fill() {
+    async function fill() {
+      const { workerManager } = scope.userData;
+      if (!workerManager.isReady()) {
+        await workerManager.init();
+      }
+      if (workerManager.isReady()) {
+        try {
+          const preparedLinks = data.links.map((link2) => {
+            const sourceIndex = registry.get(link2.source);
+            const targetIndex = registry.get(link2.target);
+            link2.sourceIndex = sourceIndex;
+            link2.targetIndex = targetIndex;
+            return {
+              ...link2,
+              sourceIndex,
+              targetIndex
+            };
+          });
+          const result = await workerManager.processTextures({
+            nodes: data.nodes,
+            links: preparedLinks,
+            textureSize: size2,
+            frustumSize: uniforms.frustumSize.value
+          });
+          textures.positions.image.data.set(result.positions);
+          textures.links.image.data.set(result.links);
+          console.log(`Texture processing completed in ${result.processingTime.toFixed(2)}ms using ${workerManager.isWasmAvailable() ? "WASM" : "JavaScript"}`);
+          return Promise.resolve();
+        } catch (error) {
+          console.warn("Worker processing failed, falling back to main thread:", error);
+        }
+      }
+      return fillMainThread();
+    }
+    function fillMainThread() {
       let k = 0;
       return each(
         textures.positions.image.data,
@@ -1261,7 +1780,7 @@ var ForceDirectedGraph = class extends import_three5.Group {
     return data.nodes[index];
   }
   dispose() {
-    const { gpgpu } = this.userData;
+    const { gpgpu, workerManager } = this.userData;
     if (gpgpu) {
       for (let i = 0; i < gpgpu.variables.length; i++) {
         const variable = gpgpu.variables[i];
@@ -1272,6 +1791,9 @@ var ForceDirectedGraph = class extends import_three5.Group {
           target.dispose();
         }
       }
+    }
+    if (workerManager) {
+      workerManager.dispose();
     }
     this.userData = {};
     return this;
@@ -1434,6 +1956,35 @@ var ForceDirectedGraph = class extends import_three5.Group {
   get edgeCount() {
     const { variables } = this.userData;
     return variables.velocities.material.uniforms.edgeAmount.value;
+  }
+  /**
+   * Get performance information about texture processing
+   * @returns {Object} Performance statistics
+   */
+  getPerformanceInfo() {
+    const { workerManager } = this.userData;
+    return workerManager ? workerManager.getPerformanceInfo() : {
+      workerSupported: false,
+      workerReady: false,
+      wasmReady: false,
+      pendingRequests: 0
+    };
+  }
+  /**
+   * Check if worker-based processing is available
+   * @returns {boolean} True if worker processing is available
+   */
+  isWorkerProcessingAvailable() {
+    const { workerManager } = this.userData;
+    return workerManager && workerManager.isReady();
+  }
+  /**
+   * Check if WASM acceleration is available
+   * @returns {boolean} True if WASM is available
+   */
+  isWasmAccelerationAvailable() {
+    const { workerManager } = this.userData;
+    return workerManager && workerManager.isWasmAvailable();
   }
 };
 // Annotate the CommonJS export names for ESM import in node:

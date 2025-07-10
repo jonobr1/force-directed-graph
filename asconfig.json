@@ -1,0 +1,16 @@
+{
+  "targets": {
+    "release": {
+      "binaryFile": "build/texture-processor.wasm",
+      "textFile": "build/texture-processor.wat",
+      "sourceMap": true,
+      "optimizeLevel": 3,
+      "shrinkLevel": 2
+    }
+  },
+  "options": {
+    "optimizeLevel": 3,
+    "shrinkLevel": 2,
+    "runtime": "stub"
+  }
+}
