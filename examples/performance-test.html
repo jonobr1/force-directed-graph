@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Force Directed Graph - Performance Test Suite</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            background: #1a1a1a;
+            color: #ffffff;
+            overflow: hidden;
+        }
+        
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+            min-width: 300px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #333;
+        }
+        
+        .control-group:last-child {
+            border-bottom: none;
+        }
+        
+        .control-group h3 {
+            margin: 0 0 10px 0;
+            color: #4CAF50;
+            font-size: 14px;
+        }
+        
+        .control-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .control-row label {
+            color: #ccc;
+            flex: 1;
+        }
+        
+        .control-row input, .control-row select, .control-row button {
+            background: #333;
+            border: 1px solid #555;
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin-left: 10px;
+        }
+        
+        .control-row button {
+            background: #4CAF50;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .control-row button:hover {
+            background: #5CBF60;
+        }
+        
+        .control-row button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        
+        .metrics {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+        
+        .metric-value {
+            font-weight: bold;
+        }
+        
+        .metric-value.good {
+            color: #4CAF50;
+        }
+        
+        .metric-value.warning {
+            color: #FF9800;
+        }
+        
+        .metric-value.critical {
+            color: #F44336;
+        }
+        
+        #status {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+            max-width: 400px;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-indicator.good {
+            background: #4CAF50;
+        }
+        
+        .status-indicator.warning {
+            background: #FF9800;
+        }
+        
+        .status-indicator.critical {
+            background: #F44336;
+        }
+        
+        #log {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            height: 150px;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 8px;
+            padding: 10px;
+            overflow-y: auto;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+        
+        .log-entry {
+            margin-bottom: 4px;
+            opacity: 0.8;
+        }
+        
+        .log-entry.info {
+            color: #4CAF50;
+        }
+        
+        .log-entry.warn {
+            color: #FF9800;
+        }
+        
+        .log-entry.error {
+            color: #F44336;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: #4CAF50;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="canvas"></canvas>
+        
+        <div id="controls">
+            <div class="control-group">
+                <h3>Test Configuration</h3>
+                <div class="control-row">
+                    <label>Node Count:</label>
+                    <select id="nodeCount">
+                        <option value="1000">1,000</option>
+                        <option value="5000" selected>5,000</option>
+                        <option value="10000">10,000</option>
+                        <option value="25000">25,000</option>
+                        <option value="50000">50,000</option>
+                        <option value="100000">100,000</option>
+                    </select>
+                </div>
+                <div class="control-row">
+                    <label>Test Duration (s):</label>
+                    <input type="number" id="testDuration" value="30" min="10" max="300">
+                </div>
+                <div class="control-row">
+                    <label>Use Spatial Grid:</label>
+                    <input type="checkbox" id="useSpatialGrid" checked>
+                </div>
+                <div class="control-row">
+                    <label>Max Neighbors:</label>
+                    <input type="number" id="maxNeighbors" value="32" min="8" max="128" step="4">
+                </div>
+                <div class="control-row">
+                    <label>Auto Tuning:</label>
+                    <input type="checkbox" id="autoTuning" checked>
+                </div>
+                <div class="control-row">
+                    <button id="startTest">Start Test</button>
+                    <button id="stopTest" disabled>Stop Test</button>
+                    <button id="resetTest">Reset</button>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <h3>Performance Metrics</h3>
+                <div class="metrics" id="metrics">
+                    <div class="metric">
+                        <span>Frame Rate:</span>
+                        <span class="metric-value" id="fps">0 FPS</span>
+                    </div>
+                    <div class="metric">
+                        <span>Frame Time:</span>
+                        <span class="metric-value" id="frameTime">0 ms</span>
+                    </div>
+                    <div class="metric">
+                        <span>GPU Compute:</span>
+                        <span class="metric-value" id="gpuTime">0 ms</span>
+                    </div>
+                    <div class="metric">
+                        <span>Spatial Grid:</span>
+                        <span class="metric-value" id="spatialTime">0 ms</span>
+                    </div>
+                    <div class="metric">
+                        <span>Memory Usage:</span>
+                        <span class="metric-value" id="memory">0 MB</span>
+                    </div>
+                    <div class="metric">
+                        <span>Active Neighbors:</span>
+                        <span class="metric-value" id="neighbors">0</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <h3>Test Results</h3>
+                <div class="metrics" id="results">
+                    <div class="metric">
+                        <span>Average FPS:</span>
+                        <span class="metric-value" id="avgFps">-</span>
+                    </div>
+                    <div class="metric">
+                        <span>Min FPS:</span>
+                        <span class="metric-value" id="minFps">-</span>
+                    </div>
+                    <div class="metric">
+                        <span>Max FPS:</span>
+                        <span class="metric-value" id="maxFps">-</span>
+                    </div>
+                    <div class="metric">
+                        <span>Performance Score:</span>
+                        <span class="metric-value" id="score">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="status">
+            <div id="systemStatus">
+                <div><span class="status-indicator good"></span>System Ready</div>
+            </div>
+            <div id="optimizationStatus">
+                <div>Optimizations: <span id="activeOptimizations">Loading...</span></div>
+            </div>
+        </div>
+        
+        <div id="log"></div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'https://unpkg.com/three@0.150.1/build/three.module.js';
+        import { OrbitControls } from 'https://unpkg.com/three@0.150.1/examples/jsm/controls/OrbitControls.js';
+        import { ForceDirectedGraph } from '../src/index.js';
+
+        class PerformanceTestSuite {
+            constructor() {
+                this.scene = null;
+                this.camera = null;
+                this.renderer = null;
+                this.controls = null;
+                this.graph = null;
+                this.animationId = null;
+                
+                this.testRunning = false;
+                this.testStartTime = 0;
+                this.testDuration = 30000; // 30 seconds
+                this.frameCount = 0;
+                this.frameTimes = [];
+                
+                this.testResults = {
+                    avgFps: 0,
+                    minFps: Infinity,
+                    maxFps: 0,
+                    totalFrames: 0,
+                    score: 0
+                };
+                
+                this.init();
+                this.setupEventListeners();
+                this.startRenderLoop();
+            }
+            
+            init() {
+                // Setup Three.js scene
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x1a1a1a);
+                
+                this.camera = new THREE.PerspectiveCamera(
+                    75, 
+                    window.innerWidth / window.innerHeight, 
+                    0.1, 
+                    1000
+                );
+                this.camera.position.set(0, 0, 100);
+                
+                this.renderer = new THREE.WebGLRenderer({
+                    canvas: document.getElementById('canvas'),
+                    antialias: true
+                });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setPixelRatio(window.devicePixelRatio);
+                
+                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.enableDamping = true;
+                this.controls.dampingFactor = 0.1;
+                
+                // Add lighting
+                const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+                this.scene.add(ambientLight);
+                
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(100, 100, 50);
+                this.scene.add(directionalLight);
+                
+                this.log('info', 'Three.js scene initialized');
+                this.updateSystemStatus();
+            }
+            
+            setupEventListeners() {
+                document.getElementById('startTest').addEventListener('click', () => this.startTest());
+                document.getElementById('stopTest').addEventListener('click', () => this.stopTest());
+                document.getElementById('resetTest').addEventListener('click', () => this.resetTest());
+                
+                window.addEventListener('resize', () => this.onWindowResize());
+            }
+            
+            generateTestData(nodeCount) {
+                this.log('info', `Generating test data for ${nodeCount} nodes...`);
+                
+                const nodes = [];
+                const links = [];
+                
+                // Generate nodes in clusters for realistic distribution
+                const clusterCount = Math.max(1, Math.floor(nodeCount / 100));
+                const nodesPerCluster = Math.floor(nodeCount / clusterCount);
+                
+                for (let cluster = 0; cluster < clusterCount; cluster++) {
+                    const clusterX = (Math.random() - 0.5) * 200;
+                    const clusterY = (Math.random() - 0.5) * 200;
+                    const clusterZ = (Math.random() - 0.5) * 200;
+                    
+                    for (let i = 0; i < nodesPerCluster && nodes.length < nodeCount; i++) {
+                        const node = {
+                            id: nodes.length,
+                            x: clusterX + (Math.random() - 0.5) * 20,
+                            y: clusterY + (Math.random() - 0.5) * 20,
+                            z: clusterZ + (Math.random() - 0.5) * 20,
+                            isStatic: Math.random() < 0.01 // 1% static nodes
+                        };
+                        nodes.push(node);
+                    }
+                }
+                
+                // Generate links with preferential attachment
+                const linkCount = Math.min(nodeCount * 2, Math.floor(nodeCount * 1.5));
+                const linkProbability = linkCount / (nodeCount * (nodeCount - 1) / 2);
+                
+                for (let i = 0; i < nodeCount && links.length < linkCount; i++) {
+                    const connectionsPerNode = Math.min(10, Math.floor(Math.random() * 5) + 1);
+                    
+                    for (let j = 0; j < connectionsPerNode && links.length < linkCount; j++) {
+                        let target;
+                        
+                        // Prefer nearby nodes for more realistic clustering
+                        if (Math.random() < 0.7 && i > 10) {
+                            target = Math.max(0, i - 10 + Math.floor(Math.random() * 20));
+                        } else {
+                            target = Math.floor(Math.random() * nodeCount);
+                        }
+                        
+                        if (target !== i && !links.find(l => 
+                            (l.source === i && l.target === target) || 
+                            (l.source === target && l.target === i))) {
+                            links.push({ source: i, target });
+                        }
+                    }
+                }
+                
+                this.log('info', `Generated ${nodes.length} nodes and ${links.length} links`);
+                return { nodes, links };
+            }
+            
+            async startTest() {
+                if (this.testRunning) return;
+                
+                const nodeCount = parseInt(document.getElementById('nodeCount').value);
+                const duration = parseInt(document.getElementById('testDuration').value) * 1000;
+                const useSpatialGrid = document.getElementById('useSpatialGrid').checked;
+                const maxNeighbors = parseInt(document.getElementById('maxNeighbors').value);
+                const autoTuning = document.getElementById('autoTuning').checked;
+                
+                this.testDuration = duration;
+                this.testRunning = true;
+                this.testStartTime = performance.now();
+                this.frameCount = 0;
+                this.frameTimes = [];
+                
+                // Reset test results
+                this.testResults = {
+                    avgFps: 0,
+                    minFps: Infinity,
+                    maxFps: 0,
+                    totalFrames: 0,
+                    score: 0
+                };
+                
+                // Update UI
+                document.getElementById('startTest').disabled = true;
+                document.getElementById('stopTest').disabled = false;
+                document.getElementById('progressFill').style.width = '0%';
+                
+                this.log('info', `Starting performance test: ${nodeCount} nodes, ${duration/1000}s duration`);
+                
+                try {
+                    // Dispose existing graph
+                    if (this.graph) {
+                        this.scene.remove(this.graph);
+                        this.graph.dispose();
+                    }
+                    
+                    // Generate test data
+                    const data = this.generateTestData(nodeCount);
+                    
+                    // Create new graph with test configuration
+                    this.graph = new ForceDirectedGraph(this.renderer, data);
+                    this.graph.useSpatialGrid = useSpatialGrid;
+                    this.graph.maxNeighbors = maxNeighbors;
+                    
+                    // Configure performance monitor
+                    const performanceInfo = this.graph.getPerformanceInfo();
+                    if (performanceInfo.performance && performanceInfo.performance.tuning) {
+                        performanceInfo.performance.tuning.enabled = autoTuning;
+                    }
+                    
+                    this.scene.add(this.graph);
+                    
+                    this.log('info', 'Graph created, waiting for initialization...');
+                    
+                    // Wait for graph to be ready
+                    await new Promise((resolve) => {
+                        const checkReady = () => {
+                            if (this.graph.ready) {
+                                resolve();
+                            } else {
+                                setTimeout(checkReady, 100);
+                            }
+                        };
+                        checkReady();
+                    });
+                    
+                    this.log('info', 'Test started successfully');
+                    this.updateOptimizationStatus();
+                    
+                } catch (error) {
+                    this.log('error', `Failed to start test: ${error.message}`);
+                    this.stopTest();
+                }
+            }
+            
+            stopTest() {
+                if (!this.testRunning) return;
+                
+                this.testRunning = false;
+                
+                // Calculate final results
+                if (this.frameTimes.length > 0) {
+                    this.testResults.avgFps = 1000 / (this.frameTimes.reduce((a, b) => a + b) / this.frameTimes.length);
+                    this.testResults.minFps = 1000 / Math.max(...this.frameTimes);
+                    this.testResults.maxFps = 1000 / Math.min(...this.frameTimes);
+                    this.testResults.totalFrames = this.frameCount;
+                    this.testResults.score = this.calculatePerformanceScore();
+                }
+                
+                // Update UI
+                document.getElementById('startTest').disabled = false;
+                document.getElementById('stopTest').disabled = true;
+                document.getElementById('progressFill').style.width = '100%';
+                
+                this.updateResults();
+                this.log('info', `Test completed. Score: ${this.testResults.score}/100`);
+            }
+            
+            resetTest() {
+                this.stopTest();
+                
+                if (this.graph) {
+                    this.scene.remove(this.graph);
+                    this.graph.dispose();
+                    this.graph = null;
+                }
+                
+                // Reset UI
+                document.getElementById('progressFill').style.width = '0%';
+                this.clearResults();
+                this.clearLog();
+                
+                this.log('info', 'Test reset');
+            }
+            
+            calculatePerformanceScore() {
+                const targetFPS = 60;
+                const avgFps = this.testResults.avgFps;
+                const minFps = this.testResults.minFps;
+                
+                // Base score from average FPS
+                let score = Math.min(100, (avgFps / targetFPS) * 60);
+                
+                // Penalty for low minimum FPS (consistency matters)
+                const consistencyBonus = Math.min(20, (minFps / targetFPS) * 20);
+                score += consistencyBonus;
+                
+                // Bonus for sustained high performance
+                const stability = 1 - (this.testResults.maxFps - this.testResults.minFps) / this.testResults.maxFps;
+                score += stability * 20;
+                
+                return Math.round(Math.max(0, Math.min(100, score)));
+            }
+            
+            startRenderLoop() {
+                const animate = (time) => {
+                    this.animationId = requestAnimationFrame(animate);
+                    
+                    const frameStart = performance.now();
+                    
+                    // Update controls
+                    this.controls.update();
+                    
+                    // Update graph
+                    if (this.graph && this.graph.ready) {
+                        this.graph.update(time);
+                    }
+                    
+                    // Render scene
+                    this.renderer.render(this.scene, this.camera);
+                    
+                    const frameEnd = performance.now();
+                    const frameTime = frameEnd - frameStart;
+                    
+                    // Update test metrics
+                    if (this.testRunning) {
+                        this.frameCount++;
+                        this.frameTimes.push(frameTime);
+                        
+                        // Limit frame time history
+                        if (this.frameTimes.length > 300) {
+                            this.frameTimes.shift();
+                        }
+                        
+                        // Update progress
+                        const elapsed = performance.now() - this.testStartTime;
+                        const progress = Math.min(100, (elapsed / this.testDuration) * 100);
+                        document.getElementById('progressFill').style.width = `${progress}%`;
+                        
+                        // Check if test duration reached
+                        if (elapsed >= this.testDuration) {
+                            this.stopTest();
+                        }
+                    }
+                    
+                    // Update real-time metrics
+                    this.updateMetrics(frameTime);
+                };
+                
+                animate(0);
+            }
+            
+            updateMetrics(frameTime) {
+                const fps = 1000 / frameTime;
+                
+                // Update FPS display
+                const fpsElement = document.getElementById('fps');
+                fpsElement.textContent = `${fps.toFixed(1)} FPS`;
+                fpsElement.className = `metric-value ${this.getPerformanceClass(fps, 60, 30, 15)}`;
+                
+                // Update frame time
+                const frameTimeElement = document.getElementById('frameTime');
+                frameTimeElement.textContent = `${frameTime.toFixed(1)} ms`;
+                frameTimeElement.className = `metric-value ${this.getPerformanceClass(frameTime, 16.7, 33.3, 66.7, true)}`;
+                
+                // Update graph-specific metrics
+                if (this.graph) {
+                    const perfInfo = this.graph.getPerformanceInfo();
+                    
+                    if (perfInfo.performance) {
+                        document.getElementById('gpuTime').textContent = 
+                            `${(perfInfo.performance.performance.gpuTime || 0).toFixed(1)} ms`;
+                        document.getElementById('spatialTime').textContent = 
+                            `${(perfInfo.performance.performance.spatialGridTime || 0).toFixed(1)} ms`;
+                    }
+                    
+                    if (perfInfo.performance && perfInfo.performance.memory) {
+                        const memoryMB = (perfInfo.performance.memory.usage || 0) / (1024 * 1024);
+                        document.getElementById('memory').textContent = `${memoryMB.toFixed(1)} MB`;
+                    }
+                    
+                    document.getElementById('neighbors').textContent = this.graph.maxNeighbors || 0;
+                }
+            }
+            
+            getPerformanceClass(value, good, warning, critical, inverse = false) {
+                if (inverse) {
+                    if (value <= good) return 'good';
+                    if (value <= warning) return 'warning';
+                    return 'critical';
+                } else {
+                    if (value >= good) return 'good';
+                    if (value >= warning) return 'warning';
+                    return 'critical';
+                }
+            }
+            
+            updateResults() {
+                document.getElementById('avgFps').textContent = this.testResults.avgFps.toFixed(1);
+                document.getElementById('minFps').textContent = this.testResults.minFps.toFixed(1);
+                document.getElementById('maxFps').textContent = this.testResults.maxFps.toFixed(1);
+                
+                const scoreElement = document.getElementById('score');
+                scoreElement.textContent = `${this.testResults.score}/100`;
+                scoreElement.className = `metric-value ${this.getPerformanceClass(this.testResults.score, 80, 60, 40)}`;
+            }
+            
+            clearResults() {
+                document.getElementById('avgFps').textContent = '-';
+                document.getElementById('minFps').textContent = '-';
+                document.getElementById('maxFps').textContent = '-';
+                document.getElementById('score').textContent = '-';
+            }
+            
+            updateSystemStatus() {
+                const gl = this.renderer.getContext();
+                const webglVersion = gl.getParameter(gl.VERSION);
+                const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+                
+                document.getElementById('systemStatus').innerHTML = `
+                    <div><span class="status-indicator good"></span>WebGL: ${webglVersion}</div>
+                    <div>Max Texture Size: ${maxTextureSize}</div>
+                    <div>Cores: ${navigator.hardwareConcurrency || 'Unknown'}</div>
+                `;
+            }
+            
+            updateOptimizationStatus() {
+                if (!this.graph) {
+                    document.getElementById('activeOptimizations').textContent = 'None';
+                    return;
+                }
+                
+                const perfInfo = this.graph.getPerformanceInfo();
+                const optimizations = [];
+                
+                if (perfInfo.optimizations) {
+                    if (perfInfo.optimizations.usingSpatialGrid) optimizations.push('Spatial Grid');
+                    if (perfInfo.optimizations.usingWorkers) optimizations.push('Web Workers');
+                    if (perfInfo.optimizations.usingWasm) optimizations.push('WASM');
+                    if (perfInfo.optimizations.autoTuning) optimizations.push('Auto-Tuning');
+                }
+                
+                if (perfInfo.fallback && perfInfo.fallback.fallbackReason) {
+                    optimizations.push(`Fallback: ${perfInfo.fallback.currentShader}`);
+                }
+                
+                document.getElementById('activeOptimizations').textContent = 
+                    optimizations.length > 0 ? optimizations.join(', ') : 'Standard';
+            }
+            
+            log(type, message) {
+                const logElement = document.getElementById('log');
+                const timestamp = new Date().toLocaleTimeString();
+                const entry = document.createElement('div');
+                entry.className = `log-entry ${type}`;
+                entry.textContent = `[${timestamp}] ${message}`;
+                
+                logElement.appendChild(entry);
+                logElement.scrollTop = logElement.scrollHeight;
+                
+                // Limit log entries
+                while (logElement.children.length > 100) {
+                    logElement.removeChild(logElement.firstChild);
+                }
+            }
+            
+            clearLog() {
+                document.getElementById('log').innerHTML = '';
+            }
+            
+            onWindowResize() {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        }
+        
+        // Start the test suite
+        new PerformanceTestSuite();
+    </script>
+</body>
+</html>

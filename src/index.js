@@ -8,6 +8,8 @@ import { Links } from './links.js';
 import { Registry } from './registry.js';
 import { Hit } from './hit.js';
 import { TextureWorkerManager } from './texture-worker-manager.js';
+import { SpatialGrid } from './spatial-grid.js';
+import { PerformanceMonitor } from './performance-monitor.js';
 
 const color = new Color();
 const position = new Vector3();
@@ -51,9 +53,21 @@ class ForceDirectedGraph extends Group {
       pointColor: { value: new Color(1, 1, 1) },
       linkColor: { value: new Color(1, 1, 1) },
       opacity: { value: 1 },
+      maxNeighbors: { value: 32 },
+      useSpatialGrid: { value: true },
     };
     this.userData.hit = new Hit(this);
     this.userData.workerManager = new TextureWorkerManager();
+    this.userData.spatialGrid = null;
+    this.userData.frameCount = 0;
+    this.userData.performanceMonitor = new PerformanceMonitor();
+    this.userData.fallbackState = {
+      spatialGridFailed: false,
+      currentShader: null,
+      fallbackReason: null,
+      retryAttempts: 0,
+      maxRetries: 3
+    };
 
     if (data) {
       this.set(data);
@@ -84,6 +98,8 @@ class ForceDirectedGraph extends Group {
     'linkColor',
     'opacity',
     'blending',
+    'maxNeighbors',
+    'useSpatialGrid',
   ];
 
   /**
@@ -137,6 +153,14 @@ class ForceDirectedGraph extends Group {
       links: gpgpu.createTexture(),
     };
 
+    // Choose velocity shader with fallback support
+    const { velocityShader, fallbackReason } = this.selectOptimalShader(data.nodes.length);
+    
+    if (fallbackReason) {
+      console.warn(`Force Directed Graph fallback: ${fallbackReason}`);
+      this.userData.fallbackState.fallbackReason = fallbackReason;
+    }
+
     const variables = {
       positions: gpgpu.addVariable(
         'texturePositions',
@@ -145,7 +169,7 @@ class ForceDirectedGraph extends Group {
       ),
       velocities: gpgpu.addVariable(
         'textureVelocities',
-        simulation.velocities,
+        velocityShader,
         textures.velocities
       ),
     };
@@ -318,6 +342,13 @@ class ForceDirectedGraph extends Group {
           uniforms.springLength;
         variables.velocities.material.uniforms.stiffness = uniforms.stiffness;
         variables.velocities.material.uniforms.gravity = uniforms.gravity;
+        variables.velocities.material.uniforms.maxNeighbors = uniforms.maxNeighbors;
+        
+        // Add spatial grid textures if using spatial optimization
+        if (scope.userData.spatialGrid) {
+          variables.velocities.material.uniforms.textureNeighbors = { value: null };
+          variables.velocities.material.uniforms.textureNeighborsDistance = { value: null };
+        }
 
         variables.positions.wrapS = variables.positions.wrapT = RepeatWrapping;
         variables.velocities.wrapS = variables.velocities.wrapT =
@@ -357,6 +388,130 @@ class ForceDirectedGraph extends Group {
   }
 
   /**
+   * Select optimal velocity shader with fallback support
+   * @param {number} nodeCount - Number of nodes in the graph
+   * @returns {Object} Object with velocityShader and fallbackReason
+   */
+  selectOptimalShader(nodeCount) {
+    const { uniforms, fallbackState } = this.userData;
+    let result = { velocityShader: simulation.velocities, fallbackReason: null };
+    
+    try {
+      // Check if spatial grid optimization should be used
+      // Increase threshold to 2000 nodes to avoid issues with medium-sized graphs
+      const shouldUseSpatialGrid = uniforms.useSpatialGrid.value && 
+                                   nodeCount > 2000 && 
+                                   !fallbackState.spatialGridFailed;
+      
+      if (shouldUseSpatialGrid) {
+        // Verify WebGL capabilities
+        if (!this.checkWebGLCapabilities()) {
+          result.fallbackReason = 'WebGL 2.0 or required extensions not available';
+          return result;
+        }
+        
+        // Verify texture size limits
+        const textureSize = getPotSize(nodeCount);
+        if (!this.checkTextureSizeSupport(textureSize)) {
+          result.fallbackReason = `Texture size ${textureSize}x${textureSize} exceeds GPU limits`;
+          return result;
+        }
+        
+        // Try to create spatial grid
+        try {
+          if (this.userData.spatialGrid) {
+            this.userData.spatialGrid.dispose();
+          }
+          
+          this.userData.spatialGrid = new SpatialGrid(32, uniforms.maxNeighbors.value);
+          
+          // Initialize spatial grid with node data to avoid GPU readbacks
+          this.userData.spatialGrid.setInitialNodeData(this.userData.data.nodes);
+          
+          result.velocityShader = simulation.spatial;
+          fallbackState.currentShader = 'spatial';
+          fallbackState.retryAttempts = 0;
+          
+          console.log(`Using spatial grid optimization for ${nodeCount} nodes`);
+          
+        } catch (error) {
+          console.warn('Failed to create spatial grid:', error);
+          result.fallbackReason = `Spatial grid creation failed: ${error.message}`;
+          fallbackState.spatialGridFailed = true;
+          fallbackState.retryAttempts++;
+        }
+        
+      } else {
+        // Use simplified spatial shader for medium node counts
+        if (nodeCount > 1000 && nodeCount <= 2000) {
+          result.velocityShader = simulation.spatialSimplified;
+          fallbackState.currentShader = 'spatialSimplified';
+          console.log(`Using simplified spatial optimization for ${nodeCount} nodes`);
+        } else {
+          // Standard shader for small node counts
+          fallbackState.currentShader = 'standard';
+          if (nodeCount <= 1000) {
+            console.log(`Using standard shader for ${nodeCount} nodes (under optimization threshold)`);
+          }
+        }
+        
+        // Clean up spatial grid if not needed
+        if (this.userData.spatialGrid) {
+          this.userData.spatialGrid.dispose();
+          this.userData.spatialGrid = null;
+        }
+      }
+      
+    } catch (error) {
+      console.error('Error in shader selection:', error);
+      result.fallbackReason = `Shader selection failed: ${error.message}`;
+      fallbackState.currentShader = 'standard';
+    }
+    
+    return result;
+  }
+
+  /**
+   * Check WebGL capabilities for spatial grid support
+   * @returns {boolean} True if capabilities are sufficient
+   */
+  checkWebGLCapabilities() {
+    try {
+      const gl = this.userData.renderer.getContext();
+      
+      // Check for WebGL 2.0 or required extensions
+      if (!gl.getParameter) return false;
+      
+      // Check for floating point texture support
+      const floatTextureExt = gl.getExtension('OES_texture_float') || 
+                             gl.getExtension('EXT_color_buffer_float');
+      
+      if (!floatTextureExt && !gl.getParameter(gl.VERSION).includes('WebGL 2.0')) {
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Check if texture size is supported by the GPU
+   * @param {number} size - Texture size to check
+   * @returns {boolean} True if size is supported
+   */
+  checkTextureSizeSupport(size) {
+    try {
+      const gl = this.userData.renderer.getContext();
+      const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+      return size <= maxTextureSize;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
    * @param {Number} time
    * @description Function to update the instance meant to be run before three.js's renderer.render method.
    * @returns {Void}
@@ -366,18 +521,119 @@ class ForceDirectedGraph extends Group {
       return this;
     }
 
-    const { gpgpu, variables, uniforms } = this.userData;
+    const { gpgpu, variables, uniforms, spatialGrid, renderer, performanceMonitor, fallbackState } = this.userData;
+    const startTime = performance.now();
 
     uniforms.alpha.value *= uniforms.decay.value;
 
-    variables.velocities.material.uniforms.time.value = time / 1000;
-    gpgpu.compute();
+    let spatialGridUpdateTime = 0;
+    let hasErrors = false;
 
-    const texture = this.getTexture('positions');
+    // Update spatial grid periodically if enabled
+    if (spatialGrid) {
+      this.userData.frameCount++;
+      
+      const positionsTexture = this.getTexture('positions');
+      const nodeCount = variables.velocities.material.uniforms.nodeAmount.value;
+      
+      try {
+        const spatialStartTime = performance.now();
+        
+        const gridUpdated = spatialGrid.update(
+          renderer, 
+          positionsTexture, 
+          nodeCount, 
+          uniforms.maxNeighbors.value
+        );
+        
+        spatialGridUpdateTime = performance.now() - spatialStartTime;
+        
+        if (gridUpdated) {
+          // Update neighbor textures in velocity shader
+          const neighborsTexture = spatialGrid.getNeighborsTexture();
+          const neighborsDistanceTexture = spatialGrid.getNeighborsDistanceTexture();
+          
+          if (neighborsTexture && neighborsDistanceTexture) {
+            variables.velocities.material.uniforms.textureNeighbors.value = neighborsTexture;
+            variables.velocities.material.uniforms.textureNeighborsDistance.value = neighborsDistanceTexture;
+          }
+        }
+        
+        // Reset error state on successful update
+        fallbackState.spatialGridFailed = false;
+        
+      } catch (error) {
+        console.warn('SpatialGrid update failed:', error);
+        hasErrors = true;
+        spatialGridUpdateTime = 0;
+        
+        // Mark spatial grid as failed and potentially retry
+        fallbackState.spatialGridFailed = true;
+        fallbackState.retryAttempts++;
+        
+        if (fallbackState.retryAttempts >= fallbackState.maxRetries) {
+          console.warn('Maximum spatial grid retry attempts reached, disabling optimization');
+          fallbackState.fallbackReason = `Spatial grid permanently disabled after ${fallbackState.maxRetries} failures`;
+          
+          // Dispose of failed spatial grid
+          spatialGrid.dispose();
+          this.userData.spatialGrid = null;
+        }
+      }
+    }
 
-    for (let i = 0; i < this.children.length; i++) {
-      const child = this.children[i];
-      child.material.uniforms.texturePositions.value = texture;
+    try {
+      variables.velocities.material.uniforms.time.value = time / 1000;
+      
+      // Apply performance monitor tuning parameters
+      const tuningParams = performanceMonitor.getTuningParameters();
+      if (tuningParams.maxNeighbors !== uniforms.maxNeighbors.value) {
+        uniforms.maxNeighbors.value = tuningParams.maxNeighbors;
+        if (spatialGrid) {
+          spatialGrid.maxNeighbors = tuningParams.maxNeighbors;
+        }
+      }
+      
+      if (spatialGrid && tuningParams.updateInterval !== spatialGrid.updateInterval) {
+        spatialGrid.setUpdateInterval(tuningParams.updateInterval);
+      }
+      
+      if (spatialGrid && tuningParams.movementThreshold !== spatialGrid.movementThreshold) {
+        spatialGrid.setMovementThreshold(tuningParams.movementThreshold);
+      }
+      
+      const gpuStartTime = performance.now();
+      gpgpu.compute();
+      const gpuComputeTime = performance.now() - gpuStartTime;
+      
+      const texture = this.getTexture('positions');
+
+      for (let i = 0; i < this.children.length; i++) {
+        const child = this.children[i];
+        child.material.uniforms.texturePositions.value = texture;
+      }
+      
+      // Update performance monitor
+      const totalFrameTime = performance.now() - startTime;
+      performanceMonitor.update(time, {
+        spatialGridUpdateTime,
+        gpuComputeTime,
+        nodeCount: variables.velocities.material.uniforms.nodeAmount.value,
+        edgeCount: variables.velocities.material.uniforms.edgeAmount.value
+      });
+      
+    } catch (error) {
+      console.error('Critical error in update loop:', error);
+      hasErrors = true;
+      
+      // Attempt recovery by disabling optimizations
+      if (this.userData.spatialGrid) {
+        console.warn('Disabling spatial grid due to critical error');
+        this.userData.spatialGrid.dispose();
+        this.userData.spatialGrid = null;
+        fallbackState.spatialGridFailed = true;
+        fallbackState.fallbackReason = `Critical error: ${error.message}`;
+      }
     }
 
     return this;
@@ -531,7 +787,7 @@ class ForceDirectedGraph extends Group {
   }
 
   dispose() {
-    const { gpgpu, workerManager } = this.userData;
+    const { gpgpu, workerManager, spatialGrid, performanceMonitor } = this.userData;
     if (gpgpu) {
       for (let i = 0; i < gpgpu.variables.length; i++) {
         const variable = gpgpu.variables[i];
@@ -545,6 +801,12 @@ class ForceDirectedGraph extends Group {
     }
     if (workerManager) {
       workerManager.dispose();
+    }
+    if (spatialGrid) {
+      spatialGrid.dispose();
+    }
+    if (performanceMonitor) {
+      performanceMonitor.reset();
     }
     this.userData = {};
     return this;
@@ -694,6 +956,24 @@ class ForceDirectedGraph extends Group {
     }
   }
 
+  get maxNeighbors() {
+    return this.userData.uniforms.maxNeighbors.value;
+  }
+  set maxNeighbors(v) {
+    this.userData.uniforms.maxNeighbors.value = Math.max(1, Math.min(256, v));
+    // Update spatial grid if it exists
+    if (this.userData.spatialGrid) {
+      this.userData.spatialGrid.maxNeighbors = this.userData.uniforms.maxNeighbors.value;
+    }
+  }
+  get useSpatialGrid() {
+    return this.userData.uniforms.useSpatialGrid.value;
+  }
+  set useSpatialGrid(v) {
+    this.userData.uniforms.useSpatialGrid.value = v;
+    // Note: Changes to this require recreating the graph with set() to take effect
+  }
+
   get points() {
     return this.children[0];
   }
@@ -713,16 +993,52 @@ class ForceDirectedGraph extends Group {
   }
   
   /**
-   * Get performance information about texture processing
-   * @returns {Object} Performance statistics
+   * Get comprehensive performance information
+   * @returns {Object} Performance statistics and system state
    */
   getPerformanceInfo() {
-    const { workerManager } = this.userData;
-    return workerManager ? workerManager.getPerformanceInfo() : {
+    const { workerManager, spatialGrid, performanceMonitor, fallbackState } = this.userData;
+    
+    const workerInfo = workerManager ? workerManager.getPerformanceInfo() : {
       workerSupported: false,
       workerReady: false,
       wasmReady: false,
       pendingRequests: 0
+    };
+    
+    const spatialInfo = spatialGrid ? spatialGrid.getPerformanceInfo() : {
+      lastUpdateTime: 0,
+      gridCells: 0,
+      maxNeighbors: 0,
+      updateInterval: 0,
+      frameCount: 0
+    };
+    
+    const performanceReport = performanceMonitor ? performanceMonitor.getPerformanceReport() : {
+      frameRate: { current: 0, average: 0, target: 30 },
+      performance: { level: 'unknown' },
+      memory: { usage: 0 },
+      tuning: { enabled: false, parameters: {} },
+      recommendations: []
+    };
+    
+    return {
+      ...workerInfo,
+      spatialGrid: spatialInfo,
+      performance: performanceReport,
+      fallback: {
+        currentShader: fallbackState.currentShader,
+        spatialGridFailed: fallbackState.spatialGridFailed,
+        fallbackReason: fallbackState.fallbackReason,
+        retryAttempts: fallbackState.retryAttempts,
+        maxRetries: fallbackState.maxRetries
+      },
+      optimizations: {
+        usingSpatialGrid: !!spatialGrid,
+        usingWorkers: workerInfo.workerReady,
+        usingWasm: workerInfo.wasmReady,
+        autoTuning: performanceReport.tuning.enabled
+      }
     };
   }
   
