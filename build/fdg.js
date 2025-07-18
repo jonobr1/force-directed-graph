@@ -312,12 +312,21 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
         b = vec3( 0.0 ),
         c = vec3( 0.0 );
 
-    /*
-    for ( float i = 0.0; i < linkAmount; i += 1.0 ) {
-      // TODO: get all edges and link them
-      b += link( i, id1, p1, v1, uv2 );
+    // Get link lookup data for this node
+    vec4 linkLookup = texture2D( textureLinksLookUp, uv );
+    float startLinkIndex = linkLookup.r;
+    float endLinkIndex = linkLookup.g;
+    float linkCount = linkLookup.b;
+    
+    // Iterate through all links connected to this node
+    for ( float i = startLinkIndex; i < endLinkIndex; i += 1.0 ) {
+      // Calculate UV coordinates for this link index in the links texture
+      float linkUvx = mod( i, size ) / size;
+      float linkUvy = floor( i / size ) / size;
+      vec2 linkUv = vec2( linkUvx, linkUvy );
+      
+      b += link( i, id1, p1, v1, linkUv );
     }
-    */
 
     for ( float i = 0.0; i < nodeAmount; i += 1.0 ) {
 
@@ -336,8 +345,8 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
 
     }
 
-    b *= 1.0 - step( edgeAmount, float( id1 ) );
-    c *= 1.0 - step( nodeAmount, float( id1 ) );
+    // b *= 1.0 - step( edgeAmount, float( id1 ) );
+    // c *= 1.0 - step( nodeAmount, float( id1 ) );
 
   // 4.
   vec3 d = center( p1 );
@@ -703,7 +712,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
   }
 
   // src/shaders/simulation.js
-  var simulation_default = createShaderConfig("nested");
+  var simulation_default = createShaderConfig("simplex");
 
   // src/points.js
   var import_three2 = __require("three");
@@ -1712,22 +1721,27 @@ initWasm();
     ready = false;
     /**
      * @param {THREE.WebGLRenderer} renderer - the three.js renderer referenced to create the render targets
-     * @param {Object} [data] - optional data to automatically set the data of the graph
      * @param {Object} [options] - configuration options
-     * @param {string} [options.shaderType='nested'] - shader algorithm type: 'simplex', 'nested', or 'nearest-neighbors'
+     * @param {Object} [options.data] - optional data to automatically set the data of the graph
+     * @param {string} [options.shaderType='simplex'] - shader algorithm type: 'simplex', 'nested', or 'nearest-neighbors'
      * @param {number} [options.nearestNeighborCount=16] - number of nearest neighbors to consider (nearest-neighbors only)
      * @param {number} [options.maxSearchRadius=50] - maximum search radius for neighbors (nearest-neighbors only)
      */
-    constructor(renderer, data, options = {}) {
+    constructor(renderer, options = {}) {
       super();
       const {
-        shaderType = "nested",
+        data = null,
+        shaderType = "simplex",
         nearestNeighborCount = 16,
         maxSearchRadius = 50
       } = options;
       const validTypes = ["simplex", "nested", "nearest-neighbors"];
       if (!validTypes.includes(shaderType)) {
-        throw new Error(`Invalid shaderType: ${shaderType}. Must be one of: ${validTypes.join(", ")}`);
+        throw new Error(
+          `Invalid shaderType: ${shaderType}. Must be one of: ${validTypes.join(
+            ", "
+          )}`
+        );
       }
       this.userData.shaderType = shaderType;
       this.userData.shaderOptions = { nearestNeighborCount, maxSearchRadius };
@@ -1757,7 +1771,9 @@ initWasm();
         opacity: { value: 1 }
       };
       if (shaderType === "nearest-neighbors") {
-        this.userData.uniforms.nearestNeighborCount = { value: nearestNeighborCount };
+        this.userData.uniforms.nearestNeighborCount = {
+          value: nearestNeighborCount
+        };
         this.userData.uniforms.spatialHashSize = { value: 10 };
         this.userData.uniforms.maxSearchRadius = { value: maxSearchRadius };
       }
@@ -1833,7 +1849,8 @@ initWasm();
       const textures = {
         positions: gpgpu.createTexture(),
         velocities: gpgpu.createTexture(),
-        links: gpgpu.createTexture()
+        links: gpgpu.createTexture(),
+        linksLookUp: gpgpu.createTexture()
       };
       if (shaderConfig.requiresNearestNeighbors) {
         textures.nearestNeighbors = gpgpu.createTexture();
@@ -1859,7 +1876,7 @@ initWasm();
       }
       this.userData.gpgpu = gpgpu;
       this.userData.variables = variables;
-      return register().then(fill).then(setup).then(generate).then(complete).catch((error) => {
+      return register().then(fill).then(fillLinksLookup).then(setup).then(generate).then(complete).catch((error) => {
         console.warn("Force Directed Graph:", error);
       });
       function register() {
@@ -1893,10 +1910,20 @@ initWasm();
             });
             textures.positions.image.data.set(result.positions);
             textures.links.image.data.set(result.links);
-            console.log(`Texture processing completed in ${result.processingTime.toFixed(2)}ms using ${workerManager.isWasmAvailable() ? "WASM" : "JavaScript"}`);
+            if (result.linksLookUp) {
+              textures.linksLookUp.image.data.set(result.linksLookUp);
+            }
+            console.log(
+              `Texture processing completed in ${result.processingTime.toFixed(
+                2
+              )}ms using ${workerManager.isWasmAvailable() ? "WASM" : "JavaScript"}`
+            );
             return Promise.resolve();
           } catch (error) {
-            console.warn("Worker processing failed, falling back to main thread:", error);
+            console.warn(
+              "Worker processing failed, falling back to main thread:",
+              error
+            );
           }
         }
         return fillMainThread();
@@ -1921,25 +1948,95 @@ initWasm();
               textures.positions.image.data[i + 2] = uniforms.frustumSize.value * 10;
               textures.positions.image.data[i + 3] = uniforms.frustumSize.value * 10;
             }
-            let i1, i2, uvx, uvy;
             if (k < data.links.length) {
-              i1 = registry.get(data.links[k].source);
-              i2 = registry.get(data.links[k].target);
+              const i1 = registry.get(data.links[k].source);
+              const i2 = registry.get(data.links[k].target);
               data.links[k].sourceIndex = i1;
               data.links[k].targetIndex = i2;
-              uvx = i1 % size2 / size2;
-              uvy = Math.floor(i1 / size2) / size2;
-              textures.links.image.data[i + 0] = uvx;
-              textures.links.image.data[i + 1] = uvy;
-              uvx = i2 % size2 / size2;
-              uvy = Math.floor(i2 / size2) / size2;
-              textures.links.image.data[i + 2] = uvx;
-              textures.links.image.data[i + 3] = uvy;
             }
             k++;
           },
           4
         );
+      }
+      function fillLinksLookup() {
+        data.links.forEach((link2, i) => {
+          if (link2.sourceIndex === void 0) {
+            link2.sourceIndex = registry.get(link2.source);
+          }
+          if (link2.targetIndex === void 0) {
+            link2.targetIndex = registry.get(link2.target);
+          }
+        });
+        const sortedLinks = [];
+        for (let nodeIndex = 0; nodeIndex < data.nodes.length; nodeIndex++) {
+          data.links.forEach((link2, linkIndex) => {
+            if (link2.sourceIndex === nodeIndex) {
+              if (link2.targetIndex >= data.nodes.length) {
+                console.warn(`Invalid link: source=${link2.sourceIndex} -> target=${link2.targetIndex} (target node doesn't exist, only ${data.nodes.length} nodes)`);
+                return;
+              }
+              sortedLinks.push({
+                originalIndex: linkIndex,
+                sourceIndex: link2.sourceIndex,
+                targetIndex: link2.targetIndex,
+                link: link2
+              });
+            }
+          });
+        }
+        const totalElements = size2 * size2;
+        const linksData = textures.links.image.data;
+        for (let i = 0; i < totalElements * 4; i++) {
+          linksData[i] = 0;
+        }
+        sortedLinks.forEach((sortedLink, sortedIndex) => {
+          const baseIndex = sortedIndex * 4;
+          if (sortedIndex < totalElements) {
+            const sourceIndex = sortedLink.sourceIndex;
+            const targetIndex = sortedLink.targetIndex;
+            const sourceU = sourceIndex % size2 / size2;
+            const sourceV = Math.floor(sourceIndex / size2) / size2;
+            const targetU = targetIndex % size2 / size2;
+            const targetV = Math.floor(targetIndex / size2) / size2;
+            linksData[baseIndex + 0] = sourceU;
+            linksData[baseIndex + 1] = sourceV;
+            linksData[baseIndex + 2] = targetU;
+            linksData[baseIndex + 3] = targetV;
+          }
+        });
+        const linksLookUpData = textures.linksLookUp.image.data;
+        let currentLinkIndex = 0;
+        for (let i = 0; i < totalElements; i++) {
+          const baseIndex = i * 4;
+          if (i < data.nodes.length) {
+            let linkCount = 0;
+            let startIndex = -1;
+            for (let j = 0; j < sortedLinks.length; j++) {
+              if (sortedLinks[j].sourceIndex === i) {
+                if (startIndex === -1) {
+                  startIndex = j;
+                }
+                linkCount++;
+              }
+            }
+            if (startIndex === -1) {
+              startIndex = 0;
+              linkCount = 0;
+            }
+            const endIndex = startIndex + linkCount;
+            linksLookUpData[baseIndex + 0] = startIndex;
+            linksLookUpData[baseIndex + 1] = endIndex;
+            linksLookUpData[baseIndex + 2] = linkCount;
+            linksLookUpData[baseIndex + 3] = 0;
+          } else {
+            linksLookUpData[baseIndex + 0] = 0;
+            linksLookUpData[baseIndex + 1] = 0;
+            linksLookUpData[baseIndex + 2] = 0;
+            linksLookUpData[baseIndex + 3] = 0;
+          }
+        }
+        return Promise.resolve();
       }
       function setup() {
         return new Promise((resolve, reject) => {
@@ -1976,6 +2073,9 @@ initWasm();
           variables.velocities.material.uniforms.repulsion = uniforms.repulsion;
           variables.velocities.material.uniforms.textureLinks = {
             value: textures.links
+          };
+          variables.velocities.material.uniforms.textureLinksLookUp = {
+            value: textures.linksLookUp
           };
           variables.velocities.material.uniforms.springLength = uniforms.springLength;
           variables.velocities.material.uniforms.stiffness = uniforms.stiffness;
@@ -2401,7 +2501,10 @@ initWasm();
           description: shaderConfig.description,
           nearestNeighborsActive,
           nearestNeighborCount: nearestNeighborsActive ? shaderOptions.nearestNeighborCount : null,
-          estimatedSpeedup: nearestNeighborsActive ? `${Math.max(1, Math.floor(nodeCount / shaderOptions.nearestNeighborCount))}x` : "1x",
+          estimatedSpeedup: nearestNeighborsActive ? `${Math.max(
+            1,
+            Math.floor(nodeCount / shaderOptions.nearestNeighborCount)
+          )}x` : "1x",
           recommendation: this.getShaderRecommendation(nodeCount)
         },
         gpu: {
@@ -2445,7 +2548,9 @@ initWasm();
     adaptNeighborCount(targetFPS = 60) {
       const { shaderType, shaderOptions } = this.userData;
       if (shaderType !== "nearest-neighbors") {
-        console.warn("adaptNeighborCount() is only available for nearest-neighbors shader type");
+        console.warn(
+          "adaptNeighborCount() is only available for nearest-neighbors shader type"
+        );
         return;
       }
       const startTime = performance.now();
@@ -2453,13 +2558,23 @@ initWasm();
         const frameTime = performance.now() - startTime;
         const currentFPS = 1e3 / frameTime;
         if (currentFPS < targetFPS * 0.8) {
-          const newCount = Math.max(4, Math.floor(shaderOptions.nearestNeighborCount * 0.8));
+          const newCount = Math.max(
+            4,
+            Math.floor(shaderOptions.nearestNeighborCount * 0.8)
+          );
           this.nearestNeighborCount = newCount;
-          console.log(`Performance below target, reducing neighbors to ${newCount}`);
+          console.log(
+            `Performance below target, reducing neighbors to ${newCount}`
+          );
         } else if (currentFPS > targetFPS * 1.2) {
-          const newCount = Math.min(32, Math.floor(shaderOptions.nearestNeighborCount * 1.2));
+          const newCount = Math.min(
+            32,
+            Math.floor(shaderOptions.nearestNeighborCount * 1.2)
+          );
           this.nearestNeighborCount = newCount;
-          console.log(`Performance above target, increasing neighbors to ${newCount}`);
+          console.log(
+            `Performance above target, increasing neighbors to ${newCount}`
+          );
         }
       });
     }

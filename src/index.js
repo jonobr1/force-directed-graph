@@ -22,17 +22,18 @@ class ForceDirectedGraph extends Group {
 
   /**
    * @param {THREE.WebGLRenderer} renderer - the three.js renderer referenced to create the render targets
-   * @param {Object} [data] - optional data to automatically set the data of the graph
    * @param {Object} [options] - configuration options
+   * @param {Object} [options.data] - optional data to automatically set the data of the graph
    * @param {string} [options.shaderType='simplex'] - shader algorithm type: 'simplex', 'nested', or 'nearest-neighbors'
    * @param {number} [options.nearestNeighborCount=16] - number of nearest neighbors to consider (nearest-neighbors only)
    * @param {number} [options.maxSearchRadius=50] - maximum search radius for neighbors (nearest-neighbors only)
    */
-  constructor(renderer, data, options = {}) {
+  constructor(renderer, options = {}) {
     super();
 
     // Parse and validate options
     const {
+      data = null,
       shaderType = 'simplex',
       nearestNeighborCount = 16,
       maxSearchRadius = 50,
@@ -178,6 +179,7 @@ class ForceDirectedGraph extends Group {
       positions: gpgpu.createTexture(),
       velocities: gpgpu.createTexture(),
       links: gpgpu.createTexture(),
+      linksLookUp: gpgpu.createTexture(),
     };
 
     // Create shader-specific textures
@@ -211,17 +213,15 @@ class ForceDirectedGraph extends Group {
     this.userData.gpgpu = gpgpu;
     this.userData.variables = variables;
 
-    return (
-      register()
-        .then(fill)
-        // TODO: Add a sort here for future simulation methods
-        .then(setup)
-        .then(generate)
-        .then(complete)
-        .catch((error) => {
-          console.warn('Force Directed Graph:', error);
-        })
-    );
+    return register()
+      .then(fill)
+      .then(fillLinksLookup)
+      .then(setup)
+      .then(generate)
+      .then(complete)
+      .catch((error) => {
+        console.warn('Force Directed Graph:', error);
+      });
 
     function register() {
       return each(data.nodes, (node, i) => {
@@ -266,6 +266,9 @@ class ForceDirectedGraph extends Group {
           // Copy results to texture data
           textures.positions.image.data.set(result.positions);
           textures.links.image.data.set(result.links);
+          if (result.linksLookUp) {
+            textures.linksLookUp.image.data.set(result.linksLookUp);
+          }
 
           console.log(
             `Texture processing completed in ${result.processingTime.toFixed(
@@ -320,33 +323,137 @@ class ForceDirectedGraph extends Group {
               uniforms.frustumSize.value * 10;
           }
 
-          let i1, i2, uvx, uvy;
-
+          // Store sourceIndex and targetIndex for later use in fillLinksLookup
           if (k < data.links.length) {
-            // Calculate uv look up for edge calculations
-            i1 = registry.get(data.links[k].source);
-            i2 = registry.get(data.links[k].target);
+            const i1 = registry.get(data.links[k].source);
+            const i2 = registry.get(data.links[k].target);
 
             data.links[k].sourceIndex = i1;
             data.links[k].targetIndex = i2;
-
-            uvx = (i1 % size) / size;
-            uvy = Math.floor(i1 / size) / size;
-
-            textures.links.image.data[i + 0] = uvx;
-            textures.links.image.data[i + 1] = uvy;
-
-            uvx = (i2 % size) / size;
-            uvy = Math.floor(i2 / size) / size;
-
-            textures.links.image.data[i + 2] = uvx;
-            textures.links.image.data[i + 3] = uvy;
           }
 
           k++;
         },
         4
       );
+    }
+
+    function fillLinksLookup() {
+      // Ensure sourceIndex and targetIndex are set for all links
+      data.links.forEach((link, i) => {
+        if (link.sourceIndex === undefined) {
+          link.sourceIndex = registry.get(link.source);
+        }
+        if (link.targetIndex === undefined) {
+          link.targetIndex = registry.get(link.target);
+        }
+      });
+
+      // Create sorted links array (source -> target only, to avoid double counting)
+      const sortedLinks = [];
+
+      // Group ORIGINAL links by source node - preserve original relationships
+      for (let nodeIndex = 0; nodeIndex < data.nodes.length; nodeIndex++) {
+        data.links.forEach((link, linkIndex) => {
+          if (link.sourceIndex === nodeIndex) {
+            // Validate that target exists
+            if (link.targetIndex >= data.nodes.length) {
+              console.warn(
+                `Invalid link: source=${link.sourceIndex} -> target=${link.targetIndex} (target node doesn't exist, only ${data.nodes.length} nodes)`
+              );
+              return; // Skip invalid links
+            }
+
+            sortedLinks.push({
+              originalIndex: linkIndex,
+              sourceIndex: link.sourceIndex,
+              targetIndex: link.targetIndex,
+              link: link,
+            });
+          }
+        });
+      }
+
+      // Update textureLinks with sorted link data
+      const totalElements = size * size;
+      const linksData = textures.links.image.data;
+
+      // Clear existing links data
+      for (let i = 0; i < totalElements * 4; i++) {
+        linksData[i] = 0;
+      }
+
+      // Fill with sorted links
+      sortedLinks.forEach((sortedLink, sortedIndex) => {
+        const baseIndex = sortedIndex * 4;
+
+        if (sortedIndex < totalElements) {
+          const sourceIndex = sortedLink.sourceIndex;
+          const targetIndex = sortedLink.targetIndex;
+
+          // Calculate UV coordinates for source and target
+          const sourceU = (sourceIndex % size) / size;
+          const sourceV = Math.floor(sourceIndex / size) / size;
+          const targetU = (targetIndex % size) / size;
+          const targetV = Math.floor(targetIndex / size) / size;
+
+          linksData[baseIndex + 0] = sourceU;
+          linksData[baseIndex + 1] = sourceV;
+          linksData[baseIndex + 2] = targetU;
+          linksData[baseIndex + 3] = targetV;
+        }
+      });
+
+      // Fill linksLookUp texture
+      // Format: [startLinkIndex, endLinkIndex, linkCount, unused]
+      const linksLookUpData = textures.linksLookUp.image.data;
+
+      // Track where each node's links start in the sorted array
+      let currentLinkIndex = 0;
+
+      for (let i = 0; i < totalElements; i++) {
+        const baseIndex = i * 4;
+
+        if (i < data.nodes.length) {
+          // Find how many links this node has in the sorted array
+          let linkCount = 0;
+          let startIndex = -1;
+
+          // Find the actual start position and count for this node
+          // Include links where this node is either source OR target
+          for (let j = 0; j < sortedLinks.length; j++) {
+            if (
+              sortedLinks[j].sourceIndex === i ||
+              sortedLinks[j].targetIndex === i
+            ) {
+              if (startIndex === -1) {
+                startIndex = j; // First occurrence
+              }
+              linkCount++;
+            }
+          }
+
+          // If node has no links, set safe values
+          if (startIndex === -1) {
+            startIndex = 0;
+            linkCount = 0;
+          }
+
+          const endIndex = startIndex + linkCount;
+
+          linksLookUpData[baseIndex + 0] = startIndex; // start index
+          linksLookUpData[baseIndex + 1] = endIndex; // end index
+          linksLookUpData[baseIndex + 2] = linkCount; // link count
+          linksLookUpData[baseIndex + 3] = 0; // unused
+        } else {
+          linksLookUpData[baseIndex + 0] = 0;
+          linksLookUpData[baseIndex + 1] = 0;
+          linksLookUpData[baseIndex + 2] = 0;
+          linksLookUpData[baseIndex + 3] = 0;
+        }
+      }
+
+      return Promise.resolve();
     }
 
     function setup() {
@@ -391,6 +498,9 @@ class ForceDirectedGraph extends Group {
         variables.velocities.material.uniforms.repulsion = uniforms.repulsion;
         variables.velocities.material.uniforms.textureLinks = {
           value: textures.links,
+        };
+        variables.velocities.material.uniforms.textureLinksLookUp = {
+          value: textures.linksLookUp,
         };
         variables.velocities.material.uniforms.springLength =
           uniforms.springLength;

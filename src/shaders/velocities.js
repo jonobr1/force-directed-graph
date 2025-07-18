@@ -129,12 +129,21 @@ export const nested = `
         b = vec3( 0.0 ),
         c = vec3( 0.0 );
 
-    /*
-    for ( float i = 0.0; i < linkAmount; i += 1.0 ) {
-      // TODO: get all edges and link them
-      b += link( i, id1, p1, v1, uv2 );
+    // Get link lookup data for this node
+    vec4 linkLookup = texture2D( textureLinksLookUp, uv );
+    float startLinkIndex = linkLookup.r;
+    float endLinkIndex = linkLookup.g;
+    float linkCount = linkLookup.b;
+
+    // Iterate through all links connected to this node
+    for ( float i = startLinkIndex; i < endLinkIndex; i += 1.0 ) {
+      // Calculate UV coordinates for this link index in the links texture
+      float linkUvx = mod( i, size ) / size;
+      float linkUvy = floor( i / size ) / size;
+      vec2 linkUv = vec2( linkUvx, linkUvy );
+
+      b += link( i, id1, p1, v1, linkUv );
     }
-    */
 
     for ( float i = 0.0; i < nodeAmount; i += 1.0 ) {
 
