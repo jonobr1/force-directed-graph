@@ -198,7 +198,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
 `;
 
   // src/shaders/velocities.js
-  var types = ["simplex", "nested"];
+  var types = ["simplex", "nested", "optimized"];
   var simplex = `
   uniform float alpha;
   uniform float is2D;
@@ -353,13 +353,221 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
 
 }
 `;
+  var optimized = `
+  uniform float alpha;
+  uniform float is2D;
+  uniform float size;
+  uniform float time;
+  uniform float nodeRadius;
+  uniform float nodeAmount;
+  uniform float edgeAmount;
+  uniform float maxSpeed;
+  uniform float timeStep;
+  uniform float damping;
+  uniform float repulsion;
+  uniform float springLength;
+  uniform float stiffness;
+  uniform float gravity;
+  uniform float enableNearestNeighbors;
+  uniform sampler2D textureLinks;
+  uniform sampler2D textureLinksLookUp;
+  uniform sampler2D textureNearestNeighbors;
+  uniform sampler2D texturePositions;
+  uniform sampler2D textureVelocities;
+
+  vec3 getPosition( vec2 uv ) {
+    return texture2D( texturePositions, uv ).xyz;
+  }
+
+  vec3 getVelocity( vec2 uv ) {
+    return texture2D( textureVelocities, uv ).xyz;
+  }
+
+  int getIndex( vec2 uv ) {
+    int s = int( size );
+    int col = int( uv.x * size );
+    int row = int( uv.y * size );
+    return col + row * s;
+  }
+
+  ${random}
+  ${jiggle}
+  ${link}
+  ${charge}
+  ${center}
+
+  void main() {
+
+    vec2 uv = gl_FragCoord.xy / resolution.xy;
+    int id1 = getIndex( uv );
+
+    vec3 p1 = getPosition( uv );
+    vec3 v1 = getVelocity( uv );
+
+    vec3 a = vec3( 0.0 ),
+        b = vec3( 0.0 ),
+        c = vec3( 0.0 );
+
+    /*
+    for ( float i = 0.0; i < linkAmount; i += 1.0 ) {
+      // TODO: get all edges and link them
+      b += link( i, id1, p1, v1, uv2 );
+    }
+    */
+
+    // Use nearest neighbors optimization if enabled
+    if (enableNearestNeighbors > 0.5) {
+      // Get the nearest neighbors from the precomputed texture
+      vec4 neighbors = texture2D(textureNearestNeighbors, uv);
+      
+      // Process each neighbor (stored as indices in RGBA channels)
+      for (int i = 0; i < 4; i++) {
+        float neighborIndex = -1.0;
+        if (i == 0) neighborIndex = neighbors.r;
+        else if (i == 1) neighborIndex = neighbors.g;
+        else if (i == 2) neighborIndex = neighbors.b;
+        else if (i == 3) neighborIndex = neighbors.a;
+        
+        // Skip if no valid neighbor
+        if (neighborIndex < 0.0) continue;
+        
+        // Calculate UV coordinates for this neighbor
+        float uvx = mod(neighborIndex, size) / size;
+        float uvy = floor(neighborIndex / size) / size;
+        vec2 uv2 = vec2(uvx, uvy);
+        
+        int id2 = getIndex(uv2);
+        vec3 v2 = getVelocity(uv2);
+        vec3 p2 = getPosition(uv2);
+        
+        // Calculate charge between this node and its neighbor
+        // Fix type conversion: use int casting for the loop index
+        c += charge(float(i), id1, p1, v1, id2, p2, v2);
+      }
+    } else {
+      // Fallback to original O(n\xB2) algorithm
+      for ( float i = 0.0; i < nodeAmount; i += 1.0 ) {
+
+        float uvx = mod( i, size ) / size;
+        float uvy = floor( i / size ) / size;
+
+        vec2 uv2 = vec2( uvx, uvy );
+
+        int id2 = getIndex( uv2 );
+        vec3 v2 = getVelocity( uv2 );
+        vec3 p2 = getPosition( uv2 );
+
+        if ( i < nodeAmount) {
+          c += charge( i, id1, p1, v1, id2, p2, v2 );
+        }
+
+      }
+    }
+
+    b *= 1.0 - step( edgeAmount, float( id1 ) );
+    c *= 1.0 - step( nodeAmount, float( id1 ) );
+
+    // 4.
+    vec3 d = center( p1 );
+    vec3 acceleration = a + b + c + d;
+
+    // Calculate Velocity
+    vec3 velocity = ( v1 + ( acceleration * timeStep ) ) * damping * alpha;
+    velocity = clamp( velocity, - maxSpeed, maxSpeed );
+    velocity.z *= 1.0 - is2D;
+
+    gl_FragColor = vec4( velocity, 0.0 );
+
+  }
+`;
+
+  // src/shaders/nearest-neighbors-simple.js
+  var nearestNeighborsSimple = `
+  uniform float size;
+  uniform float nodeAmount;
+  uniform float nearestNeighborCount;
+  uniform float maxSearchRadius;
+  uniform sampler2D texturePositions;
+
+  vec3 getPosition( vec2 uv ) {
+    return texture2D( texturePositions, uv ).xyz;
+  }
+
+  int getIndex( vec2 uv ) {
+    int s = int( size );
+    int col = int( uv.x * size );
+    int row = int( uv.y * size );
+    return col + row * s;
+  }
+
+  void main() {
+    vec2 uv = gl_FragCoord.xy / resolution.xy;
+    int nodeId = getIndex(uv);
+    
+    // Skip processing for nodes beyond the actual node count
+    if (float(nodeId) >= nodeAmount) {
+      gl_FragColor = vec4(-1.0, -1.0, -1.0, -1.0);
+      return;
+    }
+
+    vec3 nodePosition = getPosition(uv);
+    
+    // Store the 4 closest neighbors and their distances
+    float neighbors[4];
+    float distances[4];
+    
+    // Initialize with invalid values
+    for (int i = 0; i < 4; i++) {
+      neighbors[i] = -1.0;
+      distances[i] = 99999.0;
+    }
+    
+    // Search through all nodes for the closest neighbors
+    for (float i = 0.0; i < nodeAmount; i += 1.0) {
+      if (i == float(nodeId)) continue; // Skip self
+      
+      float uvx = mod(i, size) / size;
+      float uvy = floor(i / size) / size;
+      vec2 otherUv = vec2(uvx, uvy);
+      
+      vec3 otherPosition = getPosition(otherUv);
+      vec3 diff = otherPosition - nodePosition;
+      float distSq = dot(diff, diff);
+      
+      // Skip if beyond maximum search radius
+      if (distSq > maxSearchRadius * maxSearchRadius) {
+        continue;
+      }
+      
+      // Check if this neighbor is closer than any current neighbor
+      for (int j = 0; j < 4; j++) {
+        if (distSq < distances[j]) {
+          // Shift existing neighbors down
+          for (int k = 3; k > j; k--) {
+            neighbors[k] = neighbors[k-1];
+            distances[k] = distances[k-1];
+          }
+          // Insert new neighbor
+          neighbors[j] = i;
+          distances[j] = distSq;
+          break;
+        }
+      }
+    }
+    
+    // Output the 4 closest neighbors (RGBA channels)
+    gl_FragColor = vec4(neighbors[0], neighbors[1], neighbors[2], neighbors[3]);
+  }
+`;
 
   // src/shaders/simulation.js
   var simulation_default = {
     positions,
-    velocities: simplex,
+    velocities: nested,
     simplex,
     nested,
+    optimized,
+    nearestNeighbors: nearestNeighborsSimple,
     types
   };
 
@@ -1397,7 +1605,11 @@ initWasm();
         pointsInheritColor: { value: true },
         pointColor: { value: new import_three5.Color(1, 1, 1) },
         linkColor: { value: new import_three5.Color(1, 1, 1) },
-        opacity: { value: 1 }
+        opacity: { value: 1 },
+        nearestNeighborCount: { value: 16 },
+        enableNearestNeighbors: { value: false },
+        spatialHashSize: { value: 10 },
+        maxSearchRadius: { value: 50 }
       };
       this.userData.hit = new Hit(this);
       this.userData.workerManager = new TextureWorkerManager();
@@ -1428,7 +1640,11 @@ initWasm();
       "pointColor",
       "linkColor",
       "opacity",
-      "blending"
+      "blending",
+      "nearestNeighborCount",
+      "enableNearestNeighbors",
+      "spatialHashSize",
+      "maxSearchRadius"
     ];
     /**
      * @param {Object} data - Object with nodes and links properties based on https://observablehq.com/@d3/force-directed-graph-component
@@ -1467,6 +1683,7 @@ initWasm();
         positions: gpgpu.createTexture(),
         velocities: gpgpu.createTexture(),
         links: gpgpu.createTexture()
+        // nearestNeighbors: gpgpu.createTexture(), // Temporarily disabled
       };
       const variables = {
         positions: gpgpu.addVariable(
@@ -1479,6 +1696,11 @@ initWasm();
           simulation_default.velocities,
           textures.velocities
         )
+        // nearestNeighbors: gpgpu.addVariable(
+        //   'textureNearestNeighbors',
+        //   simulation.nearestNeighbors,
+        //   textures.nearestNeighbors
+        // ), // Temporarily disabled
       };
       this.userData.gpgpu = gpgpu;
       this.userData.variables = variables;
@@ -1573,6 +1795,7 @@ initWasm();
           gpgpu.setVariableDependencies(variables.velocities, [
             variables.velocities,
             variables.positions
+            // variables.nearestNeighbors, // Temporarily disabled
           ]);
           variables.positions.material.uniforms.is2D = uniforms.is2D;
           variables.positions.material.uniforms.timeStep = uniforms.timeStep;
@@ -1597,6 +1820,7 @@ initWasm();
           variables.velocities.material.uniforms.springLength = uniforms.springLength;
           variables.velocities.material.uniforms.stiffness = uniforms.stiffness;
           variables.velocities.material.uniforms.gravity = uniforms.gravity;
+          variables.velocities.material.uniforms.enableNearestNeighbors = uniforms.enableNearestNeighbors;
           variables.positions.wrapS = variables.positions.wrapT = import_three5.RepeatWrapping;
           variables.velocities.wrapS = variables.velocities.wrapT = import_three5.RepeatWrapping;
           const error = gpgpu.init();
@@ -1946,7 +2170,7 @@ initWasm();
      * Get performance information about texture processing
      * @returns {Object} Performance statistics
      */
-    getPerformanceInfo() {
+    getWorkerPerformanceInfo() {
       const { workerManager } = this.userData;
       return workerManager ? workerManager.getPerformanceInfo() : {
         workerSupported: false,
@@ -1970,6 +2194,90 @@ initWasm();
     isWasmAccelerationAvailable() {
       const { workerManager } = this.userData;
       return workerManager && workerManager.isWasmAvailable();
+    }
+    /**
+     * Check if nearest neighbors optimization is available and enabled
+     * @returns {boolean} True if nearest neighbors optimization is active
+     */
+    isNearestNeighborsAvailable() {
+      const { variables } = this.userData;
+      return variables && variables.nearestNeighbors && this.enableNearestNeighbors;
+    }
+    /**
+     * Get performance information about the current graph
+     * @returns {Object} Performance metrics and status
+     */
+    getPerformanceInfo() {
+      const { data, variables, gpgpu } = this.userData;
+      const nodeCount = data ? data.nodes.length : 0;
+      const linkCount = data ? data.links.length : 0;
+      const workerInfo = this.getWorkerPerformanceInfo();
+      return {
+        nodeCount,
+        linkCount,
+        textureSize: this.size,
+        algorithmic: {
+          nearestNeighborsEnabled: this.enableNearestNeighbors,
+          nearestNeighborsAvailable: this.isNearestNeighborsAvailable(),
+          nearestNeighborCount: this.nearestNeighborCount,
+          complexity: this.enableNearestNeighbors ? `O(n*k) where k=${this.nearestNeighborCount}` : "O(n\xB2)",
+          estimatedSpeedup: this.enableNearestNeighbors ? `${Math.max(1, Math.floor(nodeCount / this.nearestNeighborCount))}x` : "1x",
+          currentShaderType: this.getVelocityShaderType()
+        },
+        gpu: {
+          gpuComputeAvailable: !!gpgpu,
+          texturesCreated: variables ? Object.keys(variables).length : 0,
+          spatialHashSize: this.spatialHashSize,
+          maxSearchRadius: this.maxSearchRadius
+        },
+        worker: {
+          workerAvailable: this.isWorkerProcessingAvailable(),
+          wasmAvailable: this.isWasmAccelerationAvailable(),
+          ...workerInfo
+        }
+      };
+    }
+    /**
+     * Toggle nearest neighbors optimization on/off
+     * @param {boolean} enabled - Whether to enable nearest neighbors
+     */
+    setNearestNeighborsEnabled(enabled) {
+      this.enableNearestNeighbors = enabled;
+      console.log(`Nearest neighbors optimization ${enabled ? "enabled" : "disabled"}`);
+    }
+    /**
+     * Dynamically adjust neighbor count based on performance
+     * @param {number} targetFPS - Target frames per second
+     */
+    adaptNeighborCount(targetFPS = 60) {
+      const startTime = performance.now();
+      requestAnimationFrame(() => {
+        const frameTime = performance.now() - startTime;
+        const currentFPS = 1e3 / frameTime;
+        if (currentFPS < targetFPS * 0.8) {
+          this.nearestNeighborCount = Math.max(4, Math.floor(this.nearestNeighborCount * 0.8));
+          console.log(`Performance below target, reducing neighbors to ${this.nearestNeighborCount}`);
+        } else if (currentFPS > targetFPS * 1.2) {
+          this.nearestNeighborCount = Math.min(32, Math.floor(this.nearestNeighborCount * 1.2));
+          console.log(`Performance above target, increasing neighbors to ${this.nearestNeighborCount}`);
+        }
+      });
+    }
+    /**
+     * Get current velocity shader type being used
+     * @returns {string} The shader type name
+     */
+    getVelocityShaderType() {
+      const { variables } = this.userData;
+      if (!variables || !variables.velocities) return "unknown";
+      const shaderSource = variables.velocities.material.fragmentShader;
+      if (shaderSource.includes("textureNearestNeighbors")) {
+        return "optimized";
+      } else if (shaderSource.includes("textureLinksLookUp")) {
+        return "nested";
+      } else {
+        return "simplex";
+      }
     }
   };
 })();
