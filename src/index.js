@@ -1,7 +1,7 @@
 import { Color, Group, RepeatWrapping, Vector2, Vector3 } from 'three';
 import { GPUComputationRenderer } from 'three/examples/jsm/misc/GPUComputationRenderer.js';
 import { clamp, each, getPotSize, rgbToIndex } from './math.js';
-import simulation from './shaders/simulation.js';
+import { createShaderConfig } from './shaders/simulation.js';
 
 import { Points } from './points.js';
 import { Links } from './links.js';
@@ -23,12 +23,38 @@ class ForceDirectedGraph extends Group {
   /**
    * @param {THREE.WebGLRenderer} renderer - the three.js renderer referenced to create the render targets
    * @param {Object} [data] - optional data to automatically set the data of the graph
+   * @param {Object} [options] - configuration options
+   * @param {string} [options.shaderType='simplex'] - shader algorithm type: 'simplex', 'nested', or 'nearest-neighbors'
+   * @param {number} [options.nearestNeighborCount=16] - number of nearest neighbors to consider (nearest-neighbors only)
+   * @param {number} [options.maxSearchRadius=50] - maximum search radius for neighbors (nearest-neighbors only)
    */
-  constructor(renderer, data) {
+  constructor(renderer, data, options = {}) {
     super();
+
+    // Parse and validate options
+    const {
+      shaderType = 'simplex',
+      nearestNeighborCount = 16,
+      maxSearchRadius = 50,
+    } = options;
+
+    // Validate shader type
+    const validTypes = ['simplex', 'nested', 'nearest-neighbors'];
+    if (!validTypes.includes(shaderType)) {
+      throw new Error(
+        `Invalid shaderType: ${shaderType}. Must be one of: ${validTypes.join(
+          ', '
+        )}`
+      );
+    }
+
+    // Store configuration
+    this.userData.shaderType = shaderType;
+    this.userData.shaderOptions = { nearestNeighborCount, maxSearchRadius };
 
     this.userData.registry = new Registry();
     this.userData.renderer = renderer;
+    // Base uniforms for all shader types
     this.userData.uniforms = {
       decay: { value: 1 },
       alpha: { value: 1 },
@@ -51,11 +77,16 @@ class ForceDirectedGraph extends Group {
       pointColor: { value: new Color(1, 1, 1) },
       linkColor: { value: new Color(1, 1, 1) },
       opacity: { value: 1 },
-      nearestNeighborCount: { value: 16 },
-      enableNearestNeighbors: { value: false },
-      spatialHashSize: { value: 10.0 },
-      maxSearchRadius: { value: 50.0 },
     };
+
+    // Add shader-specific uniforms
+    if (shaderType === 'nearest-neighbors') {
+      this.userData.uniforms.nearestNeighborCount = {
+        value: nearestNeighborCount,
+      };
+      this.userData.uniforms.spatialHashSize = { value: 10.0 };
+      this.userData.uniforms.maxSearchRadius = { value: maxSearchRadius };
+    }
     this.userData.hit = new Hit(this);
     this.userData.workerManager = new TextureWorkerManager();
 
@@ -89,7 +120,6 @@ class ForceDirectedGraph extends Group {
     'opacity',
     'blending',
     'nearestNeighborCount',
-    'enableNearestNeighbors',
     'spatialHashSize',
     'maxSearchRadius',
   ];
@@ -139,30 +169,44 @@ class ForceDirectedGraph extends Group {
     uniforms.size.value = size;
     gpgpu = new GPUComputationRenderer(size, size, renderer);
 
+    // Get shader configuration for this instance
+    const { shaderType } = this.userData;
+    const shaderConfig = createShaderConfig(shaderType);
+
+    // Create base textures
     const textures = {
       positions: gpgpu.createTexture(),
       velocities: gpgpu.createTexture(),
       links: gpgpu.createTexture(),
-      // nearestNeighbors: gpgpu.createTexture(), // Temporarily disabled
     };
 
+    // Create shader-specific textures
+    if (shaderConfig.requiresNearestNeighbors) {
+      textures.nearestNeighbors = gpgpu.createTexture();
+    }
+
+    // Create base variables
     const variables = {
       positions: gpgpu.addVariable(
         'texturePositions',
-        simulation.positions,
+        shaderConfig.positions,
         textures.positions
       ),
       velocities: gpgpu.addVariable(
         'textureVelocities',
-        simulation.velocities,
+        shaderConfig.velocities,
         textures.velocities
       ),
-      // nearestNeighbors: gpgpu.addVariable(
-      //   'textureNearestNeighbors',
-      //   simulation.nearestNeighbors,
-      //   textures.nearestNeighbors
-      // ), // Temporarily disabled
     };
+
+    // Create shader-specific variables
+    if (shaderConfig.requiresNearestNeighbors) {
+      variables.nearestNeighbors = gpgpu.addVariable(
+        'textureNearestNeighbors',
+        shaderConfig.nearestNeighbors,
+        textures.nearestNeighbors
+      );
+    }
 
     this.userData.gpgpu = gpgpu;
     this.userData.variables = variables;
@@ -187,55 +231,64 @@ class ForceDirectedGraph extends Group {
 
     async function fill() {
       const { workerManager } = scope.userData;
-      
+
       // Initialize worker if not already done
       if (!workerManager.isReady()) {
         await workerManager.init();
       }
-      
+
       // Try worker-based processing first
       if (workerManager.isReady()) {
         try {
           // Prepare links data with registry lookups
-          const preparedLinks = data.links.map(link => {
+          const preparedLinks = data.links.map((link) => {
             const sourceIndex = registry.get(link.source);
             const targetIndex = registry.get(link.target);
-            
+
             // Store indices back on the link for later use
             link.sourceIndex = sourceIndex;
             link.targetIndex = targetIndex;
-            
+
             return {
               ...link,
               sourceIndex,
-              targetIndex
+              targetIndex,
             };
           });
-          
+
           const result = await workerManager.processTextures({
             nodes: data.nodes,
             links: preparedLinks,
             textureSize: size,
-            frustumSize: uniforms.frustumSize.value
+            frustumSize: uniforms.frustumSize.value,
           });
-          
+
           // Copy results to texture data
           textures.positions.image.data.set(result.positions);
           textures.links.image.data.set(result.links);
-          
-          console.log(`Texture processing completed in ${result.processingTime.toFixed(2)}ms using ${workerManager.isWasmAvailable() ? 'WASM' : 'JavaScript'}`);
-          
+
+          console.log(
+            `Texture processing completed in ${result.processingTime.toFixed(
+              2
+            )}ms using ${
+              workerManager.isWasmAvailable() ? 'WASM' : 'JavaScript'
+            }`
+          );
+
           return Promise.resolve();
         } catch (error) {
-          console.warn('Worker processing failed, falling back to main thread:', error);
+          console.warn(
+            'Worker processing failed, falling back to main thread:',
+            error
+          );
           // Fall through to main thread processing
         }
       }
-      
+
       // Fallback to main thread processing
       return fillMainThread();
     }
-    
+
     function fillMainThread() {
       let k = 0;
       return each(
@@ -298,18 +351,25 @@ class ForceDirectedGraph extends Group {
 
     function setup() {
       return new Promise((resolve, reject) => {
+        // Base dependencies
         gpgpu.setVariableDependencies(variables.positions, [
           variables.positions,
           variables.velocities,
         ]);
-        gpgpu.setVariableDependencies(variables.velocities, [
-          variables.velocities,
-          variables.positions,
-          // variables.nearestNeighbors, // Temporarily disabled
-        ]);
-        // gpgpu.setVariableDependencies(variables.nearestNeighbors, [
-        //   variables.positions,
-        // ]); // Temporarily disabled
+
+        // Velocity shader dependencies
+        const velocityDeps = [variables.velocities, variables.positions];
+        if (shaderConfig.requiresNearestNeighbors) {
+          velocityDeps.push(variables.nearestNeighbors);
+        }
+        gpgpu.setVariableDependencies(variables.velocities, velocityDeps);
+
+        // Nearest neighbors dependencies (if needed)
+        if (shaderConfig.requiresNearestNeighbors) {
+          gpgpu.setVariableDependencies(variables.nearestNeighbors, [
+            variables.positions,
+          ]);
+        }
 
         variables.positions.material.uniforms.is2D = uniforms.is2D;
         variables.positions.material.uniforms.timeStep = uniforms.timeStep;
@@ -336,27 +396,37 @@ class ForceDirectedGraph extends Group {
           uniforms.springLength;
         variables.velocities.material.uniforms.stiffness = uniforms.stiffness;
         variables.velocities.material.uniforms.gravity = uniforms.gravity;
-        // variables.velocities.material.uniforms.textureNearestNeighbors = {
-        //   value: textures.nearestNeighbors,
-        // }; // Temporarily disabled
-        variables.velocities.material.uniforms.enableNearestNeighbors = uniforms.enableNearestNeighbors;
 
-        // variables.nearestNeighbors.material.uniforms.size = uniforms.size;
-        // variables.nearestNeighbors.material.uniforms.nodeAmount = {
-        //   value: data.nodes.length,
-        // };
-        // variables.nearestNeighbors.material.uniforms.nearestNeighborCount = uniforms.nearestNeighborCount;
-        // variables.nearestNeighbors.material.uniforms.spatialHashSize = uniforms.spatialHashSize;
-        // variables.nearestNeighbors.material.uniforms.maxSearchRadius = uniforms.maxSearchRadius;
-        // variables.nearestNeighbors.material.uniforms.texturePositions = {
-        //   value: textures.positions,
-        // }; // Temporarily disabled
+        // Conditional uniforms for nearest neighbors
+        if (shaderConfig.requiresNearestNeighbors) {
+          variables.velocities.material.uniforms.textureNearestNeighbors = {
+            value: textures.nearestNeighbors,
+          };
+
+          variables.nearestNeighbors.material.uniforms.size = uniforms.size;
+          variables.nearestNeighbors.material.uniforms.nodeAmount = {
+            value: data.nodes.length,
+          };
+          variables.nearestNeighbors.material.uniforms.nearestNeighborCount =
+            uniforms.nearestNeighborCount;
+          variables.nearestNeighbors.material.uniforms.spatialHashSize =
+            uniforms.spatialHashSize;
+          variables.nearestNeighbors.material.uniforms.maxSearchRadius =
+            uniforms.maxSearchRadius;
+          variables.nearestNeighbors.material.uniforms.texturePositions = {
+            value: textures.positions,
+          };
+        }
 
         variables.positions.wrapS = variables.positions.wrapT = RepeatWrapping;
         variables.velocities.wrapS = variables.velocities.wrapT =
           RepeatWrapping;
-        // variables.nearestNeighbors.wrapS = variables.nearestNeighbors.wrapT =
-        //   RepeatWrapping; // Temporarily disabled
+
+        // Conditional texture wrapping for nearest neighbors
+        if (shaderConfig.requiresNearestNeighbors) {
+          variables.nearestNeighbors.wrapS = variables.nearestNeighbors.wrapT =
+            RepeatWrapping;
+        }
 
         const error = gpgpu.init();
         if (error) {
@@ -746,21 +816,23 @@ class ForceDirectedGraph extends Group {
     const { variables } = this.userData;
     return variables.velocities.material.uniforms.edgeAmount.value;
   }
-  
+
   /**
    * Get performance information about texture processing
    * @returns {Object} Performance statistics
    */
   getWorkerPerformanceInfo() {
     const { workerManager } = this.userData;
-    return workerManager ? workerManager.getPerformanceInfo() : {
-      workerSupported: false,
-      workerReady: false,
-      wasmReady: false,
-      pendingRequests: 0
-    };
+    return workerManager
+      ? workerManager.getPerformanceInfo()
+      : {
+          workerSupported: false,
+          workerReady: false,
+          wasmReady: false,
+          pendingRequests: 0,
+        };
   }
-  
+
   /**
    * Check if worker-based processing is available
    * @returns {boolean} True if worker processing is available
@@ -769,7 +841,7 @@ class ForceDirectedGraph extends Group {
     const { workerManager } = this.userData;
     return workerManager && workerManager.isReady();
   }
-  
+
   /**
    * Check if WASM acceleration is available
    * @returns {boolean} True if WASM is available
@@ -784,8 +856,12 @@ class ForceDirectedGraph extends Group {
    * @returns {boolean} True if nearest neighbors optimization is active
    */
   isNearestNeighborsAvailable() {
-    const { variables } = this.userData;
-    return variables && variables.nearestNeighbors && this.enableNearestNeighbors;
+    const { shaderType, variables } = this.userData;
+    return (
+      shaderType === 'nearest-neighbors' &&
+      variables &&
+      variables.nearestNeighbors
+    );
   }
 
   /**
@@ -793,86 +869,119 @@ class ForceDirectedGraph extends Group {
    * @returns {Object} Performance metrics and status
    */
   getPerformanceInfo() {
-    const { data, variables, gpgpu } = this.userData;
+    const { data, variables, gpgpu, shaderType, shaderOptions } = this.userData;
     const nodeCount = data ? data.nodes.length : 0;
     const linkCount = data ? data.links.length : 0;
     const workerInfo = this.getWorkerPerformanceInfo();
-    
+
+    // Get shader configuration info
+    const shaderConfig = createShaderConfig(shaderType);
+    const nearestNeighborsActive = shaderType === 'nearest-neighbors';
+
     return {
       nodeCount,
       linkCount,
       textureSize: this.size,
       algorithmic: {
-        nearestNeighborsEnabled: this.enableNearestNeighbors,
-        nearestNeighborsAvailable: this.isNearestNeighborsAvailable(),
-        nearestNeighborCount: this.nearestNeighborCount,
-        complexity: this.enableNearestNeighbors ? `O(n*k) where k=${this.nearestNeighborCount}` : 'O(n²)',
-        estimatedSpeedup: this.enableNearestNeighbors ? `${Math.max(1, Math.floor(nodeCount / this.nearestNeighborCount))}x` : '1x',
-        currentShaderType: this.getVelocityShaderType()
+        shaderType: shaderType,
+        complexity: shaderConfig.complexity,
+        description: shaderConfig.description,
+        nearestNeighborsActive,
+        nearestNeighborCount: nearestNeighborsActive
+          ? shaderOptions.nearestNeighborCount
+          : null,
+        estimatedSpeedup: nearestNeighborsActive
+          ? `${Math.max(
+              1,
+              Math.floor(nodeCount / shaderOptions.nearestNeighborCount)
+            )}x`
+          : '1x',
+        recommendation: this.getShaderRecommendation(nodeCount),
       },
       gpu: {
         gpuComputeAvailable: !!gpgpu,
         texturesCreated: variables ? Object.keys(variables).length : 0,
-        spatialHashSize: this.spatialHashSize,
-        maxSearchRadius: this.maxSearchRadius
+        spatialHashSize: nearestNeighborsActive
+          ? shaderOptions.spatialHashSize || 10.0
+          : null,
+        maxSearchRadius: nearestNeighborsActive
+          ? shaderOptions.maxSearchRadius || 50.0
+          : null,
       },
       worker: {
         workerAvailable: this.isWorkerProcessingAvailable(),
         wasmAvailable: this.isWasmAccelerationAvailable(),
-        ...workerInfo
-      }
+        ...workerInfo,
+      },
     };
   }
 
   /**
-   * Toggle nearest neighbors optimization on/off
-   * @param {boolean} enabled - Whether to enable nearest neighbors
+   * Get shader recommendation based on node count
+   * @param {number} nodeCount - Number of nodes in the graph
+   * @returns {string} Recommendation for optimal shader type
    */
-  setNearestNeighborsEnabled(enabled) {
-    this.enableNearestNeighbors = enabled;
-    console.log(`Nearest neighbors optimization ${enabled ? 'enabled' : 'disabled'}`);
+  getShaderRecommendation(nodeCount) {
+    if (nodeCount < 100) {
+      return 'Consider simplex shader for fastest setup';
+    } else if (nodeCount < 1000) {
+      return 'nested shader provides good balance';
+    } else {
+      return 'nearest-neighbors shader recommended for large datasets';
+    }
   }
 
   /**
-   * Dynamically adjust neighbor count based on performance
+   * Get current shader type
+   * @returns {string} The current shader type
+   */
+  getShaderType() {
+    return this.userData.shaderType;
+  }
+
+  /**
+   * Dynamically adjust neighbor count based on performance (nearest-neighbors shader only)
    * @param {number} targetFPS - Target frames per second
    */
   adaptNeighborCount(targetFPS = 60) {
+    const { shaderType, shaderOptions } = this.userData;
+
+    if (shaderType !== 'nearest-neighbors') {
+      console.warn(
+        'adaptNeighborCount() is only available for nearest-neighbors shader type'
+      );
+      return;
+    }
+
     const startTime = performance.now();
-    
+
     // Measure current performance after next frame
     requestAnimationFrame(() => {
       const frameTime = performance.now() - startTime;
       const currentFPS = 1000 / frameTime;
-      
+
       if (currentFPS < targetFPS * 0.8) {
         // Too slow, reduce neighbor count
-        this.nearestNeighborCount = Math.max(4, Math.floor(this.nearestNeighborCount * 0.8));
-        console.log(`Performance below target, reducing neighbors to ${this.nearestNeighborCount}`);
+        const newCount = Math.max(
+          4,
+          Math.floor(shaderOptions.nearestNeighborCount * 0.8)
+        );
+        this.nearestNeighborCount = newCount;
+        console.log(
+          `Performance below target, reducing neighbors to ${newCount}`
+        );
       } else if (currentFPS > targetFPS * 1.2) {
         // Too fast, we can increase neighbor count
-        this.nearestNeighborCount = Math.min(32, Math.floor(this.nearestNeighborCount * 1.2));
-        console.log(`Performance above target, increasing neighbors to ${this.nearestNeighborCount}`);
+        const newCount = Math.min(
+          32,
+          Math.floor(shaderOptions.nearestNeighborCount * 1.2)
+        );
+        this.nearestNeighborCount = newCount;
+        console.log(
+          `Performance above target, increasing neighbors to ${newCount}`
+        );
       }
     });
-  }
-
-  /**
-   * Get current velocity shader type being used
-   * @returns {string} The shader type name
-   */
-  getVelocityShaderType() {
-    const { variables } = this.userData;
-    if (!variables || !variables.velocities) return 'unknown';
-    
-    const shaderSource = variables.velocities.material.fragmentShader;
-    if (shaderSource.includes('textureNearestNeighbors')) {
-      return 'optimized';
-    } else if (shaderSource.includes('textureLinksLookUp')) {
-      return 'nested';
-    } else {
-      return 'simplex';
-    }
   }
 }
 

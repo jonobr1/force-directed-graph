@@ -6,10 +6,10 @@ import {
   jiggle,
   link,
   charge,
-  center
-} from "./partials.js";
+  center,
+} from './partials.js';
 
-export const types = ["simplex", "nested", "optimized"];
+export const types = ['simplex', 'nested', 'optimized'];
 
 /**
  * Calculate the next frame's velocity for all nodes.

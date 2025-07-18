@@ -1,13 +1,7 @@
-import { positions } from "./positions.js";
-import { simplex, nested, optimized, types } from "./velocities.js";
-import { nearestNeighborsSimple } from "./nearest-neighbors-simple.js";
+import { createShaderConfig } from "./shader-factory.js";
 
-export default {
-  positions,
-  velocities: nested,
-  simplex,
-  nested,
-  optimized,
-  nearestNeighbors: nearestNeighborsSimple,
-  types
-};
+// Export the factory function for dynamic shader creation
+export { createShaderConfig };
+
+// Export default configuration (for backward compatibility)
+export default createShaderConfig('nested');
