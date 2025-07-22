@@ -24,9 +24,9 @@ class ForceDirectedGraph extends Group {
    * @param {THREE.WebGLRenderer} renderer - the three.js renderer referenced to create the render targets
    * @param {Object} [options] - configuration options
    * @param {Object} [options.data] - optional data to automatically set the data of the graph
-   * @param {string} [options.shaderType='simplex'] - shader algorithm type: 'simplex', 'nested', or 'nearest-neighbors'
-   * @param {number} [options.nearestNeighborCount=16] - number of nearest neighbors to consider (nearest-neighbors only)
-   * @param {number} [options.maxSearchRadius=50] - maximum search radius for neighbors (nearest-neighbors only)
+   * @param {string} [options.shaderType='simplex'] - shader algorithm type: 'simplex', 'nested', or 'optimized'
+   * @param {number} [options.nearestNeighborCount=16] - number of nearest neighbors to consider (optimized only)
+   * @param {number} [options.maxSearchRadius=50] - maximum search radius for neighbors (optimized only)
    */
   constructor(renderer, options = {}) {
     super();
@@ -40,7 +40,7 @@ class ForceDirectedGraph extends Group {
     } = options;
 
     // Validate shader type
-    const validTypes = ['simplex', 'nested', 'nearest-neighbors'];
+    const validTypes = ['simplex', 'nested', 'optimized'];
     if (!validTypes.includes(shaderType)) {
       throw new Error(
         `Invalid shaderType: ${shaderType}. Must be one of: ${validTypes.join(
@@ -81,7 +81,7 @@ class ForceDirectedGraph extends Group {
     };
 
     // Add shader-specific uniforms
-    if (shaderType === 'nearest-neighbors') {
+    if (shaderType === 'optimized') {
       this.userData.uniforms.nearestNeighborCount = {
         value: nearestNeighborCount,
       };
@@ -509,9 +509,6 @@ class ForceDirectedGraph extends Group {
 
         // Conditional uniforms for nearest neighbors
         if (shaderConfig.requiresNearestNeighbors) {
-          variables.velocities.material.uniforms.textureNearestNeighbors = {
-            value: textures.nearestNeighbors,
-          };
 
           variables.nearestNeighbors.material.uniforms.size = uniforms.size;
           variables.nearestNeighbors.material.uniforms.nodeAmount = {
@@ -523,9 +520,6 @@ class ForceDirectedGraph extends Group {
             uniforms.spatialHashSize;
           variables.nearestNeighbors.material.uniforms.maxSearchRadius =
             uniforms.maxSearchRadius;
-          variables.nearestNeighbors.material.uniforms.texturePositions = {
-            value: textures.positions,
-          };
         }
 
         variables.positions.wrapS = variables.positions.wrapT = RepeatWrapping;
@@ -968,9 +962,7 @@ class ForceDirectedGraph extends Group {
   isNearestNeighborsAvailable() {
     const { shaderType, variables } = this.userData;
     return (
-      shaderType === 'nearest-neighbors' &&
-      variables &&
-      variables.nearestNeighbors
+      shaderType === 'optimized' && variables && variables.nearestNeighbors
     );
   }
 
@@ -986,7 +978,7 @@ class ForceDirectedGraph extends Group {
 
     // Get shader configuration info
     const shaderConfig = createShaderConfig(shaderType);
-    const nearestNeighborsActive = shaderType === 'nearest-neighbors';
+    const nearestNeighborsActive = shaderType === 'optimized';
 
     return {
       nodeCount,
@@ -1037,7 +1029,7 @@ class ForceDirectedGraph extends Group {
     } else if (nodeCount < 1000) {
       return 'nested shader provides good balance';
     } else {
-      return 'nearest-neighbors shader recommended for large datasets';
+      return 'optimized shader recommended for large datasets';
     }
   }
 
@@ -1050,13 +1042,13 @@ class ForceDirectedGraph extends Group {
   }
 
   /**
-   * Dynamically adjust neighbor count based on performance (nearest-neighbors shader only)
+   * Dynamically adjust neighbor count based on performance (optimized shader only)
    * @param {number} targetFPS - Target frames per second
    */
   adaptNeighborCount(targetFPS = 60) {
     const { shaderType, shaderOptions } = this.userData;
 
-    if (shaderType !== 'nearest-neighbors') {
+    if (shaderType !== 'optimized') {
       console.warn(
         'adaptNeighborCount() is only available for nearest-neighbors shader type'
       );

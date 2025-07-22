@@ -1,14 +1,21 @@
 (() => {
-  var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
-    get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
-  }) : x)(function(x) {
-    if (typeof require !== "undefined") return require.apply(this, arguments);
+  var __require = /* @__PURE__ */ ((x) =>
+    typeof require !== 'undefined'
+      ? require
+      : typeof Proxy !== 'undefined'
+      ? new Proxy(x, {
+          get: (a, b) => (typeof require !== 'undefined' ? require : a)[b],
+        })
+      : x)(function (x) {
+    if (typeof require !== 'undefined') return require.apply(this, arguments);
     throw Error('Dynamic require of "' + x + '" is not supported');
   });
 
   // src/index.js
-  var import_three5 = __require("three");
-  var import_GPUComputationRenderer = __require("three/examples/jsm/misc/GPUComputationRenderer.js");
+  var import_three5 = __require('three');
+  var import_GPUComputationRenderer = __require(
+    'three/examples/jsm/misc/GPUComputationRenderer.js'
+  );
 
   // src/math.js
   var pot = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096];
@@ -20,8 +27,8 @@
       }
     }
     console.error(
-      "ForceDirectedGraph: Texture size is too big.",
-      "Consider reducing the size of your data."
+      'ForceDirectedGraph: Texture size is too big.',
+      'Consider reducing the size of your data.'
     );
   }
   function clamp(x, min, max) {
@@ -29,10 +36,10 @@
   }
   var maxFrames = 1e3;
   function each(list, func, step, max) {
-    if (typeof step !== "number") {
+    if (typeof step !== 'number') {
       step = 1;
     }
-    if (typeof max !== "number") {
+    if (typeof max !== 'number') {
       max = maxFrames;
     }
     return new Promise((resolve) => {
@@ -678,33 +685,33 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
   function createShaderConfig(shaderType) {
     const baseConfig = {
       positions,
-      types: ["simplex", "nested", "nearest-neighbors"]
+      types: ['simplex', 'nested', 'nearest-neighbors'],
     };
     switch (shaderType) {
-      case "simplex":
+      case 'simplex':
         return {
           ...baseConfig,
           velocities: simplex,
           requiresNearestNeighbors: false,
-          complexity: "O(n\xB2)",
-          description: "Basic force calculation for all nodes"
+          complexity: 'O(n\xB2)',
+          description: 'Basic force calculation for all nodes',
         };
-      case "nested":
+      case 'nested':
         return {
           ...baseConfig,
           velocities: nested,
           requiresNearestNeighbors: false,
-          complexity: "O(n\xB2)",
-          description: "Optimized force calculation with link processing"
+          complexity: 'O(n\xB2)',
+          description: 'Optimized force calculation with link processing',
         };
-      case "nearest-neighbors":
+      case 'optimized':
         return {
           ...baseConfig,
           velocities: nearestNeighborsVelocity,
           nearestNeighbors: nearestNeighborsSimple,
           requiresNearestNeighbors: true,
-          complexity: "O(n\xD7k)",
-          description: "Nearest neighbors optimization for large datasets"
+          complexity: 'O(n\xD7k)',
+          description: 'Nearest neighbors optimization for large datasets',
         };
       default:
         throw new Error(`Unknown shader type: ${shaderType}`);
@@ -712,10 +719,10 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
   }
 
   // src/shaders/simulation.js
-  var simulation_default = createShaderConfig("simplex");
+  var simulation_default = createShaderConfig('simplex');
 
   // src/points.js
-  var import_three2 = __require("three");
+  var import_three2 = __require('three');
 
   // src/shaders/points.js
   var points = {
@@ -804,12 +811,12 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       #include <fog_fragment>
 
     }
-  `
+  `,
   };
   var points_default = points;
 
   // src/texture-atlas.js
-  var import_three = __require("three");
+  var import_three = __require('three');
   var anchor;
   var TextureAtlas = class _TextureAtlas extends import_three.Texture {
     map = [];
@@ -817,9 +824,9 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
     isTextureAtlas = true;
     constructor() {
       if (!anchor) {
-        anchor = document.createElement("a");
+        anchor = document.createElement('a');
       }
-      super(document.createElement("canvas"));
+      super(document.createElement('canvas'));
       this.flipY = false;
     }
     static Resolution = 1024;
@@ -830,23 +837,23 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
     add(src) {
       const scope = this;
       let img, index;
-      if (typeof src === "string") {
+      if (typeof src === 'string') {
         index = this.indexOf(src);
         if (index >= 0) {
           img = this.map[index];
           if (img.complete) {
             onLoad();
           } else {
-            img.addEventListener("load", onLoad, false);
+            img.addEventListener('load', onLoad, false);
           }
         } else {
-          img = document.createElement("img");
-          img.addEventListener("load", onLoad, false);
+          img = document.createElement('img');
+          img.addEventListener('load', onLoad, false);
           img.src = src;
           index = this.map.length;
           this.map.push(img);
         }
-      } else if (typeof src === "object" && "src" in src) {
+      } else if (typeof src === 'object' && 'src' in src) {
         img = src;
         src = img.src;
         index = this.indexOf(src);
@@ -859,22 +866,22 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
         if (img.complete) {
           onLoad();
         } else {
-          img.addEventListener("load", onLoad, false);
+          img.addEventListener('load', onLoad, false);
         }
       }
       this.dimensions = Math.ceil(Math.sqrt(this.map.length));
       return index;
       function onLoad() {
-        img.removeEventListener("load", onLoad, false);
+        img.removeEventListener('load', onLoad, false);
         scope.update();
       }
     }
     update() {
       const { image } = this;
-      const ctx = image.getContext("2d");
+      const ctx = image.getContext('2d');
       image.width = _TextureAtlas.Resolution;
       image.height = _TextureAtlas.Resolution;
-      const dims = this.dimensions = Math.ceil(Math.sqrt(this.map.length));
+      const dims = (this.dimensions = Math.ceil(Math.sqrt(this.map.length)));
       const width = image.width / dims;
       const height = image.height / dims;
       ctx.clearRect(0, 0, image.width, image.height);
@@ -882,8 +889,8 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
         const col = i % dims;
         const row = Math.floor(i / dims);
         const img = this.map[i];
-        const x = col / dims * image.width;
-        const y = row / dims * image.height;
+        const x = (col / dims) * image.width;
+        const y = (row / dims) * image.height;
         ctx.drawImage(img, x, y, width, height);
       }
       this.needsUpdate = true;
@@ -905,25 +912,28 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
   var Points = class extends import_three2.Points {
     constructor({ atlas, geometry }, uniforms) {
       const material = new import_three2.ShaderMaterial({
-        uniforms: { ...import_three2.UniformsLib["fog"], ...{
-          is2D: uniforms.is2D,
-          sizeAttenuation: uniforms.sizeAttenuation,
-          frustumSize: uniforms.frustumSize,
-          nodeRadius: uniforms.nodeRadius,
-          nodeScale: uniforms.nodeScale,
-          imageDimensions: { value: atlas.dimensions },
-          texturePositions: { value: null },
-          textureAtlas: { value: atlas },
-          size: uniforms.size,
-          opacity: uniforms.opacity,
-          uColor: uniforms.pointColor,
-          inheritColors: uniforms.pointsInheritColor
-        } },
+        uniforms: {
+          ...import_three2.UniformsLib['fog'],
+          ...{
+            is2D: uniforms.is2D,
+            sizeAttenuation: uniforms.sizeAttenuation,
+            frustumSize: uniforms.frustumSize,
+            nodeRadius: uniforms.nodeRadius,
+            nodeScale: uniforms.nodeScale,
+            imageDimensions: { value: atlas.dimensions },
+            texturePositions: { value: null },
+            textureAtlas: { value: atlas },
+            size: uniforms.size,
+            opacity: uniforms.opacity,
+            uColor: uniforms.pointColor,
+            inheritColors: uniforms.pointsInheritColor,
+          },
+        },
         vertexShader: points_default.vertexShader,
         fragmentShader: points_default.fragmentShader,
         transparent: true,
         vertexColors: true,
-        fog: true
+        fog: true,
       });
       super(geometry, material);
       this.frustumCulled = false;
@@ -935,7 +945,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       const imageKeys = [];
       return each(data.nodes, (_, i) => {
         const node = data.nodes[i];
-        const x = i % size2 / size2;
+        const x = (i % size2) / size2;
         const y = Math.floor(i / size2) / size2;
         const z = i + 1;
         vertices.push(x, y, z);
@@ -953,15 +963,15 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       }).then(() => {
         const geometry = new import_three2.BufferGeometry();
         geometry.setAttribute(
-          "position",
+          'position',
           new import_three2.Float32BufferAttribute(vertices, 3)
         );
         geometry.setAttribute(
-          "color",
+          'color',
           new import_three2.Float32BufferAttribute(colors, 3)
         );
         geometry.setAttribute(
-          "imageKey",
+          'imageKey',
           new import_three2.Float32BufferAttribute(imageKeys, 1)
         );
         return { atlas, geometry };
@@ -970,7 +980,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
   };
 
   // src/links.js
-  var import_three3 = __require("three");
+  var import_three3 = __require('three');
 
   // src/shaders/links.js
   var links = {
@@ -1008,7 +1018,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       gl_FragColor = vec4( mix( vec3( 1.0 ), vColor, inheritColors ) * uColor, opacity );
       #include <fog_fragment>
     }
-  `
+  `,
   };
   var links_default = links;
 
@@ -1016,18 +1026,21 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
   var Links = class extends import_three3.LineSegments {
     constructor(geometry, uniforms) {
       const material = new import_three3.ShaderMaterial({
-        uniforms: { ...import_three3.UniformsLib["fog"], ...{
-          is2D: uniforms.is2D,
-          inheritColors: uniforms.linksInheritColor,
-          opacity: uniforms.opacity,
-          texturePositions: { value: null },
-          uColor: uniforms.linkColor
-        } },
+        uniforms: {
+          ...import_three3.UniformsLib['fog'],
+          ...{
+            is2D: uniforms.is2D,
+            inheritColors: uniforms.linksInheritColor,
+            opacity: uniforms.opacity,
+            texturePositions: { value: null },
+            uColor: uniforms.linkColor,
+          },
+        },
         vertexShader: links_default.vertexShader,
         fragmentShader: links_default.fragmentShader,
         transparent: true,
         vertexColors: true,
-        fog: true
+        fog: true,
       });
       super(geometry, material);
       this.frustumCulled = false;
@@ -1060,11 +1073,11 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
         colors.push(r, g, b);
       }).then(() => {
         geometry.setAttribute(
-          "position",
+          'position',
           new import_three3.Float32BufferAttribute(vertices, 3)
         );
         geometry.setAttribute(
-          "color",
+          'color',
           new import_three3.Float32BufferAttribute(colors, 3)
         );
         return geometry;
@@ -1086,7 +1099,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       return this.map[id];
     }
     set(index, item) {
-      if (item.id !== "undefined") {
+      if (item.id !== 'undefined') {
         this.map[item.id] = index;
       }
     }
@@ -1096,7 +1109,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
   };
 
   // src/hit.js
-  var import_three4 = __require("three");
+  var import_three4 = __require('three');
 
   // src/shaders/hit.js
   var hit = {
@@ -1149,7 +1162,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       float t = circle( uv, vec2( 0.0, 0.0 ), 0.5, 0.0 );
       gl_FragColor = vec4( vColor, t );
     }
-  `
+  `,
   };
   var hit_default = hit;
 
@@ -1165,22 +1178,24 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
     helper = null;
     constructor(fdg) {
       this.parent = fdg;
-      this.helper = new import_three4.Sprite(new import_three4.SpriteMaterial({
-        map: this.renderTarget.texture
-      }));
+      this.helper = new import_three4.Sprite(
+        new import_three4.SpriteMaterial({
+          map: this.renderTarget.texture,
+        })
+      );
       this.material = new import_three4.ShaderMaterial({
         uniforms: {
-          hitScale: { value: 2 }
+          hitScale: { value: 2 },
         },
         vertexShader: hit_default.vertexShader,
         fragmentShader: hit_default.fragmentShader,
-        transparent: true
+        transparent: true,
       });
     }
     inherit(mesh) {
       this.material.uniforms = {
         ...this.material.uniforms,
-        ...mesh.material.uniforms
+        ...mesh.material.uniforms,
       };
     }
     setSize(width, height) {
@@ -1535,10 +1550,10 @@ initWasm();
   }
   function createInlineWorker(wasmUrl) {
     const workerCode = createWorkerCode(wasmUrl);
-    const blob = new Blob([workerCode], { type: "application/javascript" });
+    const blob = new Blob([workerCode], { type: 'application/javascript' });
     const workerUrl = URL.createObjectURL(blob);
     const worker = new Worker(workerUrl);
-    worker.addEventListener("error", () => URL.revokeObjectURL(workerUrl));
+    worker.addEventListener('error', () => URL.revokeObjectURL(workerUrl));
     return worker;
   }
 
@@ -1551,7 +1566,7 @@ initWasm();
       this.isWasmReady = false;
       this.requestId = 0;
       this.pendingRequests = /* @__PURE__ */ new Map();
-      this.workerSupported = typeof Worker !== "undefined";
+      this.workerSupported = typeof Worker !== 'undefined';
     }
     /**
      * Resolve WASM URL for different environments
@@ -1559,15 +1574,15 @@ initWasm();
      */
     resolveWasmUrl() {
       try {
-        if (typeof import_meta !== "undefined" && import_meta.url) {
-          return new URL("../build/texture-processor.wasm", import_meta.url).href;
+        if (typeof import_meta !== 'undefined' && import_meta.url) {
+          return new URL('../build/texture-processor.wasm', import_meta.url)
+            .href;
         }
-      } catch (e) {
-      }
+      } catch (e) {}
       const devPaths = [
-        "./build/texture-processor.wasm",
-        "../build/texture-processor.wasm",
-        "./texture-processor.wasm"
+        './build/texture-processor.wasm',
+        '../build/texture-processor.wasm',
+        './texture-processor.wasm',
       ];
       return devPaths[0];
     }
@@ -1586,7 +1601,7 @@ initWasm();
           this.handleWorkerMessage(event.data);
         };
         this.worker.onerror = (error) => {
-          console.warn("Texture worker error:", error);
+          console.warn('Texture worker error:', error);
           this.isWorkerReady = false;
         };
         await new Promise((resolve) => {
@@ -1597,12 +1612,12 @@ initWasm();
               setTimeout(checkReady, 50);
             }
           };
-          this.worker.postMessage({ type: "init" });
+          this.worker.postMessage({ type: 'init' });
           checkReady();
         });
         return true;
       } catch (error) {
-        console.warn("Failed to initialize texture worker:", error);
+        console.warn('Failed to initialize texture worker:', error);
         return false;
       }
     }
@@ -1613,11 +1628,11 @@ initWasm();
     handleWorkerMessage(message) {
       const { type, requestId, success, data, error } = message;
       switch (type) {
-        case "wasm-ready":
+        case 'wasm-ready':
           this.isWasmReady = success;
           this.isWorkerReady = true;
           break;
-        case "texture-processed":
+        case 'texture-processed':
           const request = this.pendingRequests.get(requestId);
           if (request) {
             this.pendingRequests.delete(requestId);
@@ -1628,8 +1643,8 @@ initWasm();
             }
           }
           break;
-        case "error":
-          console.error("Worker error:", error);
+        case 'error':
+          console.error('Worker error:', error);
           break;
       }
     }
@@ -1645,23 +1660,23 @@ initWasm();
      */
     async processTextures(data) {
       if (!this.isWorkerReady) {
-        throw new Error("Worker not ready");
+        throw new Error('Worker not ready');
       }
       const requestId = ++this.requestId;
       return new Promise((resolve, reject) => {
         this.pendingRequests.set(requestId, { resolve, reject });
         this.worker.postMessage({
-          type: "process-textures",
+          type: 'process-textures',
           data: {
             ...data,
             requestId,
-            useWasm: this.isWasmReady && data.useWasm !== false
-          }
+            useWasm: this.isWasmReady && data.useWasm !== false,
+          },
         });
         setTimeout(() => {
           if (this.pendingRequests.has(requestId)) {
             this.pendingRequests.delete(requestId);
-            reject(new Error("Texture processing timeout"));
+            reject(new Error('Texture processing timeout'));
           }
         }, 3e4);
       });
@@ -1689,7 +1704,7 @@ initWasm();
         workerSupported: this.workerSupported,
         workerReady: this.isWorkerReady,
         wasmReady: this.isWasmReady,
-        pendingRequests: this.pendingRequests.size
+        pendingRequests: this.pendingRequests.size,
       };
     }
     /**
@@ -1698,7 +1713,7 @@ initWasm();
     dispose() {
       if (this.worker) {
         this.pendingRequests.forEach((request) => {
-          request.reject(new Error("Worker disposed"));
+          request.reject(new Error('Worker disposed'));
         });
         this.pendingRequests.clear();
         this.worker.terminate();
@@ -1715,9 +1730,11 @@ initWasm();
   var size = new import_three5.Vector2();
   var buffers = {
     int: new Uint8ClampedArray(4),
-    float: new Float32Array(4)
+    float: new Float32Array(4),
   };
-  var ForceDirectedGraph =  window.ForceDirectedGraph = class extends import_three5.Group {
+  var ForceDirectedGraph = (window.ForceDirectedGraph = class extends (
+    import_three5.Group
+  ) {
     ready = false;
     /**
      * @param {THREE.WebGLRenderer} renderer - the three.js renderer referenced to create the render targets
@@ -1731,15 +1748,15 @@ initWasm();
       super();
       const {
         data = null,
-        shaderType = "simplex",
+        shaderType = 'simplex',
         nearestNeighborCount = 16,
-        maxSearchRadius = 50
+        maxSearchRadius = 50,
       } = options;
-      const validTypes = ["simplex", "nested", "nearest-neighbors"];
+      const validTypes = ['simplex', 'nested', 'nearest-neighbors'];
       if (!validTypes.includes(shaderType)) {
         throw new Error(
           `Invalid shaderType: ${shaderType}. Must be one of: ${validTypes.join(
-            ", "
+            ', '
           )}`
         );
       }
@@ -1768,11 +1785,11 @@ initWasm();
         pointsInheritColor: { value: true },
         pointColor: { value: new import_three5.Color(1, 1, 1) },
         linkColor: { value: new import_three5.Color(1, 1, 1) },
-        opacity: { value: 1 }
+        opacity: { value: 1 },
       };
-      if (shaderType === "nearest-neighbors") {
+      if (shaderType === 'nearest-neighbors') {
         this.userData.uniforms.nearestNeighborCount = {
-          value: nearestNeighborCount
+          value: nearestNeighborCount,
         };
         this.userData.uniforms.spatialHashSize = { value: 10 };
         this.userData.uniforms.maxSearchRadius = { value: maxSearchRadius };
@@ -1785,31 +1802,31 @@ initWasm();
     }
     static getPotSize = getPotSize;
     static Properties = [
-      "decay",
-      "alpha",
-      "is2D",
-      "time",
-      "size",
-      "maxSpeed",
-      "timeStep",
-      "damping",
-      "repulsion",
-      "springLength",
-      "stiffness",
-      "gravity",
-      "nodeRadius",
-      "nodeScale",
-      "sizeAttenuation",
-      "frustumSize",
-      "linksInheritColor",
-      "pointsInheritColor",
-      "pointColor",
-      "linkColor",
-      "opacity",
-      "blending",
-      "nearestNeighborCount",
-      "spatialHashSize",
-      "maxSearchRadius"
+      'decay',
+      'alpha',
+      'is2D',
+      'time',
+      'size',
+      'maxSpeed',
+      'timeStep',
+      'damping',
+      'repulsion',
+      'springLength',
+      'stiffness',
+      'gravity',
+      'nodeRadius',
+      'nodeScale',
+      'sizeAttenuation',
+      'frustumSize',
+      'linksInheritColor',
+      'pointsInheritColor',
+      'pointColor',
+      'linkColor',
+      'opacity',
+      'blending',
+      'nearestNeighborCount',
+      'spatialHashSize',
+      'maxSearchRadius',
     ];
     /**
      * @param {Object} data - Object with nodes and links properties based on https://observablehq.com/@d3/force-directed-graph-component
@@ -1837,48 +1854,58 @@ initWasm();
       for (let i = 0; i < this.children.length; i++) {
         const child = this.children[i];
         this.remove(child);
-        if ("dispose" in child) {
+        if ('dispose' in child) {
           child.dispose();
         }
       }
       const size2 = getPotSize(Math.max(data.nodes.length, data.links.length));
       uniforms.size.value = size2;
-      gpgpu = new import_GPUComputationRenderer.GPUComputationRenderer(size2, size2, renderer);
+      gpgpu = new import_GPUComputationRenderer.GPUComputationRenderer(
+        size2,
+        size2,
+        renderer
+      );
       const { shaderType } = this.userData;
       const shaderConfig = createShaderConfig(shaderType);
       const textures = {
         positions: gpgpu.createTexture(),
         velocities: gpgpu.createTexture(),
         links: gpgpu.createTexture(),
-        linksLookUp: gpgpu.createTexture()
+        linksLookUp: gpgpu.createTexture(),
       };
       if (shaderConfig.requiresNearestNeighbors) {
         textures.nearestNeighbors = gpgpu.createTexture();
       }
       const variables = {
         positions: gpgpu.addVariable(
-          "texturePositions",
+          'texturePositions',
           shaderConfig.positions,
           textures.positions
         ),
         velocities: gpgpu.addVariable(
-          "textureVelocities",
+          'textureVelocities',
           shaderConfig.velocities,
           textures.velocities
-        )
+        ),
       };
       if (shaderConfig.requiresNearestNeighbors) {
         variables.nearestNeighbors = gpgpu.addVariable(
-          "textureNearestNeighbors",
+          'textureNearestNeighbors',
           shaderConfig.nearestNeighbors,
           textures.nearestNeighbors
         );
       }
       this.userData.gpgpu = gpgpu;
       this.userData.variables = variables;
-      return register().then(fill).then(fillLinksLookup).then(setup).then(generate).then(complete).catch((error) => {
-        console.warn("Force Directed Graph:", error);
-      });
+      return register()
+        .then(fill)
+        .then(fillLinksLookup)
+        .then(setup)
+        .then(generate)
+        .then(complete)
+        .catch((error) => {
+          console.warn('Force Directed Graph:', error);
+        });
       function register() {
         return each(data.nodes, (node, i) => {
           registry.set(i, node);
@@ -1899,14 +1926,14 @@ initWasm();
               return {
                 ...link2,
                 sourceIndex,
-                targetIndex
+                targetIndex,
               };
             });
             const result = await workerManager.processTextures({
               nodes: data.nodes,
               links: preparedLinks,
               textureSize: size2,
-              frustumSize: uniforms.frustumSize.value
+              frustumSize: uniforms.frustumSize.value,
             });
             textures.positions.image.data.set(result.positions);
             textures.links.image.data.set(result.links);
@@ -1916,12 +1943,14 @@ initWasm();
             console.log(
               `Texture processing completed in ${result.processingTime.toFixed(
                 2
-              )}ms using ${workerManager.isWasmAvailable() ? "WASM" : "JavaScript"}`
+              )}ms using ${
+                workerManager.isWasmAvailable() ? 'WASM' : 'JavaScript'
+              }`
             );
             return Promise.resolve();
           } catch (error) {
             console.warn(
-              "Worker processing failed, falling back to main thread:",
+              'Worker processing failed, falling back to main thread:',
               error
             );
           }
@@ -1938,15 +1967,22 @@ initWasm();
             const z = Math.random() * 2 - 1;
             if (k < data.nodes.length) {
               const node = data.nodes[k];
-              textures.positions.image.data[i + 0] = typeof node.x !== "undefined" ? node.x : x;
-              textures.positions.image.data[i + 1] = typeof node.y !== "undefined" ? node.y : y;
-              textures.positions.image.data[i + 2] = typeof node.z !== "undefined" ? node.z : z;
+              textures.positions.image.data[i + 0] =
+                typeof node.x !== 'undefined' ? node.x : x;
+              textures.positions.image.data[i + 1] =
+                typeof node.y !== 'undefined' ? node.y : y;
+              textures.positions.image.data[i + 2] =
+                typeof node.z !== 'undefined' ? node.z : z;
               textures.positions.image.data[i + 3] = node.isStatic ? 1 : 0;
             } else {
-              textures.positions.image.data[i + 0] = uniforms.frustumSize.value * 10;
-              textures.positions.image.data[i + 1] = uniforms.frustumSize.value * 10;
-              textures.positions.image.data[i + 2] = uniforms.frustumSize.value * 10;
-              textures.positions.image.data[i + 3] = uniforms.frustumSize.value * 10;
+              textures.positions.image.data[i + 0] =
+                uniforms.frustumSize.value * 10;
+              textures.positions.image.data[i + 1] =
+                uniforms.frustumSize.value * 10;
+              textures.positions.image.data[i + 2] =
+                uniforms.frustumSize.value * 10;
+              textures.positions.image.data[i + 3] =
+                uniforms.frustumSize.value * 10;
             }
             if (k < data.links.length) {
               const i1 = registry.get(data.links[k].source);
@@ -1973,14 +2009,16 @@ initWasm();
           data.links.forEach((link2, linkIndex) => {
             if (link2.sourceIndex === nodeIndex) {
               if (link2.targetIndex >= data.nodes.length) {
-                console.warn(`Invalid link: source=${link2.sourceIndex} -> target=${link2.targetIndex} (target node doesn't exist, only ${data.nodes.length} nodes)`);
+                console.warn(
+                  `Invalid link: source=${link2.sourceIndex} -> target=${link2.targetIndex} (target node doesn't exist, only ${data.nodes.length} nodes)`
+                );
                 return;
               }
               sortedLinks.push({
                 originalIndex: linkIndex,
                 sourceIndex: link2.sourceIndex,
                 targetIndex: link2.targetIndex,
-                link: link2
+                link: link2,
               });
             }
           });
@@ -1995,9 +2033,9 @@ initWasm();
           if (sortedIndex < totalElements) {
             const sourceIndex = sortedLink.sourceIndex;
             const targetIndex = sortedLink.targetIndex;
-            const sourceU = sourceIndex % size2 / size2;
+            const sourceU = (sourceIndex % size2) / size2;
             const sourceV = Math.floor(sourceIndex / size2) / size2;
-            const targetU = targetIndex % size2 / size2;
+            const targetU = (targetIndex % size2) / size2;
             const targetV = Math.floor(targetIndex / size2) / size2;
             linksData[baseIndex + 0] = sourceU;
             linksData[baseIndex + 1] = sourceV;
@@ -2042,7 +2080,7 @@ initWasm();
         return new Promise((resolve, reject) => {
           gpgpu.setVariableDependencies(variables.positions, [
             variables.positions,
-            variables.velocities
+            variables.velocities,
           ]);
           const velocityDeps = [variables.velocities, variables.positions];
           if (shaderConfig.requiresNearestNeighbors) {
@@ -2051,7 +2089,7 @@ initWasm();
           gpgpu.setVariableDependencies(variables.velocities, velocityDeps);
           if (shaderConfig.requiresNearestNeighbors) {
             gpgpu.setVariableDependencies(variables.nearestNeighbors, [
-              variables.positions
+              variables.positions,
             ]);
           }
           variables.positions.material.uniforms.is2D = uniforms.is2D;
@@ -2060,45 +2098,53 @@ initWasm();
           variables.velocities.material.uniforms.is2D = uniforms.is2D;
           variables.velocities.material.uniforms.size = uniforms.size;
           variables.velocities.material.uniforms.time = uniforms.time;
-          variables.velocities.material.uniforms.nodeRadius = uniforms.nodeRadius;
+          variables.velocities.material.uniforms.nodeRadius =
+            uniforms.nodeRadius;
           variables.velocities.material.uniforms.nodeAmount = {
-            value: data.nodes.length
+            value: data.nodes.length,
           };
           variables.velocities.material.uniforms.edgeAmount = {
-            value: data.links.length
+            value: data.links.length,
           };
           variables.velocities.material.uniforms.maxSpeed = uniforms.maxSpeed;
           variables.velocities.material.uniforms.timeStep = uniforms.timeStep;
           variables.velocities.material.uniforms.damping = uniforms.damping;
           variables.velocities.material.uniforms.repulsion = uniforms.repulsion;
           variables.velocities.material.uniforms.textureLinks = {
-            value: textures.links
+            value: textures.links,
           };
           variables.velocities.material.uniforms.textureLinksLookUp = {
-            value: textures.linksLookUp
+            value: textures.linksLookUp,
           };
-          variables.velocities.material.uniforms.springLength = uniforms.springLength;
+          variables.velocities.material.uniforms.springLength =
+            uniforms.springLength;
           variables.velocities.material.uniforms.stiffness = uniforms.stiffness;
           variables.velocities.material.uniforms.gravity = uniforms.gravity;
           if (shaderConfig.requiresNearestNeighbors) {
             variables.velocities.material.uniforms.textureNearestNeighbors = {
-              value: textures.nearestNeighbors
+              value: textures.nearestNeighbors,
             };
             variables.nearestNeighbors.material.uniforms.size = uniforms.size;
             variables.nearestNeighbors.material.uniforms.nodeAmount = {
-              value: data.nodes.length
+              value: data.nodes.length,
             };
-            variables.nearestNeighbors.material.uniforms.nearestNeighborCount = uniforms.nearestNeighborCount;
-            variables.nearestNeighbors.material.uniforms.spatialHashSize = uniforms.spatialHashSize;
-            variables.nearestNeighbors.material.uniforms.maxSearchRadius = uniforms.maxSearchRadius;
+            variables.nearestNeighbors.material.uniforms.nearestNeighborCount =
+              uniforms.nearestNeighborCount;
+            variables.nearestNeighbors.material.uniforms.spatialHashSize =
+              uniforms.spatialHashSize;
+            variables.nearestNeighbors.material.uniforms.maxSearchRadius =
+              uniforms.maxSearchRadius;
             variables.nearestNeighbors.material.uniforms.texturePositions = {
-              value: textures.positions
+              value: textures.positions,
             };
           }
-          variables.positions.wrapS = variables.positions.wrapT = import_three5.RepeatWrapping;
-          variables.velocities.wrapS = variables.velocities.wrapT = import_three5.RepeatWrapping;
+          variables.positions.wrapS = variables.positions.wrapT =
+            import_three5.RepeatWrapping;
+          variables.velocities.wrapS = variables.velocities.wrapT =
+            import_three5.RepeatWrapping;
           if (shaderConfig.requiresNearestNeighbors) {
-            variables.nearestNeighbors.wrapS = variables.nearestNeighbors.wrapT = import_three5.RepeatWrapping;
+            variables.nearestNeighbors.wrapS =
+              variables.nearestNeighbors.wrapT = import_three5.RepeatWrapping;
           }
           const error = gpgpu.init();
           if (error) {
@@ -2110,14 +2156,17 @@ initWasm();
       }
       function generate() {
         let points2;
-        return Points.parse(size2, data).then((geometry) => {
-          points2 = new Points(geometry, uniforms);
-        }).then(() => Links.parse(points2, data)).then((geometry) => {
-          const links2 = new Links(geometry, uniforms);
-          scope.add(points2, links2);
-          points2.renderOrder = links2.renderOrder + 1;
-          scope.userData.hit.inherit(points2);
-        });
+        return Points.parse(size2, data)
+          .then((geometry) => {
+            points2 = new Points(geometry, uniforms);
+          })
+          .then(() => Links.parse(points2, data))
+          .then((geometry) => {
+            const links2 = new Links(geometry, uniforms);
+            scope.add(points2, links2);
+            points2.renderOrder = links2.renderOrder + 1;
+            scope.userData.hit.inherit(points2);
+          });
       }
       function complete() {
         scope.ready = true;
@@ -2139,7 +2188,7 @@ initWasm();
       uniforms.alpha.value *= uniforms.decay.value;
       variables.velocities.material.uniforms.time.value = time / 1e3;
       gpgpu.compute();
-      const texture = this.getTexture("positions");
+      const texture = this.getTexture('positions');
       for (let i = 0; i < this.children.length; i++) {
         const child = this.children[i];
         child.material.uniforms.texturePositions.value = texture;
@@ -2179,7 +2228,7 @@ initWasm();
       const point = this.getPositionFromIndex(index);
       return {
         point,
-        data: this.userData.data.nodes[index]
+        data: this.userData.data.nodes[index],
       };
     }
     getTexture(name) {
@@ -2191,8 +2240,8 @@ initWasm();
       const { gpgpu, renderer, variables } = this.userData;
       if (!points2 || !renderer || !size2) {
         console.warn(
-          "Force Directed Graph:",
-          "unable to calculate position without points or renderer."
+          'Force Directed Graph:',
+          'unable to calculate position without points or renderer.'
         );
         return;
       }
@@ -2218,7 +2267,7 @@ initWasm();
       this.setPointColorFromIndex(index, css);
     }
     setPointColorFromIndex(index, css) {
-      const attribute = this.points.geometry.getAttribute("color");
+      const attribute = this.points.geometry.getAttribute('color');
       const colors = attribute.array;
       color3.set(css);
       colors[3 * index + 0] = color3.r;
@@ -2229,7 +2278,7 @@ initWasm();
     updateLinksColors() {
       const { data } = this.userData;
       const ref = this.points.geometry.attributes.color.array;
-      const attribute = this.links.geometry.getAttribute("color");
+      const attribute = this.links.geometry.getAttribute('color');
       const colors = attribute.array;
       return each(data.links, (_, i) => {
         const l = data.links[i];
@@ -2242,7 +2291,7 @@ initWasm();
         colors[li + 3] = ref[ti + 0];
         colors[li + 4] = ref[ti + 1];
         colors[li + 5] = ref[ti + 2];
-      }).then(() => attribute.needsUpdate = true);
+      }).then(() => (attribute.needsUpdate = true));
     }
     getIndexById(id) {
       const { registry } = this.userData;
@@ -2449,12 +2498,14 @@ initWasm();
      */
     getWorkerPerformanceInfo() {
       const { workerManager } = this.userData;
-      return workerManager ? workerManager.getPerformanceInfo() : {
-        workerSupported: false,
-        workerReady: false,
-        wasmReady: false,
-        pendingRequests: 0
-      };
+      return workerManager
+        ? workerManager.getPerformanceInfo()
+        : {
+            workerSupported: false,
+            workerReady: false,
+            wasmReady: false,
+            pendingRequests: 0,
+          };
     }
     /**
      * Check if worker-based processing is available
@@ -2478,19 +2529,24 @@ initWasm();
      */
     isNearestNeighborsAvailable() {
       const { shaderType, variables } = this.userData;
-      return shaderType === "nearest-neighbors" && variables && variables.nearestNeighbors;
+      return (
+        shaderType === 'nearest-neighbors' &&
+        variables &&
+        variables.nearestNeighbors
+      );
     }
     /**
      * Get performance information about the current graph
      * @returns {Object} Performance metrics and status
      */
     getPerformanceInfo() {
-      const { data, variables, gpgpu, shaderType, shaderOptions } = this.userData;
+      const { data, variables, gpgpu, shaderType, shaderOptions } =
+        this.userData;
       const nodeCount = data ? data.nodes.length : 0;
       const linkCount = data ? data.links.length : 0;
       const workerInfo = this.getWorkerPerformanceInfo();
       const shaderConfig = createShaderConfig(shaderType);
-      const nearestNeighborsActive = shaderType === "nearest-neighbors";
+      const nearestNeighborsActive = shaderType === 'nearest-neighbors';
       return {
         nodeCount,
         linkCount,
@@ -2500,24 +2556,32 @@ initWasm();
           complexity: shaderConfig.complexity,
           description: shaderConfig.description,
           nearestNeighborsActive,
-          nearestNeighborCount: nearestNeighborsActive ? shaderOptions.nearestNeighborCount : null,
-          estimatedSpeedup: nearestNeighborsActive ? `${Math.max(
-            1,
-            Math.floor(nodeCount / shaderOptions.nearestNeighborCount)
-          )}x` : "1x",
-          recommendation: this.getShaderRecommendation(nodeCount)
+          nearestNeighborCount: nearestNeighborsActive
+            ? shaderOptions.nearestNeighborCount
+            : null,
+          estimatedSpeedup: nearestNeighborsActive
+            ? `${Math.max(
+                1,
+                Math.floor(nodeCount / shaderOptions.nearestNeighborCount)
+              )}x`
+            : '1x',
+          recommendation: this.getShaderRecommendation(nodeCount),
         },
         gpu: {
           gpuComputeAvailable: !!gpgpu,
           texturesCreated: variables ? Object.keys(variables).length : 0,
-          spatialHashSize: nearestNeighborsActive ? shaderOptions.spatialHashSize || 10 : null,
-          maxSearchRadius: nearestNeighborsActive ? shaderOptions.maxSearchRadius || 50 : null
+          spatialHashSize: nearestNeighborsActive
+            ? shaderOptions.spatialHashSize || 10
+            : null,
+          maxSearchRadius: nearestNeighborsActive
+            ? shaderOptions.maxSearchRadius || 50
+            : null,
         },
         worker: {
           workerAvailable: this.isWorkerProcessingAvailable(),
           wasmAvailable: this.isWasmAccelerationAvailable(),
-          ...workerInfo
-        }
+          ...workerInfo,
+        },
       };
     }
     /**
@@ -2527,11 +2591,11 @@ initWasm();
      */
     getShaderRecommendation(nodeCount) {
       if (nodeCount < 100) {
-        return "Consider simplex shader for fastest setup";
+        return 'Consider simplex shader for fastest setup';
       } else if (nodeCount < 1e3) {
-        return "nested shader provides good balance";
+        return 'nested shader provides good balance';
       } else {
-        return "nearest-neighbors shader recommended for large datasets";
+        return 'nearest-neighbors shader recommended for large datasets';
       }
     }
     /**
@@ -2547,9 +2611,9 @@ initWasm();
      */
     adaptNeighborCount(targetFPS = 60) {
       const { shaderType, shaderOptions } = this.userData;
-      if (shaderType !== "nearest-neighbors") {
+      if (shaderType !== 'nearest-neighbors') {
         console.warn(
-          "adaptNeighborCount() is only available for nearest-neighbors shader type"
+          'adaptNeighborCount() is only available for nearest-neighbors shader type'
         );
         return;
       }
@@ -2578,5 +2642,5 @@ initWasm();
         }
       });
     }
-  };
+  });
 })();

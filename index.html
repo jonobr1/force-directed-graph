@@ -172,7 +172,7 @@
         const controls = new OrbitControls(camera, renderer.domElement);
         const fog = new THREE.Fog(0xffffff, 200, 750);
         const mouse = new THREE.Vector2(-2, -2);
-        const fdg = new ForceDirectedGraph(renderer, { shaderType: 'nested' });
+        const fdg = new ForceDirectedGraph(renderer, { shaderType: 'simplex' });
 
         scene.fog = fog;
         controls.enableDamping = true;

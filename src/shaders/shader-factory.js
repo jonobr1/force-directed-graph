@@ -1,17 +1,17 @@
-import { positions } from "./positions.js";
-import { simplex, nested } from "./velocities.js";
-import { nearestNeighborsSimple } from "./nearest-neighbors-simple.js";
-import { nearestNeighborsVelocity } from "./velocity-nearest-neighbors.js";
+import { positions } from './positions.js';
+import { simplex, nested, optimized } from './velocities.js';
+// import { nearestNeighborsSimple } from './nearest-neighbors-simple.js';
+import { nearestNeighbors } from './nearest-neighbors.js';
 
 /**
  * Shader factory that returns appropriate shader configuration based on type
- * @param {string} shaderType - The shader type: 'simplex', 'nested', or 'nearest-neighbors'
+ * @param {string} shaderType - The shader type: 'simplex', 'nested', or 'optimized'
  * @returns {Object} Shader configuration object
  */
 export function createShaderConfig(shaderType) {
   const baseConfig = {
     positions,
-    types: ["simplex", "nested", "nearest-neighbors"]
+    types: ['simplex', 'nested', 'optimized'],
   };
 
   switch (shaderType) {
@@ -21,7 +21,7 @@ export function createShaderConfig(shaderType) {
         velocities: simplex,
         requiresNearestNeighbors: false,
         complexity: 'O(n²)',
-        description: 'Basic force calculation for all nodes'
+        description: 'Basic force calculation for all nodes',
       };
 
     case 'nested':
@@ -30,17 +30,18 @@ export function createShaderConfig(shaderType) {
         velocities: nested,
         requiresNearestNeighbors: false,
         complexity: 'O(n²)',
-        description: 'Optimized force calculation with link processing'
+        description: 'Unidirectional links calculated for better performances',
       };
 
-    case 'nearest-neighbors':
+    case 'optimized': // TODO: WIP
       return {
         ...baseConfig,
-        velocities: nearestNeighborsVelocity,
-        nearestNeighbors: nearestNeighborsSimple,
+        velocities: optimized,
+        nearestNeighbors, // Could be nearestNeigbors or nearestNeighborsSimple
         requiresNearestNeighbors: true,
         complexity: 'O(n×k)',
-        description: 'Nearest neighbors optimization for large datasets'
+        description:
+          'Unidirectional links and nearest neighbor repulsion comparison',
       };
 
     default:
@@ -53,7 +54,7 @@ export function createShaderConfig(shaderType) {
  * @returns {string[]} Array of shader type names
  */
 export function getAvailableShaderTypes() {
-  return ['simplex', 'nested', 'nearest-neighbors'];
+  return ['simplex', 'nested', 'optimized'];
 }
 
 /**
@@ -68,7 +69,7 @@ export function getShaderTypeInfo(shaderType) {
     complexity: config.complexity,
     description: config.description,
     requiresNearestNeighbors: config.requiresNearestNeighbors,
-    recommendedFor: getRecommendation(shaderType)
+    recommendedFor: getRecommendation(shaderType),
   };
 }
 
@@ -83,7 +84,7 @@ function getRecommendation(shaderType) {
       return 'Small graphs (< 100 nodes), fastest setup, minimal GPU usage';
     case 'nested':
       return 'Medium graphs (100-1000 nodes), balanced performance and features';
-    case 'nearest-neighbors':
+    case 'optimized':
       return 'Large graphs (> 1000 nodes), maximum performance for dense datasets';
     default:
       return 'Unknown shader type';

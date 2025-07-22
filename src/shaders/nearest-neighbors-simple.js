@@ -8,7 +8,6 @@ export const nearestNeighborsSimple = `
   uniform float nodeAmount;
   uniform float nearestNeighborCount;
   uniform float maxSearchRadius;
-  uniform sampler2D texturePositions;
 
   vec3 getPosition( vec2 uv ) {
     return texture2D( texturePositions, uv ).xyz;

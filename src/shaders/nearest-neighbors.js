@@ -1,6 +1,20 @@
-import { getPosition, getIndex } from "./partials.js";
-import { spatialHash, hashToIndex, getNeighborCells, isWithinRadius, distanceSquared } from "./partials/spatial-hash.js";
-import { neighborData, compareNeighbors, swapNeighbors, insertionSort, insertNeighbor, initializeNeighbors } from "./partials/bitonic-sort.js";
+import { getPosition, getIndex } from './partials.js';
+import {
+  spatialHash,
+  hashToIndex,
+  getNeighborCells,
+  isWithinRadius,
+  distanceSquared,
+} from './partials/spatial-hash.js';
+import {
+  findInsertionPoint,
+  neighborData,
+  compareNeighbors,
+  swapNeighbors,
+  insertionSort,
+  insertNeighbor,
+  initializeNeighbors,
+} from './partials/bitonic-sort.js';
 
 /**
  * Nearest neighbors computation shader
@@ -12,7 +26,6 @@ export const nearestNeighbors = `
   uniform float nearestNeighborCount;
   uniform float spatialHashSize;
   uniform float maxSearchRadius;
-  uniform sampler2D texturePositions;
 
   ${getPosition}
   ${getIndex}
@@ -25,6 +38,7 @@ export const nearestNeighbors = `
   ${compareNeighbors}
   ${swapNeighbors}
   ${insertionSort}
+  ${findInsertionPoint}
   ${insertNeighbor}
   ${initializeNeighbors}
 
@@ -105,7 +119,6 @@ export const nearestNeighborsExtended = `
   uniform float spatialHashSize;
   uniform float maxSearchRadius;
   uniform float outputLayer; // Which layer of neighbors to output (0-7 for up to 32 neighbors)
-  uniform sampler2D texturePositions;
 
   ${getPosition}
   ${getIndex}
