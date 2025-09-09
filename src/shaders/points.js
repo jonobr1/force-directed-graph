@@ -1,4 +1,4 @@
-import { circle } from "./partials.js";
+import { circle } from './partials.js';
 
 /**
  * Renders points of all nodes as a
@@ -90,7 +90,7 @@ const points = {
       #include <fog_fragment>
 
     }
-  `
+  `,
 };
 
 export default points;
