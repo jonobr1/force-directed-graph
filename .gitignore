@@ -129,3 +129,4 @@ dist
 .DS_Store
 package-lock.json
 assets/
+junk/
