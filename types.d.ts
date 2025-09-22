@@ -240,6 +240,9 @@ declare module '@jonobr1/force-directed-graph' {
   };
   export type LinkData = { source: number; target: number };
   export type DataType = {
+    shaderType?: 'simplex' | 'nested' | 'optimized';
+    nearestNeighborCount?: number;
+    maxSearchRadius?: number;
     nodes: NodeData[];
     links: LinkData[];
   };
