@@ -130,3 +130,7 @@ dist
 package-lock.json
 assets/
 junk/
+
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md
