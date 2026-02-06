@@ -24,6 +24,46 @@ npm install --save three @jonobr1/force-directed-graph
 import { ForceDirectedGraph } from '@jonobr1/force-directed-graph';
 ```
 
+### Data Schema (`constructor` and `set`)
+
+> Reference: The accepted `nodes` / `links` structure is inspired by the D3 force-directed graph data format: [@d3/force-directed-graph-component](https://observablehq.com/@d3/force-directed-graph-component).
+
+The same data object shape is accepted by:
+
+- `new ForceDirectedGraph(renderer, data)`
+- `fdg.set(data[, callback])`
+
+```ts
+type GraphData = {
+  nodes: NodeData[];
+  links: LinkData[];
+};
+
+type NodeData = {
+  id: string | number; // Required, unique per node
+  x?: number;          // Optional initial x position
+  y?: number;          // Optional initial y position
+  z?: number;          // Optional initial z position
+  isStatic?: boolean;  // Optional, pins node when true
+  color?: string;      // Optional CSS color (ex: '#ff6600', 'rgb(255,0,0)')
+  image?: string;      // Optional image URL for sprite atlas
+};
+
+type LinkData = {
+  source: string | number; // Node reference (must match a node id)
+  target: string | number; // Node reference (must match a node id)
+};
+```
+
+Notes:
+
+- `nodes` and `links` are both required.
+- `source` / `target` are resolved by node `id`.
+- If `x`, `y`, or `z` is omitted, a random initial position is assigned.
+- `isStatic` defaults to `false`.
+- If `color` is omitted, the node defaults to white.
+- `set(data[, callback])` returns a `Promise` that resolves when geometry/textures are ready.
+
 ### Load Script in HTML file:
 
 This example creates 512 nodes and links them randomly like big snakes.
