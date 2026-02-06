@@ -18,6 +18,7 @@ const points = {
     varying vec3 vColor;
     varying float vImageKey;
     varying float vDistance;
+    varying float vViewZ;
 
     attribute float imageKey;
 
@@ -33,6 +34,7 @@ const points = {
       gl_PointSize *= mix( 1.0, frustumSize / - mvPosition.z, sizeAttenuation );
 
       vDistance = 1.0 / - mvPosition.z;
+      vViewZ = mvPosition.z;
       vColor = color;
       vImageKey = imageKey;
 
@@ -55,6 +57,7 @@ const points = {
     varying vec3 vColor;
     varying float vImageKey;
     varying float vDistance;
+    varying float vViewZ;
 
     ${circle}
 
@@ -62,6 +65,20 @@ const points = {
 
       vec2 uv = 2.0 * vec2( gl_PointCoord ) - 1.0;
       float t = circle( uv, vec2( 0.0, 0.0 ), 0.5, 1.0 );
+
+      // Calculate custom depth to fix z-fighting with transparent points
+      vec2 cxy = 2.0 * gl_PointCoord - 1.0;
+      float r = length(cxy);
+
+      // For fragments inside the circle, offset depth proportionally
+      if (r <= 1.0) {
+        // Closer to edge = larger depth offset (appears further back)
+        // This creates a spherical depth profile
+        float depthOffset = (1.0 - r) * 0.0001;
+        gl_FragDepth = gl_FragCoord.z + depthOffset;
+      } else {
+        gl_FragDepth = gl_FragCoord.z;
+      }
 
       float col = mod( vImageKey, imageDimensions );
       float row = floor( vImageKey / imageDimensions );
