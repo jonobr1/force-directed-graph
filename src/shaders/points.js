@@ -1,5 +1,3 @@
-import { circle } from "./partials.js";
-
 /**
  * Renders points of all nodes as a
  * single draw call.
@@ -59,17 +57,17 @@ const points = {
     varying float vDistance;
     varying float vViewZ;
 
-    ${circle}
-
     void main() {
 
-      vec2 uv = 2.0 * vec2( gl_PointCoord ) - 1.0;
-      float t = circle( uv, vec2( 0.0, 0.0 ), 0.5, 1.0 );
-
-      // Calculate custom depth to fix z-fighting with transparent points
+      // Calculate distance from center for circular shape and depth
       vec2 cxy = 2.0 * gl_PointCoord - 1.0;
       float r = length(cxy);
 
+      // Antialiased circle using fwidth for automatic edge smoothing
+      float delta = fwidth(r);
+      float t = 1.0 - smoothstep(1.0 - delta, 1.0, r);
+
+      // Calculate custom depth to fix z-fighting with transparent points
       // For fragments inside the circle, offset depth proportionally
       if (r <= 1.0) {
         // Closer to edge = larger depth offset (appears further back)
@@ -80,10 +78,11 @@ const points = {
         gl_FragDepth = gl_FragCoord.z;
       }
 
+      // Calculate texture atlas coordinates for image sprites
       float col = mod( vImageKey, imageDimensions );
       float row = floor( vImageKey / imageDimensions );
 
-      uv = vec2( 0.0 );
+      vec2 uv = vec2( 0.0 );
       uv.x = mix( 0.0, 1.0 / imageDimensions, gl_PointCoord.x );
       uv.y = mix( 0.0, 1.0 / imageDimensions, gl_PointCoord.y );
 
@@ -98,16 +97,15 @@ const points = {
       vec3 layer = mix( vec3( 1.0 ), texel.rgb, useImage );
 
       float alpha = opacity * t;
-
       if ( alpha <= 0.0 ) {
         discard;
       }
 
-      gl_FragColor = vec4( layer * mix( vec3( 1.0 ), vColor, inheritColors ) * uColor, alpha );
+      gl_FragColor = vec4( layer * mix( vec3( 1.0 ), vColor, inheritColors ) * uColor, opacity );
       #include <fog_fragment>
 
     }
-  `
+  `,
 };
 
 export default points;
