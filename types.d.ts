@@ -243,14 +243,40 @@ declare module '@jonobr1/force-directed-graph' {
     nodes: NodeData[];
     links: LinkData[];
   };
+  export type NodeRendererScaleInput = {
+    x?: number;
+    y?: number;
+    z?: number;
+  };
+  export type NodeRendererConfig =
+    | 'points'
+    | 'instancedMesh'
+    | {
+        type?: 'points' | 'instancedMesh';
+        geometry?: BufferGeometry;
+        material?: Material;
+        frustumCulled?: boolean;
+        scale?:
+          | number
+          | NodeRendererScaleInput
+          | ((node: NodeData, index: number) => number | NodeRendererScaleInput);
+      };
+  export type ForceDirectedGraphOptions = {
+    nodes?: NodeRendererConfig;
+  };
   export class ForceDirectedGraph extends Group {
     static getPotSize: typeof getPotSize;
     static Properties: string[];
     /**
      * @param {THREE.WebGLRenderer} renderer - the three.js renderer referenced to create the render targets
      * @param {Object} [data] - optional data to automatically set the data of the graph
+     * @param {Object} [options] - optional rendering configuration
      */
-    constructor(renderer: WebGLRenderer, data?: DataType);
+    constructor(
+      renderer: WebGLRenderer,
+      data?: DataType,
+      options?: ForceDirectedGraphOptions
+    );
     ready: boolean;
     /**
      * @param {Object} data - Object with nodes and links properties based on https://observablehq.com/@d3/force-directed-graph-component
@@ -354,6 +380,8 @@ declare module '@jonobr1/force-directed-graph' {
   import { Points } from '@jonobr1/force-directed-graph/points';
   import { Links } from '@jonobr1/force-directed-graph/links';
   import {
+    BufferGeometry,
+    Material,
     NoBlending,
     NormalBlending,
     AdditiveBlending,

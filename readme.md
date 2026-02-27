@@ -64,6 +64,41 @@ Notes:
 - If `color` is omitted, the node defaults to white.
 - `set(data[, callback])` returns a `Promise` that resolves when geometry/textures are ready.
 
+### Node Rendering Options
+
+By default, nodes render as shader-based `THREE.Points` (single draw call, GPU position sampling in the vertex shader).
+
+You can opt into `THREE.InstancedMesh` rendering via a third constructor argument:
+
+```js
+import * as THREE from 'three';
+import { ForceDirectedGraph } from '@jonobr1/force-directed-graph';
+
+const nodeGeometry = new THREE.SphereGeometry(0.5, 16, 16);
+const nodeMaterial = new THREE.MeshPhysicalMaterial({
+  color: 0xffffff,
+  roughness: 0.35,
+  metalness: 0.05,
+  clearcoat: 0.5,
+  vertexColors: true
+});
+
+const fdg = new ForceDirectedGraph(renderer, data, {
+  nodes: {
+    type: 'instancedMesh',
+    geometry: nodeGeometry,
+    material: nodeMaterial,
+    scale: 0.75 // number, { x, y, z }, or (node, index) => number | { x, y, z }
+  }
+});
+```
+
+Notes:
+
+- Default behavior remains `Points` if `options.nodes` is omitted.
+- The instanced mesh mode is intended for smaller particle counts where higher-fidelity materials/shadows are preferred.
+- In instanced mesh mode, node positions are updated from the simulation texture via per-frame readback.
+
 ### Load Script in HTML file:
 
 This example creates 512 nodes and links them randomly like big snakes.

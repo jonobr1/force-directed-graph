@@ -1,10 +1,11 @@
-import { Color, Group, RepeatWrapping, Vector2, Vector3 } from 'three';
+import { Color, Group, Raycaster, RepeatWrapping, Vector2, Vector3 } from 'three';
 import { GPUComputationRenderer } from 'three/examples/jsm/misc/GPUComputationRenderer.js';
 import { clamp, each, getPotSize, rgbToIndex } from './math.js';
 import simulation from './shaders/simulation.js';
 
 import { Points } from './points.js';
 import { Links } from './links.js';
+import { NodesInstancedMesh } from './nodes-instanced-mesh.js';
 import { Registry } from './registry.js';
 import { Hit } from './hit.js';
 import { TextureWorkerManager } from './texture-worker-manager.js';
@@ -12,10 +13,28 @@ import { TextureWorkerManager } from './texture-worker-manager.js';
 const color = new Color();
 const position = new Vector3();
 const size = new Vector2();
+const ndc = new Vector2();
+const raycaster = new Raycaster();
 const buffers = {
   int: new Uint8ClampedArray(4),
   float: new Float32Array(4),
 };
+
+function normalizeNodeRenderer(renderer) {
+  if (!renderer || renderer === 'points') {
+    return { type: 'points' };
+  }
+  if (renderer === 'instancedMesh') {
+    return { type: 'instancedMesh' };
+  }
+  if (typeof renderer === 'object') {
+    return {
+      type: renderer.type || 'points',
+      ...renderer,
+    };
+  }
+  return { type: 'points' };
+}
 
 function buildLinkTextureData(preparedLinks, nodeAmount, size) {
   const totalElements = size * size;
@@ -90,8 +109,9 @@ class ForceDirectedGraph extends Group {
   /**
    * @param {THREE.WebGLRenderer} renderer - the three.js renderer referenced to create the render targets
    * @param {Object} [data] - optional data to automatically set the data of the graph
+   * @param {Object} [options] - optional rendering configuration
    */
-  constructor(renderer, data) {
+  constructor(renderer, data, options = {}) {
     super();
 
     this.userData.registry = new Registry();
@@ -121,6 +141,10 @@ class ForceDirectedGraph extends Group {
     };
     this.userData.hit = new Hit(this);
     this.userData.workerManager = new TextureWorkerManager();
+    this.userData.renderers = {
+      nodes: normalizeNodeRenderer(options.nodes),
+    };
+    this.userData.lookupGeometry = null;
 
     if (data) {
       this.set(data);
@@ -163,6 +187,8 @@ class ForceDirectedGraph extends Group {
     const scope = this;
     let { gpgpu, registry, renderer, uniforms } = this.userData;
     let packedLinkAmount = 0;
+    const previousPoints = this.points;
+    const previousLookupGeometry = this.userData.lookupGeometry;
 
     this.ready = false;
     this.userData.data = data;
@@ -186,13 +212,20 @@ class ForceDirectedGraph extends Group {
     }
 
     // Reset points and links
-    for (let i = 0; i < this.children.length; i++) {
-      const child = this.children[i];
+    while (this.children.length > 0) {
+      const child = this.children[0];
       this.remove(child);
       if ('dispose' in child) {
         child.dispose();
       }
     }
+    if (
+      previousLookupGeometry &&
+      (!previousPoints || previousLookupGeometry !== previousPoints.geometry)
+    ) {
+      previousLookupGeometry.dispose();
+    }
+    this.userData.lookupGeometry = null;
 
     // Initialize new properties
     const size = getPotSize(Math.max(data.nodes.length, data.links.length * 2));
@@ -381,17 +414,26 @@ class ForceDirectedGraph extends Group {
 
     function generate() {
       let points;
+      let parsedNodes;
 
       return Points.parse(size, data)
-        .then((geometry) => {
-          points = new Points(geometry, uniforms);
+        .then((parsed) => {
+          parsedNodes = parsed;
+          scope.userData.lookupGeometry = parsed.geometry;
+
+          const nodeRenderer = scope.userData.renderers.nodes;
+          if (nodeRenderer.type === 'instancedMesh') {
+            points = new NodesInstancedMesh(parsed, uniforms, data, nodeRenderer);
+          } else {
+            points = new Points(parsed, uniforms);
+            scope.userData.hit.inherit(points);
+          }
         })
-        .then(() => Links.parse(points, data))
+        .then(() => Links.parse({ geometry: parsedNodes.geometry }, data))
         .then((geometry) => {
           const links = new Links(geometry, uniforms);
           scope.add(points, links);
           points.renderOrder = links.renderOrder + 1;
-          scope.userData.hit.inherit(points);
         });
     }
 
@@ -421,10 +463,23 @@ class ForceDirectedGraph extends Group {
     gpgpu.compute();
 
     const texture = this.getTexture('positions');
+    const renderTarget = gpgpu.getCurrentRenderTarget(variables.positions);
 
     for (let i = 0; i < this.children.length; i++) {
       const child = this.children[i];
-      child.material.uniforms.texturePositions.value = texture;
+      if (
+        child.material &&
+        child.material.uniforms &&
+        child.material.uniforms.texturePositions
+      ) {
+        child.material.uniforms.texturePositions.value = texture;
+      }
+      if (typeof child.updateFromRenderTarget === 'function') {
+        child.updateFromRenderTarget(this.userData.renderer, renderTarget);
+      }
+      if (child.material && !child.material.uniforms && child.userData.fdgSyncOpacity) {
+        child.material.opacity = uniforms.opacity.value;
+      }
     }
 
     return this;
@@ -438,6 +493,25 @@ class ForceDirectedGraph extends Group {
    */
   intersect(pointer, camera) {
     const { hit, renderer } = this.userData;
+    const points = this.points;
+    const isInstancedMesh = points && points.userData.fdgNodeRenderMode === 'instancedMesh';
+
+    if (isInstancedMesh) {
+      ndc.set(clamp(pointer.x, 0, 1) * 2 - 1, 1 - clamp(pointer.y, 0, 1) * 2);
+      raycaster.setFromCamera(ndc, camera);
+      const intersections = raycaster.intersectObject(points, false);
+      const result = intersections[0];
+      if (!result || typeof result.instanceId !== 'number') {
+        return null;
+      }
+
+      const index = result.instanceId;
+      const point = this.getPositionFromIndex(index);
+      return {
+        point,
+        data: this.userData.data.nodes[index],
+      };
+    }
 
     renderer.getSize(size);
 
@@ -480,10 +554,11 @@ class ForceDirectedGraph extends Group {
   }
 
   getPositionFromIndex(i) {
-    const { points, size } = this;
+    const { size } = this;
     const { gpgpu, renderer, variables } = this.userData;
+    const lookupGeometry = this.userData.lookupGeometry;
 
-    if (!points || !renderer || !size) {
+    if (!lookupGeometry || !renderer || !size) {
       console.warn(
         'Force Directed Graph:',
         'unable to calculate position without points or renderer.'
@@ -492,7 +567,7 @@ class ForceDirectedGraph extends Group {
     }
 
     const index = i * 3;
-    const uvs = points.geometry.attributes.position.array;
+    const uvs = lookupGeometry.attributes.position.array;
     const uvx = Math.floor(uvs[index + 0] * size);
     const uvy = Math.floor(uvs[index + 1] * size);
     const renderTarget = gpgpu.getCurrentRenderTarget(variables.positions);
@@ -518,7 +593,8 @@ class ForceDirectedGraph extends Group {
   }
 
   setPointColorFromIndex(index, css) {
-    const attribute = this.points.geometry.getAttribute('color');
+    const lookupGeometry = this.userData.lookupGeometry;
+    const attribute = lookupGeometry.getAttribute('color');
     const colors = attribute.array;
 
     color.set(css);
@@ -528,12 +604,20 @@ class ForceDirectedGraph extends Group {
     colors[3 * index + 2] = color.b;
 
     attribute.needsUpdate = true;
+
+    if (this.points && this.points.userData.fdgNodeRenderMode === 'instancedMesh') {
+      this.points.setColorAt(index, color);
+      if (this.points.instanceColor) {
+        this.points.instanceColor.needsUpdate = true;
+      }
+    }
   }
 
   updateLinksColors() {
     const { data } = this.userData;
 
-    const ref = this.points.geometry.attributes.color.array;
+    const lookupGeometry = this.userData.lookupGeometry;
+    const ref = lookupGeometry.attributes.color.array;
     const attribute = this.links.geometry.getAttribute('color');
     const colors = attribute.array;
 

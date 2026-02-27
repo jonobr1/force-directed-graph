@@ -22,7 +22,7 @@ __export(index_exports, {
   ForceDirectedGraph: () => ForceDirectedGraph
 });
 module.exports = __toCommonJS(index_exports);
-var import_three5 = require("three");
+var import_three6 = require("three");
 var import_GPUComputationRenderer = require("three/examples/jsm/misc/GPUComputationRenderer.js");
 
 // src/math.js
@@ -773,6 +773,134 @@ var Links = class extends import_three3.LineSegments {
   }
 };
 
+// src/nodes-instanced-mesh.js
+var import_three4 = require("three");
+var quaternion = new import_three4.Quaternion();
+var matrix = new import_three4.Matrix4();
+var position = new import_three4.Vector3();
+var scale = new import_three4.Vector3();
+var instanceColor = new import_three4.Color();
+var fallbackColor = new import_three4.Color(1, 1, 1);
+function getScalarScale(value, fallback) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+var NodesInstancedMesh = class extends import_three4.InstancedMesh {
+  constructor(parsedNodes, uniforms, data, options = {}) {
+    const geometry = options.geometry || new import_three4.SphereGeometry(0.5, 8, 8);
+    const material = options.material || new import_three4.MeshBasicMaterial({
+      color: 16777215,
+      transparent: true,
+      vertexColors: true,
+      opacity: uniforms.opacity.value
+    });
+    const count = data.nodes.length;
+    super(geometry, material, count);
+    this.count = count;
+    this.frustumCulled = typeof options.frustumCulled === "boolean" ? options.frustumCulled : false;
+    this.userData.fdgNodeRenderMode = "instancedMesh";
+    this.userData.fdgOwnsGeometry = !options.geometry;
+    this.userData.fdgOwnsMaterial = !options.material;
+    this.userData.fdgScale = options.scale;
+    this.userData.fdgData = data;
+    this.userData.fdgUniforms = uniforms;
+    this.userData.fdgReadback = new Float32Array(0);
+    this.userData.fdgReadbackSize = 0;
+    this.userData.fdgSyncOpacity = true;
+    this._applyColors(parsedNodes.geometry);
+  }
+  _applyColors(lookupGeometry) {
+    const colors = lookupGeometry.getAttribute("color");
+    if (!colors) {
+      return;
+    }
+    for (let i = 0; i < this.count; i++) {
+      const ci = i * 3;
+      instanceColor.setRGB(
+        colors.array[ci + 0] ?? fallbackColor.r,
+        colors.array[ci + 1] ?? fallbackColor.g,
+        colors.array[ci + 2] ?? fallbackColor.b
+      );
+      this.setColorAt(i, instanceColor);
+    }
+    if (this.instanceColor) {
+      this.instanceColor.needsUpdate = true;
+    }
+  }
+  _ensureReadbackSize(size2) {
+    const expected = size2 * size2 * 4;
+    if (this.userData.fdgReadback.length !== expected) {
+      this.userData.fdgReadback = new Float32Array(expected);
+      this.userData.fdgReadbackSize = size2;
+    }
+  }
+  _resolveScale(index) {
+    const { fdgScale, fdgData, fdgUniforms } = this.userData;
+    const fallback = getScalarScale(fdgUniforms.nodeRadius.value, 1);
+    const node = fdgData.nodes[index];
+    if (typeof fdgScale === "function") {
+      const value = fdgScale(node, index);
+      if (typeof value === "number") {
+        scale.setScalar(getScalarScale(value, fallback));
+        return;
+      }
+      if (value && typeof value === "object") {
+        scale.set(
+          getScalarScale(value.x, fallback),
+          getScalarScale(value.y, fallback),
+          getScalarScale(value.z, fallback)
+        );
+        return;
+      }
+    }
+    if (typeof fdgScale === "number") {
+      scale.setScalar(getScalarScale(fdgScale, fallback));
+      return;
+    }
+    if (fdgScale && typeof fdgScale === "object") {
+      scale.set(
+        getScalarScale(fdgScale.x, fallback),
+        getScalarScale(fdgScale.y, fallback),
+        getScalarScale(fdgScale.z, fallback)
+      );
+      return;
+    }
+    scale.setScalar(fallback);
+  }
+  updateFromRenderTarget(renderer, renderTarget) {
+    const { fdgUniforms } = this.userData;
+    const textureSize = fdgUniforms.size.value;
+    const is2D = fdgUniforms.is2D.value;
+    this._ensureReadbackSize(textureSize);
+    const readback = this.userData.fdgReadback;
+    renderer.readRenderTargetPixels(
+      renderTarget,
+      0,
+      0,
+      textureSize,
+      textureSize,
+      readback
+    );
+    for (let i = 0; i < this.count; i++) {
+      const index = i * 4;
+      position.x = readback[index + 0];
+      position.y = readback[index + 1];
+      position.z = readback[index + 2] * (1 - is2D);
+      this._resolveScale(i);
+      matrix.compose(position, quaternion, scale);
+      this.setMatrixAt(i, matrix);
+    }
+    this.instanceMatrix.needsUpdate = true;
+  }
+  dispose() {
+    if (this.userData.fdgOwnsGeometry && this.geometry) {
+      this.geometry.dispose();
+    }
+    if (this.userData.fdgOwnsMaterial && this.material) {
+      this.material.dispose();
+    }
+  }
+};
+
 // src/registry.js
 var Registry = class {
   map = {};
@@ -797,7 +925,7 @@ var Registry = class {
 };
 
 // src/hit.js
-var import_three4 = require("three");
+var import_three5 = require("three");
 
 // src/shaders/hit.js
 var hit = {
@@ -855,10 +983,10 @@ var hit = {
 var hit_default = hit;
 
 // src/hit.js
-var color2 = new import_three4.Color();
+var color2 = new import_three5.Color();
 var Hit = class {
   parent = null;
-  renderTarget = new import_three4.WebGLRenderTarget(1, 1);
+  renderTarget = new import_three5.WebGLRenderTarget(1, 1);
   width = 1;
   height = 1;
   ratio = 1;
@@ -866,10 +994,10 @@ var Hit = class {
   helper = null;
   constructor(fdg) {
     this.parent = fdg;
-    this.helper = new import_three4.Sprite(new import_three4.SpriteMaterial({
+    this.helper = new import_three5.Sprite(new import_three5.SpriteMaterial({
       map: this.renderTarget.texture
     }));
-    this.material = new import_three4.ShaderMaterial({
+    this.material = new import_three5.ShaderMaterial({
       uniforms: {
         hitScale: { value: 2 }
       },
@@ -914,7 +1042,7 @@ var Hit = class {
   }
   dispose() {
     this.parent = null;
-    this.renderTarget = new import_three4.WebGLRenderTarget(1, 1);
+    this.renderTarget = new import_three5.WebGLRenderTarget(1, 1);
     this.width = 1;
     this.height = 1;
     this.ratio = 1;
@@ -1585,13 +1713,30 @@ var TextureWorkerManager = class {
 };
 
 // src/index.js
-var color3 = new import_three5.Color();
-var position = new import_three5.Vector3();
-var size = new import_three5.Vector2();
+var color3 = new import_three6.Color();
+var position2 = new import_three6.Vector3();
+var size = new import_three6.Vector2();
+var ndc = new import_three6.Vector2();
+var raycaster = new import_three6.Raycaster();
 var buffers = {
   int: new Uint8ClampedArray(4),
   float: new Float32Array(4)
 };
+function normalizeNodeRenderer(renderer) {
+  if (!renderer || renderer === "points") {
+    return { type: "points" };
+  }
+  if (renderer === "instancedMesh") {
+    return { type: "instancedMesh" };
+  }
+  if (typeof renderer === "object") {
+    return {
+      type: renderer.type || "points",
+      ...renderer
+    };
+  }
+  return { type: "points" };
+}
 function buildLinkTextureData(preparedLinks, nodeAmount, size2) {
   const totalElements = size2 * size2;
   const linksData = new Float32Array(totalElements * 4);
@@ -1641,13 +1786,14 @@ function buildLinkTextureData(preparedLinks, nodeAmount, size2) {
     packedLinkAmount: packedLinks.length
   };
 }
-var ForceDirectedGraph = class extends import_three5.Group {
+var ForceDirectedGraph = class extends import_three6.Group {
   ready = false;
   /**
    * @param {THREE.WebGLRenderer} renderer - the three.js renderer referenced to create the render targets
    * @param {Object} [data] - optional data to automatically set the data of the graph
+   * @param {Object} [options] - optional rendering configuration
    */
-  constructor(renderer, data) {
+  constructor(renderer, data, options = {}) {
     super();
     this.userData.registry = new Registry();
     this.userData.renderer = renderer;
@@ -1670,12 +1816,16 @@ var ForceDirectedGraph = class extends import_three5.Group {
       frustumSize: { value: 100 },
       linksInheritColor: { value: false },
       pointsInheritColor: { value: true },
-      pointColor: { value: new import_three5.Color(1, 1, 1) },
-      linkColor: { value: new import_three5.Color(1, 1, 1) },
+      pointColor: { value: new import_three6.Color(1, 1, 1) },
+      linkColor: { value: new import_three6.Color(1, 1, 1) },
       opacity: { value: 1 }
     };
     this.userData.hit = new Hit(this);
     this.userData.workerManager = new TextureWorkerManager();
+    this.userData.renderers = {
+      nodes: normalizeNodeRenderer(options.nodes)
+    };
+    this.userData.lookupGeometry = null;
     if (data) {
       this.set(data);
     }
@@ -1715,6 +1865,8 @@ var ForceDirectedGraph = class extends import_three5.Group {
     const scope = this;
     let { gpgpu, registry, renderer, uniforms } = this.userData;
     let packedLinkAmount = 0;
+    const previousPoints = this.points;
+    const previousLookupGeometry = this.userData.lookupGeometry;
     this.ready = false;
     this.userData.data = data;
     registry.clear();
@@ -1729,13 +1881,17 @@ var ForceDirectedGraph = class extends import_three5.Group {
         variable.material.dispose();
       }
     }
-    for (let i = 0; i < this.children.length; i++) {
-      const child = this.children[i];
+    while (this.children.length > 0) {
+      const child = this.children[0];
       this.remove(child);
       if ("dispose" in child) {
         child.dispose();
       }
     }
+    if (previousLookupGeometry && (!previousPoints || previousLookupGeometry !== previousPoints.geometry)) {
+      previousLookupGeometry.dispose();
+    }
+    this.userData.lookupGeometry = null;
     const size2 = getPotSize(Math.max(data.nodes.length, data.links.length * 2));
     uniforms.size.value = size2;
     gpgpu = new import_GPUComputationRenderer.GPUComputationRenderer(size2, size2, renderer);
@@ -1867,8 +2023,8 @@ var ForceDirectedGraph = class extends import_three5.Group {
         variables.velocities.material.uniforms.springLength = uniforms.springLength;
         variables.velocities.material.uniforms.stiffness = uniforms.stiffness;
         variables.velocities.material.uniforms.gravity = uniforms.gravity;
-        variables.positions.wrapS = variables.positions.wrapT = import_three5.RepeatWrapping;
-        variables.velocities.wrapS = variables.velocities.wrapT = import_three5.RepeatWrapping;
+        variables.positions.wrapS = variables.positions.wrapT = import_three6.RepeatWrapping;
+        variables.velocities.wrapS = variables.velocities.wrapT = import_three6.RepeatWrapping;
         const error = gpgpu.init();
         if (error) {
           reject(error);
@@ -1879,13 +2035,21 @@ var ForceDirectedGraph = class extends import_three5.Group {
     }
     function generate() {
       let points2;
-      return Points.parse(size2, data).then((geometry) => {
-        points2 = new Points(geometry, uniforms);
-      }).then(() => Links.parse(points2, data)).then((geometry) => {
+      let parsedNodes;
+      return Points.parse(size2, data).then((parsed) => {
+        parsedNodes = parsed;
+        scope.userData.lookupGeometry = parsed.geometry;
+        const nodeRenderer = scope.userData.renderers.nodes;
+        if (nodeRenderer.type === "instancedMesh") {
+          points2 = new NodesInstancedMesh(parsed, uniforms, data, nodeRenderer);
+        } else {
+          points2 = new Points(parsed, uniforms);
+          scope.userData.hit.inherit(points2);
+        }
+      }).then(() => Links.parse({ geometry: parsedNodes.geometry }, data)).then((geometry) => {
         const links2 = new Links(geometry, uniforms);
         scope.add(points2, links2);
         points2.renderOrder = links2.renderOrder + 1;
-        scope.userData.hit.inherit(points2);
       });
     }
     function complete() {
@@ -1909,9 +2073,18 @@ var ForceDirectedGraph = class extends import_three5.Group {
     variables.velocities.material.uniforms.time.value = time / 1e3;
     gpgpu.compute();
     const texture = this.getTexture("positions");
+    const renderTarget = gpgpu.getCurrentRenderTarget(variables.positions);
     for (let i = 0; i < this.children.length; i++) {
       const child = this.children[i];
-      child.material.uniforms.texturePositions.value = texture;
+      if (child.material && child.material.uniforms && child.material.uniforms.texturePositions) {
+        child.material.uniforms.texturePositions.value = texture;
+      }
+      if (typeof child.updateFromRenderTarget === "function") {
+        child.updateFromRenderTarget(this.userData.renderer, renderTarget);
+      }
+      if (child.material && !child.material.uniforms && child.userData.fdgSyncOpacity) {
+        child.material.opacity = uniforms.opacity.value;
+      }
     }
     return this;
   }
@@ -1923,6 +2096,23 @@ var ForceDirectedGraph = class extends import_three5.Group {
    */
   intersect(pointer, camera) {
     const { hit: hit2, renderer } = this.userData;
+    const points2 = this.points;
+    const isInstancedMesh = points2 && points2.userData.fdgNodeRenderMode === "instancedMesh";
+    if (isInstancedMesh) {
+      ndc.set(clamp(pointer.x, 0, 1) * 2 - 1, 1 - clamp(pointer.y, 0, 1) * 2);
+      raycaster.setFromCamera(ndc, camera);
+      const intersections = raycaster.intersectObject(points2, false);
+      const result = intersections[0];
+      if (!result || typeof result.instanceId !== "number") {
+        return null;
+      }
+      const index2 = result.instanceId;
+      const point2 = this.getPositionFromIndex(index2);
+      return {
+        point: point2,
+        data: this.userData.data.nodes[index2]
+      };
+    }
     renderer.getSize(size);
     hit2.setSize(size.x, size.y);
     hit2.compute(renderer, camera);
@@ -1956,9 +2146,10 @@ var ForceDirectedGraph = class extends import_three5.Group {
     return gpgpu.getCurrentRenderTarget(variables[name]).texture;
   }
   getPositionFromIndex(i) {
-    const { points: points2, size: size2 } = this;
+    const { size: size2 } = this;
     const { gpgpu, renderer, variables } = this.userData;
-    if (!points2 || !renderer || !size2) {
+    const lookupGeometry = this.userData.lookupGeometry;
+    if (!lookupGeometry || !renderer || !size2) {
       console.warn(
         "Force Directed Graph:",
         "unable to calculate position without points or renderer."
@@ -1966,7 +2157,7 @@ var ForceDirectedGraph = class extends import_three5.Group {
       return;
     }
     const index = i * 3;
-    const uvs = points2.geometry.attributes.position.array;
+    const uvs = lookupGeometry.attributes.position.array;
     const uvx = Math.floor(uvs[index + 0] * size2);
     const uvy = Math.floor(uvs[index + 1] * size2);
     const renderTarget = gpgpu.getCurrentRenderTarget(variables.positions);
@@ -1979,25 +2170,33 @@ var ForceDirectedGraph = class extends import_three5.Group {
       buffers.float
     );
     const [x, y, z] = buffers.float;
-    position.set(x, y, z);
-    return position;
+    position2.set(x, y, z);
+    return position2;
   }
   setPointColorById(id, css) {
     const index = this.getIndexById(id);
     this.setPointColorFromIndex(index, css);
   }
   setPointColorFromIndex(index, css) {
-    const attribute = this.points.geometry.getAttribute("color");
+    const lookupGeometry = this.userData.lookupGeometry;
+    const attribute = lookupGeometry.getAttribute("color");
     const colors = attribute.array;
     color3.set(css);
     colors[3 * index + 0] = color3.r;
     colors[3 * index + 1] = color3.g;
     colors[3 * index + 2] = color3.b;
     attribute.needsUpdate = true;
+    if (this.points && this.points.userData.fdgNodeRenderMode === "instancedMesh") {
+      this.points.setColorAt(index, color3);
+      if (this.points.instanceColor) {
+        this.points.instanceColor.needsUpdate = true;
+      }
+    }
   }
   updateLinksColors() {
     const { data } = this.userData;
-    const ref = this.points.geometry.attributes.color.array;
+    const lookupGeometry = this.userData.lookupGeometry;
+    const ref = lookupGeometry.attributes.color.array;
     const attribute = this.links.geometry.getAttribute("color");
     const colors = attribute.array;
     return each(data.links, (_, i) => {
