@@ -171,12 +171,35 @@
         const camera = new THREE.PerspectiveCamera();
         const controls = new OrbitControls(camera, renderer.domElement);
         const fog = new THREE.Fog(0xffffff, 200, 750);
+        const keyLight = new THREE.DirectionalLight(0xffffff, 1);
         const mouse = new THREE.Vector2(-2, -2);
-        const fdg = new ForceDirectedGraph(renderer);
+        const fdg = new ForceDirectedGraph(renderer, null, {
+          nodes: {
+            type: 'instancedMesh',
+            geometry: new THREE.SphereGeometry(0.5, 36, 36),
+            material: new THREE.MeshPhysicalMaterial({
+              color: 0xffffff,
+            }),
+            scale: 2
+          }
+        });
 
         scene.fog = fog;
+        scene.add(keyLight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         controls.enableDamping = true;
         camera.position.z = 250;
+
+        keyLight.position.set(120, 180, 120);
+        keyLight.castShadow = true;
+        keyLight.shadow.mapSize.set(4096, 4096);
+        keyLight.shadow.camera.near = 1;
+        keyLight.shadow.camera.far = 512;
+        keyLight.shadow.camera.left = -512;
+        keyLight.shadow.camera.right = 512;
+        keyLight.shadow.camera.top = 512;
+        keyLight.shadow.camera.bottom = -512;
 
         const qp = new URLSearchParams(window.location.search);
         const amount = +(qp.get('amount') || 1000);
@@ -254,6 +277,9 @@
           folders.links.add(fdg.links, 'visible').name('visible');
           folders.links.add(fdg, 'linksInheritColor').name('inheritColor');
           folders.links.addColor(fdg, 'linkColor').name('color');
+
+          fdg.points.castShadow = true;
+          fdg.points.receiveShadow = true;
 
           scene.add(fdg);
 

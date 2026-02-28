@@ -36,7 +36,9 @@ class NodesInstancedMesh extends InstancedMesh {
 
     this.count = count;
     this.frustumCulled =
-      typeof options.frustumCulled === 'boolean' ? options.frustumCulled : false;
+      typeof options.frustumCulled === 'boolean'
+        ? options.frustumCulled
+        : false;
 
     this.userData.fdgNodeRenderMode = 'instancedMesh';
     this.userData.fdgOwnsGeometry = !options.geometry;
@@ -62,7 +64,7 @@ class NodesInstancedMesh extends InstancedMesh {
       instanceColor.setRGB(
         colors.array[ci + 0] ?? fallbackColor.r,
         colors.array[ci + 1] ?? fallbackColor.g,
-        colors.array[ci + 2] ?? fallbackColor.b
+        colors.array[ci + 2] ?? fallbackColor.b,
       );
       this.setColorAt(i, instanceColor);
     }
@@ -95,7 +97,7 @@ class NodesInstancedMesh extends InstancedMesh {
         scale.set(
           getScalarScale(value.x, fallback),
           getScalarScale(value.y, fallback),
-          getScalarScale(value.z, fallback)
+          getScalarScale(value.z, fallback),
         );
         return;
       }
@@ -110,7 +112,7 @@ class NodesInstancedMesh extends InstancedMesh {
       scale.set(
         getScalarScale(fdgScale.x, fallback),
         getScalarScale(fdgScale.y, fallback),
-        getScalarScale(fdgScale.z, fallback)
+        getScalarScale(fdgScale.z, fallback),
       );
       return;
     }
@@ -125,13 +127,14 @@ class NodesInstancedMesh extends InstancedMesh {
 
     this._ensureReadbackSize(textureSize);
     const readback = this.userData.fdgReadback;
+
     renderer.readRenderTargetPixels(
       renderTarget,
       0,
       0,
       textureSize,
       textureSize,
-      readback
+      readback,
     );
 
     for (let i = 0; i < this.count; i++) {
