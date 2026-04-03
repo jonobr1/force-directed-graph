@@ -393,6 +393,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
     varying float vViewZ;
 
     attribute float imageKey;
+    attribute float pointSize;
 
     void main() {
 
@@ -402,7 +403,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
 
       vec4 mvPosition = modelViewMatrix * vec4( vPosition, 1.0 );
 
-      gl_PointSize = nodeRadius * nodeScale;
+      gl_PointSize = nodeRadius * pointSize * nodeScale;
       gl_PointSize *= mix( 1.0, frustumSize / - mvPosition.z, sizeAttenuation );
 
       vDistance = 1.0 / - mvPosition.z;
@@ -619,6 +620,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       const vertices = [];
       const colors = [];
       const imageKeys = [];
+      const sizes = [];
       return each(data.nodes, (_, i) => {
         const node = data.nodes[i];
         const x = i % size2 / size2;
@@ -636,6 +638,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
         } else {
           imageKeys.push(-1);
         }
+        sizes.push(typeof node.size !== "undefined" ? node.size : 1);
       }).then(() => {
         const geometry = new import_three2.BufferGeometry();
         geometry.setAttribute(
@@ -649,6 +652,10 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
         geometry.setAttribute(
           "imageKey",
           new import_three2.Float32BufferAttribute(imageKeys, 1)
+        );
+        geometry.setAttribute(
+          "pointSize",
+          new import_three2.Float32BufferAttribute(sizes, 1)
         );
         return { atlas, geometry };
       });

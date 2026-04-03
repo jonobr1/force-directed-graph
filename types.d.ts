@@ -237,6 +237,7 @@ declare module '@jonobr1/force-directed-graph' {
     isStatic?: boolean;
     color?: CSSStyleValue;
     image?: string;
+    size?: number;
   };
   export type LinkData = { source: number; target: number };
   export type DataType = {

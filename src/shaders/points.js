@@ -19,6 +19,7 @@ const points = {
     varying float vViewZ;
 
     attribute float imageKey;
+    attribute float pointSize;
 
     void main() {
 
@@ -28,7 +29,7 @@ const points = {
 
       vec4 mvPosition = modelViewMatrix * vec4( vPosition, 1.0 );
 
-      gl_PointSize = nodeRadius * nodeScale;
+      gl_PointSize = nodeRadius * pointSize * nodeScale;
       gl_PointSize *= mix( 1.0, frustumSize / - mvPosition.z, sizeAttenuation );
 
       vDistance = 1.0 / - mvPosition.z;

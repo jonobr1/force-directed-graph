@@ -49,6 +49,7 @@ class Points extends BasePoints {
     const vertices = [];
     const colors = [];
     const imageKeys = [];
+    const sizes = [];
 
     return each(data.nodes, (_, i) => {
 
@@ -72,6 +73,8 @@ class Points extends BasePoints {
         imageKeys.push(-1);
       }
 
+      sizes.push(typeof node.size !== 'undefined' ? node.size : 1.0);
+
     }).then(() => {
 
       const geometry = new BufferGeometry();
@@ -81,6 +84,8 @@ class Points extends BasePoints {
         'color', new Float32BufferAttribute(colors, 3));
       geometry.setAttribute(
         'imageKey', new Float32BufferAttribute(imageKeys, 1));
+      geometry.setAttribute(
+        'pointSize', new Float32BufferAttribute(sizes, 1));
 
       return { atlas, geometry };
 

@@ -408,6 +408,7 @@ var points = {
     varying float vViewZ;
 
     attribute float imageKey;
+    attribute float pointSize;
 
     void main() {
 
@@ -417,7 +418,7 @@ var points = {
 
       vec4 mvPosition = modelViewMatrix * vec4( vPosition, 1.0 );
 
-      gl_PointSize = nodeRadius * nodeScale;
+      gl_PointSize = nodeRadius * pointSize * nodeScale;
       gl_PointSize *= mix( 1.0, frustumSize / - mvPosition.z, sizeAttenuation );
 
       vDistance = 1.0 / - mvPosition.z;
@@ -634,6 +635,7 @@ var Points = class extends import_three2.Points {
     const vertices = [];
     const colors = [];
     const imageKeys = [];
+    const sizes = [];
     return each(data.nodes, (_, i) => {
       const node = data.nodes[i];
       const x = i % size2 / size2;
@@ -651,6 +653,7 @@ var Points = class extends import_three2.Points {
       } else {
         imageKeys.push(-1);
       }
+      sizes.push(typeof node.size !== "undefined" ? node.size : 1);
     }).then(() => {
       const geometry = new import_three2.BufferGeometry();
       geometry.setAttribute(
@@ -664,6 +667,10 @@ var Points = class extends import_three2.Points {
       geometry.setAttribute(
         "imageKey",
         new import_three2.Float32BufferAttribute(imageKeys, 1)
+      );
+      geometry.setAttribute(
+        "pointSize",
+        new import_three2.Float32BufferAttribute(sizes, 1)
       );
       return { atlas, geometry };
     });
