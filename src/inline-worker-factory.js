@@ -28,17 +28,16 @@ class WasmMemoryError extends Error {
   }
 }
 
-function buildLinkTextureData(links, nodeAmount, textureSize) {
+function buildLinkTextureData(linksBuffer, linksLength, nodeAmount, textureSize) {
   const totalElements = textureSize * textureSize;
   const linksData = new Float32Array(totalElements * 4);
   const linkRangesData = new Float32Array(totalElements * 4);
   const linksByNode = Array.from({ length: nodeAmount }, () => []);
   const packedLinks = [];
 
-  for (let i = 0; i < links.length; i++) {
-    const link = links[i];
-    const sourceIndex = link.sourceIndex;
-    const targetIndex = link.targetIndex;
+  for (let i = 0; i < linksLength; i++) {
+    const sourceIndex = linksBuffer[i * 2];
+    const targetIndex = linksBuffer[i * 2 + 1];
     const isValid =
       Number.isInteger(sourceIndex) &&
       Number.isInteger(targetIndex) &&
@@ -51,9 +50,10 @@ function buildLinkTextureData(links, nodeAmount, textureSize) {
       continue;
     }
 
-    linksByNode[sourceIndex].push(link);
+    const entry = { sourceIndex, targetIndex };
+    linksByNode[sourceIndex].push(entry);
     if (targetIndex !== sourceIndex) {
-      linksByNode[targetIndex].push(link);
+      linksByNode[targetIndex].push(entry);
     }
   }
 
@@ -75,9 +75,7 @@ function buildLinkTextureData(links, nodeAmount, textureSize) {
   }
 
   for (let i = 0; i < packedLinks.length; i++) {
-    const link = packedLinks[i];
-    const sourceIndex = link.sourceIndex;
-    const targetIndex = link.targetIndex;
+    const { sourceIndex, targetIndex } = packedLinks[i];
     const linkOffset = i * 4;
 
     linksData[linkOffset + 0] = (sourceIndex % textureSize) / textureSize;
@@ -93,15 +91,11 @@ function buildLinkTextureData(links, nodeAmount, textureSize) {
   };
 }
 
-function getPackedLinkRequirement(links, nodeAmount) {
+function getPackedLinkRequirement(linksBuffer, linksLength, nodeAmount) {
   let packed = 0;
-  for (let i = 0; i < links.length; i++) {
-    const link = links[i];
-    if (!link || typeof link !== 'object') {
-      continue;
-    }
-    const sourceIndex = link.sourceIndex;
-    const targetIndex = link.targetIndex;
+  for (let i = 0; i < linksLength; i++) {
+    const sourceIndex = linksBuffer[i * 2];
+    const targetIndex = linksBuffer[i * 2 + 1];
     const isValid =
       Number.isInteger(sourceIndex) &&
       Number.isInteger(targetIndex) &&
@@ -120,13 +114,19 @@ function getPackedLinkRequirement(links, nodeAmount) {
 }
 
 function validateInput(data) {
-  const { nodes, links, textureSize, frustumSize } = data;
+  const { nodesBuffer, nodesLength, linksBuffer, linksLength, textureSize, frustumSize } = data;
 
-  if (!Array.isArray(nodes)) {
-    throw new InputValidationError('Invalid input: nodes must be an array');
+  if (!(nodesBuffer instanceof Float32Array)) {
+    throw new InputValidationError('Invalid input: nodesBuffer must be a Float32Array');
   }
-  if (!Array.isArray(links)) {
-    throw new InputValidationError('Invalid input: links must be an array');
+  if (!(linksBuffer instanceof Int32Array)) {
+    throw new InputValidationError('Invalid input: linksBuffer must be an Int32Array');
+  }
+  if (!Number.isInteger(nodesLength) || nodesLength < 0) {
+    throw new InputValidationError('Invalid input: nodesLength must be a non-negative integer');
+  }
+  if (!Number.isInteger(linksLength) || linksLength < 0) {
+    throw new InputValidationError('Invalid input: linksLength must be a non-negative integer');
   }
   if (!Number.isInteger(textureSize) || textureSize <= 0) {
     throw new InputValidationError('Invalid input: textureSize must be a positive integer');
@@ -144,12 +144,12 @@ function validateInput(data) {
   }
 
   const totalElements = textureSize * textureSize;
-  const nodesDataSize = nodes.length * 4 * 4;
-  const linksDataSize = links.length * 2 * 4;
+  const nodesDataSize = nodesLength * 4 * 4;
+  const linksDataSize = linksLength * 2 * 4;
   const positionsSize = totalElements * 4 * 4;
   const linksTextureSize = totalElements * 4 * 4;
   const linkRangesTextureSize = totalElements * 4 * 4;
-  const requiredPackedLinks = getPackedLinkRequirement(links, nodes.length);
+  const requiredPackedLinks = getPackedLinkRequirement(linksBuffer, linksLength, nodesLength);
   const totalBytes =
     nodesDataSize + linksDataSize + positionsSize + linksTextureSize + linkRangesTextureSize;
 
@@ -246,23 +246,25 @@ async function initWasm() {
  */
 async function processTextures(data) {
   const {
-    nodes,
-    links,
+    nodesBuffer,
+    nodesLength,
+    linksBuffer,
+    linksLength,
     textureSize,
     frustumSize,
     requestId
   } = data;
-  
+
   if (!wasmReady) {
     await initWasm();
   }
-  
+
   if (!wasmReady) {
     throw new Error('WASM module failed to initialize');
   }
-  
+
   const startTime = performance.now();
-  
+
   try {
     const {
       totalElements,
@@ -272,7 +274,7 @@ async function processTextures(data) {
       linksTextureSize,
       linkRangesTextureSize,
     } = validateInput(data);
-    
+
     const { allocateMemory, freeMemory, processTextures, memory } = wasmModule.exports;
     if (!allocateMemory || !freeMemory || !processTextures || !memory) {
       throw new Error('WASM exports are missing required texture processing functions');
@@ -287,43 +289,25 @@ async function processTextures(data) {
     let positionsResult = null;
     let linksResult = null;
     let linkRangesResult = null;
-    
+
     try {
       nodesDataPtr = allocateMemory(nodesDataSize);
       linksDataPtr = allocateMemory(linksDataSize);
       positionsPtr = allocateMemory(positionsSize);
       linksTexturePtr = allocateMemory(linksTextureSize);
       linkRangesTexturePtr = allocateMemory(linkRangesTextureSize);
-    
-      // Prepare and copy node data
+
+      // Copy pre-serialized typed arrays directly into WASM memory
       const wasmMemory = new Uint8Array(memory.buffer);
-      const nodesFloat32 = new Float32Array(nodes.length * 4);
-      for (let i = 0; i < nodes.length; i++) {
-        const node = nodes[i];
-        const offset = i * 4;
-        nodesFloat32[offset + 0] = typeof node.x !== 'undefined' ? node.x : NaN;
-        nodesFloat32[offset + 1] = typeof node.y !== 'undefined' ? node.y : NaN;
-        nodesFloat32[offset + 2] = typeof node.z !== 'undefined' ? node.z : NaN;
-        nodesFloat32[offset + 3] = node.isStatic ? 1.0 : 0.0;
-      }
-      wasmMemory.set(new Uint8Array(nodesFloat32.buffer), nodesDataPtr);
-      
-      // Prepare and copy links data
-      const linksInt32 = new Int32Array(links.length * 2);
-      for (let i = 0; i < links.length; i++) {
-        const link = links[i];
-        const offset = i * 2;
-        linksInt32[offset + 0] = link.sourceIndex;
-        linksInt32[offset + 1] = link.targetIndex;
-      }
-      wasmMemory.set(new Uint8Array(linksInt32.buffer), linksDataPtr);
-      
+      wasmMemory.set(new Uint8Array(nodesBuffer.buffer), nodesDataPtr);
+      wasmMemory.set(new Uint8Array(linksBuffer.buffer), linksDataPtr);
+
       // Process textures in WASM
       packedLinkAmount = processTextures(
         nodesDataPtr,
-        nodes.length,
+        nodesLength,
         linksDataPtr,
-        links.length,
+        linksLength,
         textureSize,
         positionsPtr,
         linksTexturePtr,
@@ -386,33 +370,36 @@ async function processTextures(data) {
  */
 function processFallback(data) {
   const {
-    nodes,
-    links,
+    nodesBuffer,
+    nodesLength,
+    linksBuffer,
+    linksLength,
     textureSize,
     frustumSize,
     requestId
   } = data;
-  
+
   const startTime = performance.now();
-  
+
   try {
     const { totalElements } = validateInput(data);
     const positionsData = new Float32Array(totalElements * 4);
-    
-    // Process positions
+
+    // Process positions from pre-serialized typed array
     for (let i = 0; i < totalElements; i++) {
       const baseIndex = i * 4;
-      
-      if (i < nodes.length) {
-        const node = nodes[i];
-        const x = typeof node.x !== 'undefined' ? node.x : (Math.random() * 2 - 1);
-        const y = typeof node.y !== 'undefined' ? node.y : (Math.random() * 2 - 1);
-        const z = typeof node.z !== 'undefined' ? node.z : (Math.random() * 2 - 1);
-        
+
+      if (i < nodesLength) {
+        const nb = i * 4;
+        // NaN encodes "no initial position" — use random placement
+        const x = !isNaN(nodesBuffer[nb + 0]) ? nodesBuffer[nb + 0] : (Math.random() * 2 - 1);
+        const y = !isNaN(nodesBuffer[nb + 1]) ? nodesBuffer[nb + 1] : (Math.random() * 2 - 1);
+        const z = !isNaN(nodesBuffer[nb + 2]) ? nodesBuffer[nb + 2] : (Math.random() * 2 - 1);
+
         positionsData[baseIndex + 0] = x;
         positionsData[baseIndex + 1] = y;
         positionsData[baseIndex + 2] = z;
-        positionsData[baseIndex + 3] = node.isStatic ? 1 : 0;
+        positionsData[baseIndex + 3] = nodesBuffer[nb + 3];
       } else {
         const farAway = frustumSize * 10;
         positionsData[baseIndex + 0] = farAway;
@@ -421,8 +408,8 @@ function processFallback(data) {
         positionsData[baseIndex + 3] = 0;
       }
     }
-    
-    const linkTextureData = buildLinkTextureData(links, nodes.length, textureSize);
+
+    const linkTextureData = buildLinkTextureData(linksBuffer, linksLength, nodesLength, textureSize);
     
     const processingTime = performance.now() - startTime;
     

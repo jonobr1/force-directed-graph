@@ -125,7 +125,7 @@ class TextureWorkerManager {
    * Process texture data using worker
    * @param {Object} data - Processing data
    * @param {Array} data.nodes - Node data
-   * @param {Array} data.links - Link data
+   * @param {Array} data.links - Link data (must have sourceIndex/targetIndex)
    * @param {number} data.textureSize - Texture size
    * @param {number} data.frustumSize - Frustum size
    * @param {boolean} data.useWasm - Whether to use WASM
@@ -135,23 +135,49 @@ class TextureWorkerManager {
     if (!this.isWorkerReady) {
       throw new Error('Worker not ready');
     }
-    
+
     const requestId = ++this.requestId;
-    
+
+    // Serialize node objects to a typed array for zero-copy transfer.
+    // Layout: [x, y, z, isStatic] per node. NaN encodes "no initial position".
+    const nodesBuffer = new Float32Array(data.nodes.length * 4);
+    for (let i = 0; i < data.nodes.length; i++) {
+      const node = data.nodes[i];
+      const o = i * 4;
+      nodesBuffer[o + 0] = typeof node.x !== 'undefined' ? node.x : NaN;
+      nodesBuffer[o + 1] = typeof node.y !== 'undefined' ? node.y : NaN;
+      nodesBuffer[o + 2] = typeof node.z !== 'undefined' ? node.z : NaN;
+      nodesBuffer[o + 3] = node.isStatic ? 1.0 : 0.0;
+    }
+
+    // Serialize link objects to a typed array for zero-copy transfer.
+    // Layout: [sourceIndex, targetIndex] per link.
+    const linksBuffer = new Int32Array(data.links.length * 2);
+    for (let i = 0; i < data.links.length; i++) {
+      const link = data.links[i];
+      linksBuffer[i * 2 + 0] = link.sourceIndex;
+      linksBuffer[i * 2 + 1] = link.targetIndex;
+    }
+
     return new Promise((resolve, reject) => {
       // Store request for response handling
       this.pendingRequests.set(requestId, { resolve, reject });
-      
-      // Send processing request
+
+      // Transfer typed arrays — zero-copy, no structured clone overhead
       this.worker.postMessage({
         type: 'process-textures',
         data: {
-          ...data,
+          nodesBuffer,
+          nodesLength: data.nodes.length,
+          linksBuffer,
+          linksLength: data.links.length,
+          textureSize: data.textureSize,
+          frustumSize: data.frustumSize,
           requestId,
           useWasm: this.isWasmReady && data.useWasm !== false
         }
-      });
-      
+      }, [nodesBuffer.buffer, linksBuffer.buffer]);
+
       // Timeout after 30 seconds
       setTimeout(() => {
         if (this.pendingRequests.has(requestId)) {

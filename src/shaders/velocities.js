@@ -32,6 +32,8 @@ export const simplex = `
   uniform float stiffness;
   uniform float gravity;
   uniform float pinStrength;
+  uniform float frustumSize;
+  uniform float softBoundary;
   uniform float uBeginning;
   uniform float uEnding;
   uniform sampler2D textureLinks;
@@ -63,6 +65,13 @@ export const simplex = `
     vec3 a = vec3( 0.0 ),
         b = vec3( 0.0 ),
         c = vec3( 0.0 );
+
+    if ( softBoundary > 0.5 ) {
+      float boundaryInner = frustumSize * 0.8;
+      vec3 excess = max( abs( p1 ) - boundaryInner, vec3( 0.0 ) );
+      a = -sign( p1 ) * excess * excess * gravity;
+      a.z *= 1.0 - is2D;
+    }
 
     vec4 linkRange = texture2D( textureLinkRanges, uv );
     float linkStart = linkRange.x;
@@ -120,6 +129,8 @@ export const nested = `
   uniform float stiffness;
   uniform float gravity;
   uniform float pinStrength;
+  uniform float frustumSize;
+  uniform float softBoundary;
   uniform float uBeginning;
   uniform float uEnding;
   uniform sampler2D textureLinks;
@@ -151,6 +162,13 @@ export const nested = `
     vec3 a = vec3( 0.0 ),
         b = vec3( 0.0 ),
         c = vec3( 0.0 );
+
+    if ( softBoundary > 0.5 ) {
+      float boundaryInner = frustumSize * 0.8;
+      vec3 excess = max( abs( p1 ) - boundaryInner, vec3( 0.0 ) );
+      a = -sign( p1 ) * excess * excess * gravity;
+      a.z *= 1.0 - is2D;
+    }
 
     /*
     for ( float i = 0.0; i < linkAmount; i += 1.0 ) {

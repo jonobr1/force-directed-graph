@@ -12,6 +12,10 @@ import { TextureWorkerManager } from './texture-worker-manager.js';
 const color = new Color();
 const position = new Vector3();
 const size = new Vector2();
+
+const DT_MIN = 1 / 240; // ~4.17ms — prevents absurdly fast frames from destabilizing physics
+const DT_MAX = 1 / 30;  // ~33.33ms — clamps the spike on tab resume
+const SMOOTH_TAU = 0.5; // seconds — exponential spring time constant for dt smoothing
 const buffers = {
   int: new Uint8ClampedArray(4),
   float: new Float32Array(4),
@@ -86,6 +90,8 @@ function buildLinkTextureData(preparedLinks, nodeAmount, size) {
 
 class ForceDirectedGraph extends Group {
   ready = false;
+  _lastTime = null;
+  _smoothedDt = 1 / 60;
 
   /**
    * @param {THREE.WebGLRenderer} renderer - the three.js renderer referenced to create the render targets
@@ -114,6 +120,7 @@ class ForceDirectedGraph extends Group {
       nodeScale: { value: 8 },
       sizeAttenuation: { value: true },
       frustumSize: { value: 100 },
+      softBoundary: { value: true },
       linksInheritColor: { value: false },
       pointsInheritColor: { value: true },
       pointColor: { value: new Color(1, 1, 1) },
@@ -123,6 +130,7 @@ class ForceDirectedGraph extends Group {
       uEnding: { value: 1 },
       uNodeAmount: { value: 0 },
     };
+    this.userData._shaderTimeStep = { value: this.userData.uniforms.timeStep.value };
     this.userData.hit = new Hit(this);
     this.userData.workerManager = new TextureWorkerManager();
 
@@ -150,6 +158,7 @@ class ForceDirectedGraph extends Group {
     'nodeScale',
     'sizeAttenuation',
     'frustumSize',
+    'softBoundary',
     'linksInheritColor',
     'pointsInheritColor',
     'pointColor',
@@ -168,6 +177,14 @@ class ForceDirectedGraph extends Group {
     const scope = this;
     let { gpgpu, registry, renderer, uniforms } = this.userData;
     let packedLinkAmount = 0;
+
+    // Reset adaptive timestep state so a fresh simulation doesn't carry stale delta
+    this._lastTime = null;
+    this._smoothedDt = 1 / 60;
+
+    // Dedicated uniform object for shader — keeps public timeStep getter as user speed scale
+    const shaderTimeStep = { value: uniforms.timeStep.value };
+    this.userData._shaderTimeStep = shaderTimeStep;
 
     this.ready = false;
     this.userData.data = data;
@@ -362,7 +379,7 @@ class ForceDirectedGraph extends Group {
         ]);
 
         variables.positions.material.uniforms.is2D = uniforms.is2D;
-        variables.positions.material.uniforms.timeStep = uniforms.timeStep;
+        variables.positions.material.uniforms.timeStep = shaderTimeStep;
 
         variables.velocities.material.uniforms.alpha = uniforms.alpha;
         variables.velocities.material.uniforms.is2D = uniforms.is2D;
@@ -379,7 +396,7 @@ class ForceDirectedGraph extends Group {
           value: packedLinkAmount,
         };
         variables.velocities.material.uniforms.maxSpeed = uniforms.maxSpeed;
-        variables.velocities.material.uniforms.timeStep = uniforms.timeStep;
+        variables.velocities.material.uniforms.timeStep = shaderTimeStep;
         variables.velocities.material.uniforms.damping = uniforms.damping;
         variables.velocities.material.uniforms.repulsion = uniforms.repulsion;
         variables.velocities.material.uniforms.textureLinks = {
@@ -396,6 +413,8 @@ class ForceDirectedGraph extends Group {
         variables.velocities.material.uniforms.textureTargetPositions = {
           value: textures.targetPositions,
         };
+        variables.velocities.material.uniforms.frustumSize = uniforms.frustumSize;
+        variables.velocities.material.uniforms.softBoundary = uniforms.softBoundary;
 
         variables.positions.wrapS = variables.positions.wrapT = RepeatWrapping;
         variables.velocities.wrapS = variables.velocities.wrapT =
@@ -444,9 +463,19 @@ class ForceDirectedGraph extends Group {
       return this;
     }
 
-    const { gpgpu, textures, variables, uniforms } = this.userData;
+    const { gpgpu, textures, variables, uniforms, _shaderTimeStep } = this.userData;
 
     uniforms.alpha.value *= uniforms.decay.value;
+
+    if (this._lastTime === null) {
+      this._lastTime = time;
+    } else {
+      const rawDt = Math.min(Math.max((time - this._lastTime) / 1000, DT_MIN), DT_MAX);
+      this._lastTime = time;
+      const springAlpha = 1 - Math.exp(-rawDt / SMOOTH_TAU);
+      this._smoothedDt += springAlpha * (rawDt - this._smoothedDt);
+      _shaderTimeStep.value = this._smoothedDt * uniforms.timeStep.value;
+    }
 
     variables.velocities.material.uniforms.time.value = time / 1000;
     gpgpu.compute();
@@ -735,6 +764,12 @@ class ForceDirectedGraph extends Group {
   }
   set frustumSize(v) {
     this.userData.uniforms.frustumSize.value = v;
+  }
+  get softBoundary() {
+    return this.userData.uniforms.softBoundary.value;
+  }
+  set softBoundary(v) {
+    this.userData.uniforms.softBoundary.value = v;
   }
   get linksInheritColor() {
     return this.userData.uniforms.linksInheritColor.value;
