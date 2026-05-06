@@ -11,8 +11,7 @@
     "build": "npm run build:wasm && node ./utils/build.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint . --fix",
-    "types": "tsc --outFile types.d.ts"
+    "lint": "eslint . --fix"
   },
   "files": [
     "package.json",

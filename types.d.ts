@@ -327,8 +327,8 @@ declare module '@jonobr1/force-directed-graph' {
     get nodeRadius(): number;
     set nodeScale(arg: number);
     get nodeScale(): number;
-    set sizeAttenuation(arg: number);
-    get sizeAttenuation(): number;
+    set sizeAttenuation(arg: boolean);
+    get sizeAttenuation(): boolean;
     set frustumSize(arg: number);
     get frustumSize(): number;
     set linksInheritColor(arg: boolean);
