@@ -18,7 +18,10 @@ class Links extends LineSegments {
         inheritColors: uniforms.linksInheritColor,
         opacity: uniforms.opacity,
         texturePositions: { value: null },
-        uColor: uniforms.linkColor
+        uColor: uniforms.linkColor,
+        uBeginning: uniforms.uBeginning,
+        uEnding: uniforms.uEnding,
+        uNodeAmount: uniforms.uNodeAmount,
       } },
       vertexShader: shader.vertexShader,
       fragmentShader: shader.fragmentShader,
@@ -37,6 +40,7 @@ class Links extends LineSegments {
     const geometry = new BufferGeometry();
     const vertices = [];
     const colors = [];
+    const partnerIndices = [];
 
     const v = points.geometry.attributes.position.array;
     const c = points.geometry.attributes.color.array;
@@ -58,6 +62,7 @@ class Links extends LineSegments {
 
       vertices.push(x, y, z);
       colors.push(r, g, b);
+      partnerIndices.push(v[ti + 2]); // target's nodeIndex+1
 
       x = v[ti + 0];
       y = v[ti + 1];
@@ -69,6 +74,7 @@ class Links extends LineSegments {
 
       vertices.push(x, y, z);
       colors.push(r, g, b);
+      partnerIndices.push(v[si + 2]); // source's nodeIndex+1
 
     }).then(() => {
 
@@ -76,6 +82,8 @@ class Links extends LineSegments {
         new Float32BufferAttribute(vertices, 3));
       geometry.setAttribute('color',
         new Float32BufferAttribute(colors, 3));
+      geometry.setAttribute('partnerIndex',
+        new Float32BufferAttribute(partnerIndices, 1));
 
       return geometry;
 

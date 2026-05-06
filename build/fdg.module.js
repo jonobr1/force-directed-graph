@@ -1,5 +1,12 @@
 // src/index.js
-import { Color as Color4, Group, Raycaster, RepeatWrapping, Vector2, Vector3 as Vector32 } from "three";
+import {
+  Color as Color4,
+  Group,
+  Raycaster,
+  RepeatWrapping,
+  Vector2,
+  Vector3 as Vector32
+} from "three";
 import { GPUComputationRenderer } from "three/examples/jsm/misc/GPUComputationRenderer.js";
 
 // src/math.js
@@ -124,7 +131,7 @@ var jiggle = `
   }
 `;
 var link = `
-  vec3 link( int id1, vec2 uv2 ) {
+  vec3 link( int id1, vec2 uv2, float rangeStart, float rangeEnd ) {
 
     vec3 result = vec3( 0.0 );
 
@@ -163,7 +170,9 @@ var link = `
 
     result.z *= 1.0 - is2D;
 
-    return result;
+    float siInRange = step( rangeStart, siF ) * ( 1.0 - step( rangeEnd, siF ) );
+    float tiInRange = step( rangeStart, tiF ) * ( 1.0 - step( rangeEnd, tiF ) );
+    return result * siInRange * tiInRange;
 
   }
 `;
@@ -195,6 +204,11 @@ var center = `
     return - p1 * gravity * 0.1;
   }
 `;
+var anchor = `
+  vec3 anchor( vec3 p1, vec3 target ) {
+    return ( target - p1 ) * gravity * 0.1;
+  }
+`;
 
 // src/shaders/velocities.js
 var types = ["simplex", "nested"];
@@ -213,8 +227,12 @@ var simplex = `
   uniform float springLength;
   uniform float stiffness;
   uniform float gravity;
+  uniform float pinStrength;
+  uniform float uBeginning;
+  uniform float uEnding;
   uniform sampler2D textureLinks;
   uniform sampler2D textureLinkRanges;
+  uniform sampler2D textureTargetPositions;
 
   ${getPosition}
   ${getVelocity}
@@ -225,6 +243,7 @@ var simplex = `
   ${link}
   ${charge}
   ${center}
+  ${anchor}
 
   void main() {
 
@@ -233,6 +252,9 @@ var simplex = `
 
     vec3 p1 = getPosition( uv );
     vec3 v1 = getVelocity( uv );
+
+    float rangeStart = uBeginning * nodeAmount;
+    float rangeEnd   = uEnding   * nodeAmount;
 
     vec3 a = vec3( 0.0 ),
         b = vec3( 0.0 ),
@@ -247,7 +269,7 @@ var simplex = `
         break;
       }
       vec2 linkUV = getUVFromIndex( linkStart + i );
-      b += link( id1, linkUV );
+      b += link( id1, linkUV, rangeStart, rangeEnd );
     }
 
     for ( float i = 0.0; i < nodeAmount; i += 1.0 ) {
@@ -255,15 +277,18 @@ var simplex = `
       int id2 = getIndex( uv2 );
       vec3 v2 = getVelocity( uv2 );
       vec3 p2 = getPosition( uv2 );
-      c += charge( i, id1, p1, v1, id2, p2, v2 );
+      float id2InRange = step( rangeStart, i ) * ( 1.0 - step( rangeEnd, i ) );
+      c += charge( i, id1, p1, v1, id2, p2, v2 ) * id2InRange;
     }
 
-    b *= 1.0 - step( nodeAmount, float( id1 ) );
-    c *= 1.0 - step( nodeAmount, float( id1 ) );
+    float id1InRange = step( rangeStart, float( id1 ) ) * ( 1.0 - step( rangeEnd, float( id1 ) ) );
+    b *= id1InRange;
+    c *= id1InRange;
 
     // 4.
-    vec3 d = center( p1 );
-    vec3 acceleration = a + b + c + d;
+    vec4 targetTexel = texture2D( textureTargetPositions, uv );
+    vec3 d = mix( center( p1 ), anchor( p1, targetTexel.xyz ), pinStrength * targetTexel.w );
+    vec3 acceleration = a + b + c + d * id1InRange;
 
     // Calculate Velocity
     vec3 velocity = ( v1 + ( acceleration * timeStep ) ) * damping * alpha;
@@ -289,8 +314,12 @@ var nested = `
   uniform float springLength;
   uniform float stiffness;
   uniform float gravity;
+  uniform float pinStrength;
+  uniform float uBeginning;
+  uniform float uEnding;
   uniform sampler2D textureLinks;
   uniform sampler2D textureLinksLookUp;
+  uniform sampler2D textureTargetPositions;
 
   ${getPosition}
   ${getVelocity}
@@ -301,6 +330,7 @@ var nested = `
   ${link}
   ${charge}
   ${center}
+  ${anchor}
 
   void main() {
 
@@ -310,6 +340,9 @@ var nested = `
     vec3 p1 = getPosition( uv );
     vec3 v1 = getVelocity( uv );
 
+    float rangeStart = uBeginning * nodeAmount;
+    float rangeEnd   = uEnding   * nodeAmount;
+
     vec3 a = vec3( 0.0 ),
         b = vec3( 0.0 ),
         c = vec3( 0.0 );
@@ -317,7 +350,7 @@ var nested = `
     /*
     for ( float i = 0.0; i < linkAmount; i += 1.0 ) {
       // TODO: get all edges and link them
-      b += link( id1, uv2 );
+      b += link( id1, uv2, rangeStart, rangeEnd );
     }
     */
 
@@ -332,18 +365,21 @@ var nested = `
       vec3 v2 = getVelocity( uv2 );
       vec3 p2 = getPosition( uv2 );
 
+      float id2InRange = step( rangeStart, i ) * ( 1.0 - step( rangeEnd, i ) );
       if ( i < nodeAmount) {
-        c += charge( i, id1, p1, v1, id2, p2, v2 );
+        c += charge( i, id1, p1, v1, id2, p2, v2 ) * id2InRange;
       }
 
     }
 
-    b *= 1.0 - step( edgeAmount, float( id1 ) );
-    c *= 1.0 - step( nodeAmount, float( id1 ) );
+    float id1InRange = step( rangeStart, float( id1 ) ) * ( 1.0 - step( rangeEnd, float( id1 ) ) );
+    b *= id1InRange;
+    c *= id1InRange;
 
   // 4.
-  vec3 d = center( p1 );
-  vec3 acceleration = a + b + c + d;
+  vec4 targetTexel = texture2D( textureTargetPositions, uv );
+  vec3 d = mix( center( p1 ), anchor( p1, targetTexel.xyz ), pinStrength * targetTexel.w );
+  vec3 acceleration = a + b + c + d * id1InRange;
 
   // Calculate Velocity
   vec3 velocity = ( v1 + ( acceleration * timeStep ) ) * damping * alpha;
@@ -384,24 +420,46 @@ var points = {
     uniform float is2D;
     uniform float nodeRadius;
     uniform float nodeScale;
+    uniform float uBeginning;
+    uniform float uEnding;
+    uniform float uNodeAmount;
     uniform sampler2D texturePositions;
+    uniform sampler2D textureTargetPositions;
 
     varying vec3 vColor;
     varying float vImageKey;
     varying float vDistance;
     varying float vViewZ;
+    varying vec3 vTargetPosition;
+    varying float vHasTarget;
 
     attribute float imageKey;
+    attribute float pointSize;
 
     void main() {
+
+      float nodeIndex  = position.z - 1.0;
+      float rangeStart = uBeginning * uNodeAmount;
+      float rangeEnd   = uEnding   * uNodeAmount;
+      float inRange    = step( rangeStart, nodeIndex ) * ( 1.0 - step( rangeEnd, nodeIndex ) );
+
+      if ( inRange < 0.5 ) {
+        gl_PointSize = 0.0;
+        gl_Position  = vec4( 0.0, 0.0, 10000.0, 1.0 );
+        return;
+      }
 
       vec4 texel = texture2D( texturePositions, position.xy );
       vec3 vPosition = texel.xyz;
       vPosition.z *= 1.0 - is2D;
 
+      vec4 targetTexel = texture2D( textureTargetPositions, position.xy );
+      vTargetPosition = targetTexel.xyz;
+      vHasTarget = targetTexel.w;
+
       vec4 mvPosition = modelViewMatrix * vec4( vPosition, 1.0 );
 
-      gl_PointSize = nodeRadius * nodeScale;
+      gl_PointSize = nodeRadius * pointSize * nodeScale;
       gl_PointSize *= mix( 1.0, frustumSize / - mvPosition.z, sizeAttenuation );
 
       vDistance = 1.0 / - mvPosition.z;
@@ -495,22 +553,22 @@ var points_default = points;
 
 // src/texture-atlas.js
 import { Texture } from "three";
-var anchor;
+var anchor2;
 var TextureAtlas = class _TextureAtlas extends Texture {
   map = [];
   dimensions = 1;
   isTextureAtlas = true;
   constructor() {
-    if (!anchor) {
-      anchor = document.createElement("a");
+    if (!anchor2) {
+      anchor2 = document.createElement("a");
     }
     super(document.createElement("canvas"));
     this.flipY = false;
   }
   static Resolution = 1024;
   static getAbsoluteURL(path) {
-    anchor.href = path;
-    return anchor.href;
+    anchor2.href = path;
+    return anchor2.href;
   }
   add(src) {
     const scope = this;
@@ -598,11 +656,15 @@ var Points = class extends BasePoints {
         nodeScale: uniforms.nodeScale,
         imageDimensions: { value: atlas.dimensions },
         texturePositions: { value: null },
+        textureTargetPositions: { value: null },
         textureAtlas: { value: atlas },
         size: uniforms.size,
         opacity: uniforms.opacity,
         uColor: uniforms.pointColor,
-        inheritColors: uniforms.pointsInheritColor
+        inheritColors: uniforms.pointsInheritColor,
+        uBeginning: uniforms.uBeginning,
+        uEnding: uniforms.uEnding,
+        uNodeAmount: uniforms.uNodeAmount
       } },
       vertexShader: points_default.vertexShader,
       fragmentShader: points_default.fragmentShader,
@@ -618,6 +680,7 @@ var Points = class extends BasePoints {
     const vertices = [];
     const colors = [];
     const imageKeys = [];
+    const sizes = [];
     return each(data.nodes, (_, i) => {
       const node = data.nodes[i];
       const x = i % size2 / size2;
@@ -635,6 +698,7 @@ var Points = class extends BasePoints {
       } else {
         imageKeys.push(-1);
       }
+      sizes.push(node.size != null ? node.size : 1);
     }).then(() => {
       const geometry = new BufferGeometry();
       geometry.setAttribute(
@@ -648,6 +712,10 @@ var Points = class extends BasePoints {
       geometry.setAttribute(
         "imageKey",
         new Float32BufferAttribute(imageKeys, 1)
+      );
+      geometry.setAttribute(
+        "pointSize",
+        new Float32BufferAttribute(sizes, 1)
       );
       return { atlas, geometry };
     });
@@ -669,11 +737,28 @@ var links = {
     #include <fog_pars_vertex>
 
     uniform float is2D;
+    uniform float uBeginning;
+    uniform float uEnding;
+    uniform float uNodeAmount;
     uniform sampler2D texturePositions;
+
+    attribute float partnerIndex;
 
     varying vec3 vColor;
 
     void main() {
+
+      float ownIndex      = position.z - 1.0;
+      float partnerIdx    = partnerIndex - 1.0;
+      float rangeStart    = uBeginning * uNodeAmount;
+      float rangeEnd      = uEnding   * uNodeAmount;
+      float ownInRange     = step( rangeStart, ownIndex )   * ( 1.0 - step( rangeEnd, ownIndex ) );
+      float partnerInRange = step( rangeStart, partnerIdx ) * ( 1.0 - step( rangeEnd, partnerIdx ) );
+
+      if ( ownInRange * partnerInRange < 0.5 ) {
+        gl_Position = vec4( 0.0, 0.0, 10000.0, 1.0 );
+        return;
+      }
 
       vec3 vPosition = texture2D( texturePositions, position.xy ).xyz;
       vPosition.z *= 1.0 - is2D;
@@ -712,7 +797,10 @@ var Links = class extends LineSegments {
         inheritColors: uniforms.linksInheritColor,
         opacity: uniforms.opacity,
         texturePositions: { value: null },
-        uColor: uniforms.linkColor
+        uColor: uniforms.linkColor,
+        uBeginning: uniforms.uBeginning,
+        uEnding: uniforms.uEnding,
+        uNodeAmount: uniforms.uNodeAmount
       } },
       vertexShader: links_default.vertexShader,
       fragmentShader: links_default.fragmentShader,
@@ -727,6 +815,7 @@ var Links = class extends LineSegments {
     const geometry = new BufferGeometry2();
     const vertices = [];
     const colors = [];
+    const partnerIndices = [];
     const v = points2.geometry.attributes.position.array;
     const c = points2.geometry.attributes.color.array;
     return each(data.links, (_, i) => {
@@ -741,6 +830,7 @@ var Links = class extends LineSegments {
       let b = c[si + 2];
       vertices.push(x, y, z);
       colors.push(r, g, b);
+      partnerIndices.push(v[ti + 2]);
       x = v[ti + 0];
       y = v[ti + 1];
       z = v[ti + 2];
@@ -749,6 +839,7 @@ var Links = class extends LineSegments {
       b = c[ti + 2];
       vertices.push(x, y, z);
       colors.push(r, g, b);
+      partnerIndices.push(v[si + 2]);
     }).then(() => {
       geometry.setAttribute(
         "position",
@@ -757,6 +848,10 @@ var Links = class extends LineSegments {
       geometry.setAttribute(
         "color",
         new Float32BufferAttribute2(colors, 3)
+      );
+      geometry.setAttribute(
+        "partnerIndex",
+        new Float32BufferAttribute2(partnerIndices, 1)
       );
       return geometry;
     });
@@ -940,12 +1035,28 @@ var hit = {
     uniform float nodeRadius;
     uniform float nodeScale;
     uniform float hitScale;
+    uniform float uBeginning;
+    uniform float uEnding;
+    uniform float uNodeAmount;
     uniform sampler2D texturePositions;
+
+    attribute float pointSize;
 
     varying vec3 vColor;
     varying float vDistance;
 
     void main() {
+
+      float nodeIndex  = position.z - 1.0;
+      float rangeStart = uBeginning * uNodeAmount;
+      float rangeEnd   = uEnding   * uNodeAmount;
+      float inRange    = step( rangeStart, nodeIndex ) * ( 1.0 - step( rangeEnd, nodeIndex ) );
+
+      if ( inRange < 0.5 ) {
+        gl_PointSize = 0.0;
+        gl_Position  = vec4( 0.0, 0.0, 10000.0, 1.0 );
+        return;
+      }
 
       vec4 texel = texture2D( texturePositions, position.xy );
       vec3 vPosition = texel.xyz;
@@ -953,7 +1064,7 @@ var hit = {
 
       vec4 mvPosition = modelViewMatrix * vec4( vPosition, 1.0 );
 
-      gl_PointSize = nodeRadius * nodeScale;
+      gl_PointSize = nodeRadius * pointSize * nodeScale;
       gl_PointSize *= mix( 1.0, frustumSize / - mvPosition.z, sizeAttenuation );
       gl_PointSize *= hitScale;
 
@@ -1813,6 +1924,7 @@ var ForceDirectedGraph = class extends Group {
       springLength: { value: 2 },
       stiffness: { value: 0.1 },
       gravity: { value: 0.1 },
+      pinStrength: { value: 0 },
       nodeRadius: { value: 1 },
       nodeScale: { value: 8 },
       sizeAttenuation: { value: true },
@@ -1821,7 +1933,10 @@ var ForceDirectedGraph = class extends Group {
       pointsInheritColor: { value: true },
       pointColor: { value: new Color4(1, 1, 1) },
       linkColor: { value: new Color4(1, 1, 1) },
-      opacity: { value: 1 }
+      opacity: { value: 1 },
+      uBeginning: { value: 0 },
+      uEnding: { value: 1 },
+      uNodeAmount: { value: 0 }
     };
     this.userData.hit = new Hit(this);
     this.userData.workerManager = new TextureWorkerManager();
@@ -1847,6 +1962,7 @@ var ForceDirectedGraph = class extends Group {
     "springLength",
     "stiffness",
     "gravity",
+    "pinStrength",
     "nodeRadius",
     "nodeScale",
     "sizeAttenuation",
@@ -1902,7 +2018,8 @@ var ForceDirectedGraph = class extends Group {
       positions: gpgpu.createTexture(),
       velocities: gpgpu.createTexture(),
       links: gpgpu.createTexture(),
-      linkRanges: gpgpu.createTexture()
+      linkRanges: gpgpu.createTexture(),
+      targetPositions: gpgpu.createTexture()
     };
     const variables = {
       positions: gpgpu.addVariable(
@@ -1918,6 +2035,7 @@ var ForceDirectedGraph = class extends Group {
     };
     this.userData.gpgpu = gpgpu;
     this.userData.variables = variables;
+    this.userData.textures = textures;
     return register().then(fill).then(setup).then(generate).then(complete).catch((error) => {
       console.warn("Force Directed Graph:", error);
     });
@@ -1954,10 +2072,16 @@ var ForceDirectedGraph = class extends Group {
           textures.links.image.data.set(result.links);
           textures.linkRanges.image.data.set(result.linkRanges);
           packedLinkAmount = result.packedLinkAmount;
-          console.log(`Texture processing completed in ${result.processingTime.toFixed(2)}ms using ${workerManager.isWasmAvailable() ? "WASM" : "JavaScript"}`);
+          fillTargetPositions();
+          console.log(
+            `Texture processing completed in ${result.processingTime.toFixed(2)}ms using ${workerManager.isWasmAvailable() ? "WASM" : "JavaScript"}`
+          );
           return Promise.resolve();
         } catch (error) {
-          console.warn("Worker processing failed, falling back to main thread:", error);
+          console.warn(
+            "Worker processing failed, falling back to main thread:",
+            error
+          );
         }
       }
       return fillMainThread(preparedLinks);
@@ -1971,24 +2095,43 @@ var ForceDirectedGraph = class extends Group {
       textures.links.image.data.set(linkTextureData.linksData);
       textures.linkRanges.image.data.set(linkTextureData.linkRangesData);
       packedLinkAmount = linkTextureData.packedLinkAmount;
-      return each(textures.positions.image.data, (_, i) => {
-        const k = i / 4;
-        const x = Math.random() * 2 - 1;
-        const y = Math.random() * 2 - 1;
-        const z = Math.random() * 2 - 1;
-        if (k < data.nodes.length) {
-          const node = data.nodes[k];
-          textures.positions.image.data[i + 0] = typeof node.x !== "undefined" ? node.x : x;
-          textures.positions.image.data[i + 1] = typeof node.y !== "undefined" ? node.y : y;
-          textures.positions.image.data[i + 2] = typeof node.z !== "undefined" ? node.z : z;
-          textures.positions.image.data[i + 3] = node.isStatic ? 1 : 0;
-        } else {
-          textures.positions.image.data[i + 0] = uniforms.frustumSize.value * 10;
-          textures.positions.image.data[i + 1] = uniforms.frustumSize.value * 10;
-          textures.positions.image.data[i + 2] = uniforms.frustumSize.value * 10;
-          textures.positions.image.data[i + 3] = uniforms.frustumSize.value * 10;
-        }
-      }, 4);
+      return each(
+        textures.positions.image.data,
+        (_, i) => {
+          const k = i / 4;
+          const x = Math.random() * 2 - 1;
+          const y = Math.random() * 2 - 1;
+          const z = Math.random() * 2 - 1;
+          if (k < data.nodes.length) {
+            const node = data.nodes[k];
+            textures.positions.image.data[i + 0] = typeof node.x !== "undefined" ? node.x : x;
+            textures.positions.image.data[i + 1] = typeof node.y !== "undefined" ? node.y : y;
+            textures.positions.image.data[i + 2] = typeof node.z !== "undefined" ? node.z : z;
+            textures.positions.image.data[i + 3] = node.isStatic ? 1 : 0;
+          } else {
+            textures.positions.image.data[i + 0] = uniforms.frustumSize.value * 10;
+            textures.positions.image.data[i + 1] = uniforms.frustumSize.value * 10;
+            textures.positions.image.data[i + 2] = uniforms.frustumSize.value * 10;
+            textures.positions.image.data[i + 3] = uniforms.frustumSize.value * 10;
+          }
+        },
+        4
+      ).then(fillTargetPositions);
+    }
+    function fillTargetPositions() {
+      for (let k = 0; k < data.nodes.length; k++) {
+        const node = data.nodes[k];
+        const i = k * 4;
+        const hasX = typeof node.x !== "undefined";
+        const hasY = typeof node.y !== "undefined";
+        const hasZ = typeof node.z !== "undefined";
+        const definedCount = (hasX ? 1 : 0) + (hasY ? 1 : 0) + (hasZ ? 1 : 0);
+        const hasTarget = definedCount >= 2 ? 1 : 0;
+        textures.targetPositions.image.data[i + 0] = hasTarget ? node.x ?? 0 : 0;
+        textures.targetPositions.image.data[i + 1] = hasTarget ? node.y ?? 0 : 0;
+        textures.targetPositions.image.data[i + 2] = hasTarget ? node.z ?? 0 : 0;
+        textures.targetPositions.image.data[i + 3] = hasTarget;
+      }
     }
     function setup() {
       return new Promise((resolve, reject) => {
@@ -2010,6 +2153,9 @@ var ForceDirectedGraph = class extends Group {
         variables.velocities.material.uniforms.nodeAmount = {
           value: data.nodes.length
         };
+        variables.velocities.material.uniforms.uBeginning = uniforms.uBeginning;
+        variables.velocities.material.uniforms.uEnding = uniforms.uEnding;
+        uniforms.uNodeAmount.value = data.nodes.length;
         variables.velocities.material.uniforms.edgeAmount = {
           value: packedLinkAmount
         };
@@ -2026,6 +2172,10 @@ var ForceDirectedGraph = class extends Group {
         variables.velocities.material.uniforms.springLength = uniforms.springLength;
         variables.velocities.material.uniforms.stiffness = uniforms.stiffness;
         variables.velocities.material.uniforms.gravity = uniforms.gravity;
+        variables.velocities.material.uniforms.pinStrength = uniforms.pinStrength;
+        variables.velocities.material.uniforms.textureTargetPositions = {
+          value: textures.targetPositions
+        };
         variables.positions.wrapS = variables.positions.wrapT = RepeatWrapping;
         variables.velocities.wrapS = variables.velocities.wrapT = RepeatWrapping;
         const error = gpgpu.init();
@@ -2044,7 +2194,12 @@ var ForceDirectedGraph = class extends Group {
         scope.userData.lookupGeometry = parsed.geometry;
         const nodeRenderer = scope.userData.renderers.nodes;
         if (nodeRenderer.type === "instancedMesh") {
-          points2 = new NodesInstancedMesh(parsed, uniforms, data, nodeRenderer);
+          points2 = new NodesInstancedMesh(
+            parsed,
+            uniforms,
+            data,
+            nodeRenderer
+          );
         } else {
           points2 = new Points(parsed, uniforms);
           scope.userData.hit.inherit(points2);
@@ -2071,7 +2226,7 @@ var ForceDirectedGraph = class extends Group {
     if (!this.ready) {
       return this;
     }
-    const { gpgpu, variables, uniforms } = this.userData;
+    const { gpgpu, textures, variables, uniforms } = this.userData;
     uniforms.alpha.value *= uniforms.decay.value;
     variables.velocities.material.uniforms.time.value = time / 1e3;
     gpgpu.compute();
@@ -2081,6 +2236,9 @@ var ForceDirectedGraph = class extends Group {
       const child = this.children[i];
       if (child.material && child.material.uniforms && child.material.uniforms.texturePositions) {
         child.material.uniforms.texturePositions.value = texture;
+        if (child.material.uniforms.textureTargetPositions) {
+          child.material.uniforms.textureTargetPositions.value = textures.targetPositions;
+        }
       }
       if (typeof child.updateFromRenderTarget === "function") {
         child.updateFromRenderTarget(this.userData.renderer, renderTarget);
@@ -2328,6 +2486,12 @@ var ForceDirectedGraph = class extends Group {
   set gravity(v) {
     this.userData.uniforms.gravity.value = v;
   }
+  get pinStrength() {
+    return this.userData.uniforms.pinStrength.value;
+  }
+  set pinStrength(v) {
+    this.userData.uniforms.pinStrength.value = v;
+  }
   get nodeRadius() {
     return this.userData.uniforms.nodeRadius.value;
   }
@@ -2387,6 +2551,18 @@ var ForceDirectedGraph = class extends Group {
   }
   set opacity(v) {
     this.userData.uniforms.opacity.value = v;
+  }
+  get beginning() {
+    return this.userData.uniforms.uBeginning.value;
+  }
+  set beginning(v) {
+    this.userData.uniforms.uBeginning.value = v;
+  }
+  get ending() {
+    return this.userData.uniforms.uEnding.value;
+  }
+  set ending(v) {
+    this.userData.uniforms.uEnding.value = v;
   }
   get blending() {
     return this.children[0].material.blending;

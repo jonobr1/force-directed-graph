@@ -65,6 +65,14 @@ declare module '@jonobr1/force-directed-graph/shaders/partials' {
    * - float gravity: number
    */
   export const center: '\n  vec3 center( vec3 p1 ) {\n    return - p1 * gravity * 0.1;\n  }\n';
+  /**
+   * Attracts a node toward its supplied target position,
+   * using the same gravity scaling as center().
+   *
+   * Relies on uniforms:
+   * - float gravity: number
+   */
+  export const anchor: '\n  vec3 anchor( vec3 p1, vec3 target ) {\n    return ( target - p1 ) * gravity * 0.1;\n  }\n';
 }
 declare module '@jonobr1/force-directed-graph/shaders/hit' {
   export default hit;
@@ -116,7 +124,7 @@ declare module '@jonobr1/force-directed-graph/math' {
     list: any[],
     func: Function,
     step?: number,
-    max?: number
+    max?: number,
   ): Promise<any>;
   /**
    *
@@ -184,7 +192,7 @@ declare module '@jonobr1/force-directed-graph/points' {
   export class Points extends BasePoints {
     static parse(
       size: any,
-      data: any
+      data: any,
     ): Promise<{
       atlas: TextureAtlas;
       geometry: any;
@@ -197,7 +205,7 @@ declare module '@jonobr1/force-directed-graph/points' {
         atlas: any;
         geometry: any;
       },
-      uniforms: any
+      uniforms: any,
     );
     frustumCulled: boolean;
   }
@@ -237,6 +245,7 @@ declare module '@jonobr1/force-directed-graph' {
     isStatic?: boolean;
     color?: CSSStyleValue;
     image?: string;
+    size?: number;
   };
   export type LinkData = { source: number; target: number };
   export type DataType = {
@@ -299,7 +308,7 @@ declare module '@jonobr1/force-directed-graph' {
      */
     intersect(
       pointer: Vector2,
-      camera: Camera
+      camera: Camera,
     ): { point: Vector3; data: NodeData } | null;
     getTexture(name: string): Texture;
     getPositionFromIndex(i: number): Vector3;
@@ -310,6 +319,10 @@ declare module '@jonobr1/force-directed-graph' {
     getLinksById(id: string | number): Promise<LinkData[]>;
     getPointById(id: string | number): NodeData;
     dispose(): void;
+    set beginning(arg: number);
+    get beginning(): number;
+    set ending(arg: number);
+    get ending(): number;
     set decay(arg: number);
     get decay(): number;
     set alpha(arg: number);
@@ -334,6 +347,8 @@ declare module '@jonobr1/force-directed-graph' {
     get stiffness(): number;
     set gravity(arg: number);
     get gravity(): number;
+    set pinStrength(arg: number);
+    get pinStrength(): number;
     set nodeRadius(arg: number);
     get nodeRadius(): number;
     set nodeScale(arg: number);
@@ -361,7 +376,7 @@ declare module '@jonobr1/force-directed-graph' {
         | typeof AdditiveBlending
         | typeof SubtractiveBlending
         | typeof MultiplyBlending
-        | typeof CustomBlending
+        | typeof CustomBlending,
     );
     get blending():
       | typeof NoBlending

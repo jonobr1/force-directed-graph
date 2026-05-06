@@ -239,6 +239,9 @@
 
           gui.close();
 
+          gui.add(fog, 'near', 0, 700, 1).name('fogNear');
+          gui.add(fog, 'far', 250, 1000).name('fogFar');
+
           [
             { name: 'decay', min: 0, max: 1, step: 0.001 },
             { name: 'maxSpeed', min: 0, max: 25, step: 1 },
@@ -250,6 +253,8 @@
             { name: 'nodeRadius', min: 0, max: 5, step: 0.5 },
             { name: 'nodeScale', min: 0, max: 50, step: 0.1 },
             { name: 'gravity', min: 0, max: 1, step: 0.1 },
+            { name: 'beginning', min: 0, max: 1, step: 0.01 },
+            { name: 'ending', min: 0, max: 1, step: 0.01 },
             { name: 'opacity', min: 0, max: 1, step: 0.1 }
           ].forEach(function({ name, min, max, step }) {
 
