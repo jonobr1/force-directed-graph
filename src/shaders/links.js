@@ -17,7 +17,7 @@ const links = {
       float ownIndex      = position.z - 1.0;
       float partnerIdx    = partnerIndex - 1.0;
       float rangeStart    = uBeginning * uNodeAmount;
-      float rangeEnd      = uEnding   * uNodeAmount;
+      float rangeEnd      = uEnding    * uNodeAmount;
       float ownInRange     = step( rangeStart, ownIndex )   * ( 1.0 - step( rangeEnd, ownIndex ) );
       float partnerInRange = step( rangeStart, partnerIdx ) * ( 1.0 - step( rangeEnd, partnerIdx ) );
 
@@ -50,7 +50,7 @@ const links = {
       gl_FragColor = vec4( mix( vec3( 1.0 ), vColor, inheritColors ) * uColor, opacity );
       #include <fog_fragment>
     }
-  `
+  `,
 };
 
 export default links;
