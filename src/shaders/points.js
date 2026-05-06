@@ -31,14 +31,8 @@ const points = {
 
       float nodeIndex  = position.z - 1.0;
       float rangeStart = uBeginning * uNodeAmount;
-      float rangeEnd   = uEnding   * uNodeAmount;
+      float rangeEnd   = uEnding    * uNodeAmount;
       float inRange    = step( rangeStart, nodeIndex ) * ( 1.0 - step( rangeEnd, nodeIndex ) );
-
-      if ( inRange < 0.5 ) {
-        gl_PointSize = 0.0;
-        gl_Position  = vec4( 0.0, 0.0, 10000.0, 1.0 );
-        return;
-      }
 
       vec4 texel = texture2D( texturePositions, position.xy );
       vec3 vPosition = texel.xyz;
@@ -52,6 +46,7 @@ const points = {
 
       gl_PointSize = nodeRadius * pointSize * nodeScale;
       gl_PointSize *= mix( 1.0, frustumSize / - mvPosition.z, sizeAttenuation );
+      gl_PointSize *= inRange;
 
       vDistance = 1.0 / - mvPosition.z;
       vViewZ = mvPosition.z;
