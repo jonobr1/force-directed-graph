@@ -10,6 +10,7 @@ GPU supercharged attraction-graph visualizations for the web built on top of [Th
 6. 🧩 Three.js scene compatible object
 7. 📝 Simple data schema to populate compatible with d3.js JSON samples
 8. 🧊 2d & 3d simulation modes
+9. 🦺 WASM workers to generate textures
 
 Visit the hosted [project page](https://jonobr1.com/force-directed-graph/) for a running demo.
 
