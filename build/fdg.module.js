@@ -713,6 +713,7 @@ var Points = class extends BasePoints {
 // src/links.js
 import {
   BufferAttribute,
+  DoubleSide,
   InstancedBufferAttribute,
   InstancedBufferGeometry,
   Mesh,
@@ -957,7 +958,8 @@ var Links = class extends Mesh {
       vertexShader: links_default.vertexShader,
       fragmentShader: links_default.fragmentShader,
       transparent: true,
-      fog: true
+      fog: true,
+      side: DoubleSide
     });
     super(geometry, material);
     this.frustumCulled = false;

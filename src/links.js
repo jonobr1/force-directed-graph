@@ -1,5 +1,6 @@
 import {
   BufferAttribute,
+  DoubleSide,
   InstancedBufferAttribute,
   InstancedBufferGeometry,
   Mesh,
@@ -39,6 +40,7 @@ class Links extends Mesh {
       fragmentShader: shader.fragmentShader,
       transparent: true,
       fog: true,
+      side: DoubleSide,
     });
 
     super(geometry, material);

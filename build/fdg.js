@@ -951,7 +951,8 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
         vertexShader: links_default.vertexShader,
         fragmentShader: links_default.fragmentShader,
         transparent: true,
-        fog: true
+        fog: true,
+        side: import_three3.DoubleSide
       });
       super(geometry, material);
       this.frustumCulled = false;

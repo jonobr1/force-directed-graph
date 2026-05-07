@@ -966,7 +966,8 @@ var Links = class extends import_three3.Mesh {
       vertexShader: links_default.vertexShader,
       fragmentShader: links_default.fragmentShader,
       transparent: true,
-      fog: true
+      fog: true,
+      side: import_three3.DoubleSide
     });
     super(geometry, material);
     this.frustumCulled = false;
