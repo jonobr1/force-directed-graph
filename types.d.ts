@@ -4,25 +4,25 @@ declare module '@jonobr1/force-directed-graph/shaders/partials' {
    * Relies on uniforms:
    * - float sizeAttenuation: 0, 1
    */
-  export const circle: '\nfloat circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {\n\n  float limit = 0.02;\n  float limit2 = limit * 2.0;\n  float d = length( pos - uv ) - ( rad - limit );\n  float t = clamp( d, 0.0, 1.0 );\n\n  float viewRange = smoothstep( 0.0, frustumSize * 0.001, abs( vDistance ) );\n  float taper = limit2 * viewRange + limit;\n  taper = mix( taper, limit2, sizeAttenuation );\n\n  float a = step( 0.5, 1.0 - t );\n  float aa = smoothstep( 0.5 - taper, 0.5 + taper, 1.0 - t );;\n\n  return mix( a, aa, isSmooth );\n\n}\n';
+  export const circle: string;
   /**
    * Get the position in local space of a node
    */
-  export const getPosition: '\n  vec3 getPosition( vec2 uv ) {\n    return texture2D( texturePositions, uv ).xyz;\n  }\n';
+  export const getPosition: string;
   /**
    * Get the velocity in local space of a node
    */
-  export const getVelocity: '\n  vec3 getVelocity( vec2 uv ) {\n    return texture2D( textureVelocities, uv ).xyz;\n  }\n';
+  export const getVelocity: string;
   /**
    * Get a node's id from a specific UV coordinate
    * Relies on uniforms:
    * - float size: number
    */
-  export const getIndex: '\n  int getIndex( vec2 uv ) {\n    int s = int( size );\n    int col = int( uv.x * size );\n    int row = int( uv.y * size );\n    return col + row * s;\n  }\n';
+  export const getIndex: string;
   /**
    * GLSL version of a random float generator
    */
-  export const random: '\n  float random( vec2 seed ) {\n    return fract( sin( dot( seed.xy, vec2( 12.9898, 78.233 ) ) ) * 43758.5453 );\n  }\n';
+  export const random: string;
   /**
    * Add slight variation of a given node's index
    * Used for unsticking two nodes that happen to be
@@ -32,7 +32,7 @@ declare module '@jonobr1/force-directed-graph/shaders/partials' {
    * Relies on uniforms:
    * - float time: number
    */
-  export const jiggle: '\n  float jiggle( float index ) {\n    return ( random( vec2( index, time ) ) - 0.5 ) * 0.000001;\n  }\n';
+  export const jiggle: string;
   /**
    * Link two nodes together based on the relied on "links"
    * array from the ingested data. Schema mimics d3's
@@ -46,7 +46,7 @@ declare module '@jonobr1/force-directed-graph/shaders/partials' {
    * - float is2D: [0, 1]
    * - float springLength: number
    */
-  export const link: '\n  vec3 link( float i, int id1, vec3 p1, vec3 v1, vec2 uv2 ) {\n\n    vec3 result = vec3( 0.0 );\n\n    vec4 edge = texture2D( textureLinks, uv2 );\n\n    vec2 source = edge.xy;\n    vec2 target = edge.zw;\n\n    int si = getIndex( source );\n    float siF = float( si );\n    vec3 sv = getVelocity( source );\n    vec3 sp = getPosition( source );\n\n    int ti = getIndex( target );\n    float tiF = float( ti );\n    vec3 tv = getVelocity( target );\n    vec3 tp = getPosition( target );\n\n    vec3 diff = tp + tv - ( sp + sv );\n    diff.z *= 1.0 - is2D;\n\n    vec3 mag = abs( diff );\n    float seed = float( si + ti );\n\n    float bias = 0.5;\n    float dist = length( diff );\n\n    dist = stiffness * ( dist - springLength ) / dist;\n    diff *= dist;\n\n    if ( id1 == ti ) {\n      result -= diff * bias;\n    } else if ( id1 == si ) {\n      result += diff * bias;\n    }\n\n    result.z *= 1.0 - is2D;\n\n    return result;\n\n  }\n';
+  export const link: string;
   /**
    * Repulses (or not) two nodes together based
    * on a repulsion amount.
@@ -55,7 +55,7 @@ declare module '@jonobr1/force-directed-graph/shaders/partials' {
    * - float is2D: [0, 1]
    * - float repulsion: number
    */
-  export const charge: '\n  vec3 charge( float i, int id1, vec3 p1, vec3 v1, int id2, vec3 v2, vec3 p2 ) {\n\n    vec3 result = vec3( 0.0 );\n\n    vec3 diff = ( p2 + v2 ) - ( p1 + v1 );\n    diff.z *= 1.0 - is2D;\n\n    float dist = length( diff );\n    float mag = repulsion / dist;\n\n    vec3 dir = normalize( diff );\n\n    if ( id1 != id2 ) {\n      result += dir * mag;\n    }\n\n    result.z *= 1.0 - is2D;\n\n    return result;\n\n  }\n';
+  export const charge: string;
   /**
    * Attracts (or not) a node to the
    * center of the force directed graph
@@ -64,7 +64,7 @@ declare module '@jonobr1/force-directed-graph/shaders/partials' {
    * Relies on uniforms:
    * - float gravity: number
    */
-  export const center: '\n  vec3 center( vec3 p1 ) {\n    return - p1 * gravity * 0.1;\n  }\n';
+  export const center: string;
   /**
    * Attracts a node toward its supplied target position,
    * using the same gravity scaling as center().
@@ -72,7 +72,7 @@ declare module '@jonobr1/force-directed-graph/shaders/partials' {
    * Relies on uniforms:
    * - float gravity: number
    */
-  export const anchor: '\n  vec3 anchor( vec3 p1, vec3 target ) {\n    return ( target - p1 ) * gravity * 0.1;\n  }\n';
+  export const anchor: string;
 }
 declare module '@jonobr1/force-directed-graph/shaders/hit' {
   export default hit;
@@ -220,12 +220,12 @@ declare module '@jonobr1/force-directed-graph/shaders/links' {
   }
 }
 declare module '@jonobr1/force-directed-graph/links' {
-  export class Links extends LineSegments {
+  export class Links extends Mesh {
     static parse(points: any, data: any): Promise<any>;
     constructor(geometry: any, uniforms: any);
     frustumCulled: boolean;
   }
-  import { LineSegments } from 'three';
+  import { Mesh } from 'three';
 }
 declare module '@jonobr1/force-directed-graph/registry' {
   export class Registry {
@@ -353,8 +353,8 @@ declare module '@jonobr1/force-directed-graph' {
     get nodeRadius(): number;
     set nodeScale(arg: number);
     get nodeScale(): number;
-    set sizeAttenuation(arg: number);
-    get sizeAttenuation(): number;
+    set sizeAttenuation(arg: boolean);
+    get sizeAttenuation(): boolean;
     set frustumSize(arg: number);
     get frustumSize(): number;
     set linksInheritColor(arg: boolean);
@@ -367,6 +367,10 @@ declare module '@jonobr1/force-directed-graph' {
     get linksColor(): Color;
     set linkColor(arg: Color);
     get linkColor(): Color;
+    set linecap(arg: 'round' | 'butt' | 'square');
+    get linecap(): 'round' | 'butt' | 'square';
+    set linewidth(arg: number);
+    get linewidth(): number;
     set opacity(arg: number);
     get opacity(): number;
     set blending(
@@ -390,6 +394,14 @@ declare module '@jonobr1/force-directed-graph' {
     get uniforms(): any;
     get nodeCount(): number;
     get edgeCount(): number;
+    getPerformanceInfo(): {
+      workerSupported: boolean;
+      workerReady: boolean;
+      wasmReady: boolean;
+      pendingRequests: number;
+    };
+    isWorkerProcessingAvailable(): boolean;
+    isWasmAccelerationAvailable(): boolean;
   }
   import { getPotSize } from '@jonobr1/force-directed-graph/math';
   import { Points } from '@jonobr1/force-directed-graph/points';

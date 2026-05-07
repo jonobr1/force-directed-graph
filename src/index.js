@@ -22,6 +22,14 @@ const position = new Vector3();
 const size = new Vector2();
 const ndc = new Vector2();
 const raycaster = new Raycaster();
+
+const drawingBufferSize = new Vector2();
+const LineCaps = ['round', 'butt', 'square'];
+const LineCapsMap = {
+  round: 0,
+  butt: 1,
+  square: 2,
+};
 const buffers = {
   int: new Uint8ClampedArray(4),
   float: new Float32Array(4),
@@ -145,7 +153,11 @@ class ForceDirectedGraph extends Group {
       pointsInheritColor: { value: true },
       pointColor: { value: new Color(1, 1, 1) },
       linkColor: { value: new Color(1, 1, 1) },
+      linecap: { value: LineCapsMap.round },
+      linewidth: { value: 1 },
       opacity: { value: 1 },
+      pixelRatio: { value: 1 },
+      resolution: { value: new Vector2(1, 1) },
       uBeginning: { value: 0 },
       uEnding: { value: 1 },
       uNodeAmount: { value: 0 },
@@ -185,6 +197,8 @@ class ForceDirectedGraph extends Group {
     'pointsInheritColor',
     'pointColor',
     'linkColor',
+    'linecap',
+    'linewidth',
     'opacity',
     'blending',
   ];
@@ -518,12 +532,18 @@ class ForceDirectedGraph extends Group {
       return this;
     }
 
-    const { gpgpu, textures, variables, uniforms } = this.userData;
+    const { gpgpu, renderer, textures, variables, uniforms } = this.userData;
 
     uniforms.alpha.value *= uniforms.decay.value;
 
     variables.velocities.material.uniforms.time.value = time / 1000;
     gpgpu.compute();
+
+    renderer.getSize(size);
+    renderer.getDrawingBufferSize(drawingBufferSize);
+
+    uniforms.resolution.value.copy(drawingBufferSize);
+    uniforms.pixelRatio.value = size.x > 0 ? drawingBufferSize.x / size.x : 1;
 
     const texture = this.getTexture('positions');
     const renderTarget = gpgpu.getCurrentRenderTarget(variables.positions);
@@ -693,23 +713,30 @@ class ForceDirectedGraph extends Group {
 
     const lookupGeometry = this.userData.lookupGeometry;
     const ref = lookupGeometry.attributes.color.array;
-    const attribute = this.links.geometry.getAttribute('color');
-    const colors = attribute.array;
+    const sourceAttribute = this.links.geometry.getAttribute('sourceColor');
+    const targetAttribute = this.links.geometry.getAttribute('targetColor');
+    const sourceColors = sourceAttribute.array;
+    const targetColors = targetAttribute.array;
 
     return each(data.links, (_, i) => {
       const l = data.links[i];
-      const li = i * 6;
+      const li = i * 3;
       const si = 3 * l.sourceIndex;
       const ti = 3 * l.targetIndex;
 
-      colors[li + 0] = ref[si + 0];
-      colors[li + 1] = ref[si + 1];
-      colors[li + 2] = ref[si + 2];
+      sourceColors[li + 0] = ref[si + 0];
+      sourceColors[li + 1] = ref[si + 1];
+      sourceColors[li + 2] = ref[si + 2];
 
-      colors[li + 3] = ref[ti + 0];
-      colors[li + 4] = ref[ti + 1];
-      colors[li + 5] = ref[ti + 2];
-    }).then(() => (attribute.needsUpdate = true));
+      targetColors[li + 0] = ref[ti + 0];
+      targetColors[li + 1] = ref[ti + 1];
+      targetColors[li + 2] = ref[ti + 2];
+    }).then(() => {
+      sourceAttribute.needsUpdate = true;
+      targetAttribute.needsUpdate = true;
+
+      return true;
+    });
   }
 
   getIndexById(id) {
@@ -889,6 +916,19 @@ class ForceDirectedGraph extends Group {
   }
   set linkColor(v) {
     this.userData.uniforms.linkColor.value = v;
+  }
+  get linecap() {
+    const index = Math.round(this.userData.uniforms.linecap.value);
+    return LineCaps[index] || 'round';
+  }
+  set linecap(v) {
+    this.userData.uniforms.linecap.value = LineCapsMap[v] ?? LineCapsMap.round;
+  }
+  get linewidth() {
+    return this.userData.uniforms.linewidth.value;
+  }
+  set linewidth(v) {
+    this.userData.uniforms.linewidth.value = v;
   }
   get opacity() {
     return this.userData.uniforms.opacity.value;
