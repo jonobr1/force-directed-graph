@@ -2,9 +2,11 @@ const links = {
   vertexShader: `
     #include <fog_pars_vertex>
 
+    uniform float frustumSize;
     uniform float is2D;
     uniform float linewidth;
     uniform float pixelRatio;
+    uniform float sizeAttenuation;
     uniform float uBeginning;
     uniform float uEnding;
     uniform float uNodeAmount;
@@ -53,7 +55,13 @@ const links = {
       vec2 tangent = segmentLength > 0.0 ? delta / segmentLength : vec2( 1.0, 0.0 );
       vec2 normal = vec2( - tangent.y, tangent.x );
 
-      float halfWidth = max( 0.5 * linewidth * pixelRatio, 0.5 );
+      float centerViewZ = 0.5 * ( sourceModelView.z + targetModelView.z );
+      float widthScale = mix(
+        1.0,
+        frustumSize / max( -centerViewZ, 0.0001 ),
+        sizeAttenuation
+      );
+      float halfWidth = max( 0.5 * linewidth * pixelRatio * widthScale, 0.5 );
       float expansion = halfWidth + 1.0;
       float edgeT = position.x * 0.5 + 0.5;
 

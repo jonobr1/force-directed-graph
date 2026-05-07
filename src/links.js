@@ -19,12 +19,14 @@ class Links extends Mesh {
       uniforms: {
         ...UniformsLib['fog'],
         ...{
+          frustumSize: uniforms.frustumSize,
           is2D: uniforms.is2D,
           inheritColors: uniforms.linksInheritColor,
           linewidth: uniforms.linewidth,
           opacity: uniforms.opacity,
           pixelRatio: uniforms.pixelRatio,
           resolution: uniforms.resolution,
+          sizeAttenuation: uniforms.sizeAttenuation,
           texturePositions: { value: null },
           uColor: uniforms.linkColor,
           uBeginning: uniforms.uBeginning,

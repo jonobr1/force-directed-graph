@@ -719,9 +719,11 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
     vertexShader: `
     #include <fog_pars_vertex>
 
+    uniform float frustumSize;
     uniform float is2D;
     uniform float linewidth;
     uniform float pixelRatio;
+    uniform float sizeAttenuation;
     uniform float uBeginning;
     uniform float uEnding;
     uniform float uNodeAmount;
@@ -770,7 +772,13 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       vec2 tangent = segmentLength > 0.0 ? delta / segmentLength : vec2( 1.0, 0.0 );
       vec2 normal = vec2( - tangent.y, tangent.x );
 
-      float halfWidth = max( 0.5 * linewidth * pixelRatio, 0.5 );
+      float centerViewZ = 0.5 * ( sourceModelView.z + targetModelView.z );
+      float widthScale = mix(
+        1.0,
+        frustumSize / max( -centerViewZ, 0.0001 ),
+        sizeAttenuation
+      );
+      float halfWidth = max( 0.5 * linewidth * pixelRatio * widthScale, 0.5 );
       float expansion = halfWidth + 1.0;
       float edgeT = position.x * 0.5 + 0.5;
 
@@ -871,12 +879,14 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
         uniforms: {
           ...import_three3.UniformsLib["fog"],
           ...{
+            frustumSize: uniforms.frustumSize,
             is2D: uniforms.is2D,
             inheritColors: uniforms.linksInheritColor,
             linewidth: uniforms.linewidth,
             opacity: uniforms.opacity,
             pixelRatio: uniforms.pixelRatio,
             resolution: uniforms.resolution,
+            sizeAttenuation: uniforms.sizeAttenuation,
             texturePositions: { value: null },
             uColor: uniforms.linkColor,
             uBeginning: uniforms.uBeginning,
