@@ -187,7 +187,10 @@
 
         for (let i = 0; i < amount; i++) {
 
-          data.nodes.push({ id: i });
+          const r = Math.floor(Math.random() * 255);
+          const g = Math.floor(Math.random() * 255);
+          const b = Math.floor(Math.random() * 255);
+          data.nodes.push({ id: i, color: `rgb(${r},${g},${b})` });
 
           const target = Math.floor(Math.random() * i);
           const source = i;
@@ -232,6 +235,7 @@
             { name: 'gravity', min: 0, max: 1, step: 0.1 },
             { name: 'beginning', min: 0, max: 1, step: 0.01 },
             { name: 'ending', min: 0, max: 1, step: 0.01 },
+            { name: 'linewidth', min: 0.5, max: 16, step: 0.5 },
             { name: 'opacity', min: 0, max: 1, step: 0.1 }
           ].forEach(function({ name, min, max, step }) {
 
