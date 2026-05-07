@@ -35,7 +35,8 @@ The same data object shape is accepted by:
 - `new ForceDirectedGraph(renderer, data)`
 - `fdg.set(data[, callback])`
 
-:note: recommended to use `set` and update setters in the callback or after the promise resolves. E.g: `fdg.set(data).then(() => {fdg.linewidth = 2})`
+> [!NOTE]
+> It is recommended to use `set` and update setters in the callback or after the promise resolves. E.g: `fdg.set(data).then(() => {fdg.linewidth = 2})`
 
 ```ts
 type GraphData = {
@@ -60,14 +61,13 @@ type LinkData = {
 };
 ```
 
-Notes:
-
-- `nodes` and `links` are both required.
-- `source` / `target` are resolved by node `id`.
-- If `x`, `y`, or `z` is omitted, a random initial position is assigned.
-- `isStatic` defaults to `false`.
-- If `color` is omitted, the node defaults to white.
-- `set(data[, callback])` returns a `Promise` that resolves when geometry/textures are ready.
+> [!NOTE]
+> - `nodes` and `links` are both required.
+> - `source` / `target` are resolved by node `id`.
+> - If `x`, `y`, or `z` is omitted, a random initial position is assigned.
+> - `isStatic` defaults to `false`.
+> - If `color` is omitted, the node defaults to white.
+> - `set(data[, callback])` returns a `Promise` that resolves when geometry/textures are ready.
 
 ### Load Script in HTML file:
 
@@ -153,6 +153,7 @@ This example creates 512 nodes and links them randomly like big snakes.
 </html>
 ```
 
-:warning: Due to the reliance on the GPU compute rendering, this project is not built for node.js use.
+> [!WARNING]
+> Due to the reliance on the GPU compute rendering, this project is not built for node.js use.
 
 A free and open source tool by [Jono Brandel](http://jono.fyi/)
