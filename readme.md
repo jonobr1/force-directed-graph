@@ -35,6 +35,8 @@ The same data object shape is accepted by:
 - `new ForceDirectedGraph(renderer, data)`
 - `fdg.set(data[, callback])`
 
+:note: recommended to use `set` and update setters in the callback or after the promise resolves. E.g: `fdg.set(data).then(() => {fdg.linewidth = 2})`
+
 ```ts
 type GraphData = {
   nodes: NodeData[];
