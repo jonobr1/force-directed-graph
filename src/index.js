@@ -3,7 +3,7 @@ import { GPUComputationRenderer } from 'three/examples/jsm/misc/GPUComputationRe
 import { clamp, each, getPotSize, rgbToIndex } from './math.js';
 import simulation from './shaders/simulation.js';
 
-import { Points } from './points.js';
+import { Planes } from './planes.js';
 import { Links } from './links.js';
 import { Registry } from './registry.js';
 import { Hit } from './hit.js';
@@ -16,6 +16,10 @@ const buffers = {
   int: new Uint8ClampedArray(4),
   float: new Float32Array(4),
 };
+
+function getLookupAttribute(geometry) {
+  return geometry.getAttribute('lookup') || geometry.getAttribute('position');
+}
 
 function buildLinkTextureData(preparedLinks, nodeAmount, size) {
   const totalElements = size * size;
@@ -413,9 +417,9 @@ class ForceDirectedGraph extends Group {
     function generate() {
       let points;
 
-      return Points.parse(size, data)
+      return Planes.parse(size, data)
         .then((geometry) => {
-          points = new Points(geometry, uniforms);
+          points = new Planes(geometry, uniforms);
         })
         .then(() => Links.parse(points, data))
         .then((geometry) => {
@@ -444,7 +448,7 @@ class ForceDirectedGraph extends Group {
       return this;
     }
 
-    const { gpgpu, textures, variables, uniforms } = this.userData;
+    const { gpgpu, renderer, textures, variables, uniforms } = this.userData;
 
     uniforms.alpha.value *= uniforms.decay.value;
 
@@ -452,6 +456,7 @@ class ForceDirectedGraph extends Group {
     gpgpu.compute();
 
     const texture = this.getTexture('positions');
+    renderer.getDrawingBufferSize(size);
 
     for (let i = 0; i < this.children.length; i++) {
       const child = this.children[i];
@@ -459,6 +464,9 @@ class ForceDirectedGraph extends Group {
       if (child.material.uniforms.textureTargetPositions) {
         child.material.uniforms.textureTargetPositions.value =
           textures.targetPositions;
+      }
+      if (child.material.uniforms.viewport) {
+        child.material.uniforms.viewport.value.copy(size);
       }
     }
 
@@ -526,8 +534,9 @@ class ForceDirectedGraph extends Group {
       return;
     }
 
-    const index = i * 3;
-    const uvs = points.geometry.attributes.position.array;
+    const lookup = getLookupAttribute(points.geometry);
+    const index = lookup.itemSize * i;
+    const uvs = lookup.array;
     const uvx = Math.floor(uvs[index + 0] * size);
     const uvy = Math.floor(uvs[index + 1] * size);
     const renderTarget = gpgpu.getCurrentRenderTarget(variables.positions);
@@ -845,4 +854,4 @@ class ForceDirectedGraph extends Group {
   }
 }
 
-export { ForceDirectedGraph };
+export { ForceDirectedGraph, Planes };

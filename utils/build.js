@@ -56,6 +56,10 @@ es.buildSync({
 
 var contents = fs.readFileSync(path.resolve(__dirname, '../build/fdg.js'), 'utf-8');
 contents = contents.replace(
+  /(var Planes = )/,
+  '$1 window.Planes = '
+);
+contents = contents.replace(
   /(var ForceDirectedGraph = )/i,
   '$1 window.ForceDirectedGraph = '
 );

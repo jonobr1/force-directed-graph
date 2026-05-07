@@ -3,9 +3,10 @@ import {
   ShaderMaterial,
   WebGLRenderTarget,
   Sprite,
-  SpriteMaterial
+  SpriteMaterial,
+  Vector2
 } from "three";
-import shader from "./shaders/hit.js";
+import pointShader from "./shaders/hit.js";
 
 const color = new Color();
 
@@ -20,6 +21,7 @@ export class Hit {
 
   material = null;
   helper = null;
+  shader = null;
 
   constructor(fdg) {
 
@@ -30,19 +32,30 @@ export class Hit {
 
     this.material = new ShaderMaterial({
       uniforms: {
-        hitScale: { value: 2 }
+        hitScale: { value: 2 },
+        viewport: { value: new Vector2(1, 1) }
       },
-      vertexShader: shader.vertexShader,
-      fragmentShader: shader.fragmentShader,
+      vertexShader: pointShader.vertexShader,
+      fragmentShader: pointShader.fragmentShader,
       transparent: true
     });
+    this.shader = pointShader;
 
   }
 
   inherit(mesh) {
+    const shader = mesh.userData.hitShader || pointShader;
+    if (shader !== this.shader) {
+      this.material.vertexShader = shader.vertexShader;
+      this.material.fragmentShader = shader.fragmentShader;
+      this.material.needsUpdate = true;
+      this.shader = shader;
+    }
+    const { hitScale, viewport } = this.material.uniforms;
     this.material.uniforms = {
-      ...this.material.uniforms,
-      ...mesh.material.uniforms
+      ...mesh.material.uniforms,
+      hitScale,
+      viewport
     };
   }
 
@@ -72,6 +85,13 @@ export class Hit {
     const material = parent.points.material;
     const visible = parent.links.visible;
     const alpha = renderer.getClearAlpha();
+
+    if (this.material.uniforms.viewport) {
+      this.material.uniforms.viewport.value.set(
+        this.renderTarget.width,
+        this.renderTarget.height
+      );
+    }
 
     renderer.getClearColor(color);
 
@@ -104,6 +124,7 @@ export class Hit {
 
     this.material = null;
     this.helper = null;
+    this.shader = null;
 
   }
 

@@ -81,6 +81,13 @@ declare module '@jonobr1/force-directed-graph/shaders/hit' {
     const fragmentShader: string;
   }
 }
+declare module '@jonobr1/force-directed-graph/shaders/hit-planes' {
+  export default hitPlanes;
+  namespace hitPlanes {
+    const vertexShader: string;
+    const fragmentShader: string;
+  }
+}
 declare module '@jonobr1/force-directed-graph/hit' {
   export class Hit {
     constructor(fdg: any);
@@ -174,6 +181,13 @@ declare module '@jonobr1/force-directed-graph/shaders/points' {
     const fragmentShader: string;
   }
 }
+declare module '@jonobr1/force-directed-graph/shaders/planes' {
+  export default planes;
+  namespace planes {
+    const vertexShader: string;
+    const fragmentShader: string;
+  }
+}
 declare module '@jonobr1/force-directed-graph/texture-atlas' {
   export class TextureAtlas extends Texture {
     static Resolution: number;
@@ -211,6 +225,31 @@ declare module '@jonobr1/force-directed-graph/points' {
   }
   import { TextureAtlas } from '@jonobr1/force-directed-graph/texture-atlas';
   import { Points as BasePoints } from 'three';
+}
+declare module '@jonobr1/force-directed-graph/planes' {
+  export class Planes extends Mesh {
+    static parse(
+      size: any,
+      data: any,
+    ): Promise<{
+      atlas: TextureAtlas;
+      geometry: any;
+    }>;
+    constructor(
+      {
+        atlas,
+        geometry,
+      }: {
+        atlas: any;
+        geometry: any;
+      },
+      uniforms: any,
+    );
+    frustumCulled: boolean;
+    dispose(): void;
+  }
+  import { TextureAtlas } from '@jonobr1/force-directed-graph/texture-atlas';
+  import { Mesh } from 'three';
 }
 declare module '@jonobr1/force-directed-graph/shaders/links' {
   export default links;
@@ -359,14 +398,14 @@ declare module '@jonobr1/force-directed-graph' {
       | typeof SubtractiveBlending
       | typeof MultiplyBlending
       | typeof CustomBlending;
-    get points(): Points;
+    get points(): Planes;
     get links(): Links;
     get uniforms(): any;
     get nodeCount(): number;
     get edgeCount(): number;
   }
   import { getPotSize } from '@jonobr1/force-directed-graph/math';
-  import { Points } from '@jonobr1/force-directed-graph/points';
+  import { Planes } from '@jonobr1/force-directed-graph/planes';
   import { Links } from '@jonobr1/force-directed-graph/links';
   import {
     NoBlending,
@@ -383,4 +422,5 @@ declare module '@jonobr1/force-directed-graph' {
     Vector2,
     Vector3,
   } from 'three';
+  export { Planes };
 }

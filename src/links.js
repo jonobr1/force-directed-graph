@@ -8,6 +8,14 @@ import {
 import { each } from "./math.js";
 import shader from './shaders/links.js';
 
+function getLookupAttribute(geometry) {
+  return geometry.getAttribute('lookup') || geometry.getAttribute('position');
+}
+
+function getNodeIndexAttribute(geometry) {
+  return geometry.getAttribute('nodeIndex');
+}
+
 class Links extends LineSegments {
 
   constructor(geometry, uniforms) {
@@ -42,39 +50,43 @@ class Links extends LineSegments {
     const colors = [];
     const partnerIndices = [];
 
-    const v = points.geometry.attributes.position.array;
-    const c = points.geometry.attributes.color.array;
+    const lookup = getLookupAttribute(points.geometry);
+    const nodeIndex = getNodeIndexAttribute(points.geometry);
+    const c = points.geometry.attributes.color;
+    const v = lookup.array;
+    const colorsRef = c.array;
+    const lookupSize = lookup.itemSize;
 
     return each(data.links, (_, i) => {
 
       const l = data.links[i];
 
-      const si = 3 * l.sourceIndex;
-      const ti = 3 * l.targetIndex;
+      const si = lookupSize * l.sourceIndex;
+      const ti = lookupSize * l.targetIndex;
 
       let x = v[si + 0];
       let y = v[si + 1];
-      let z = v[si + 2];
+      let z = nodeIndex ? nodeIndex.array[l.sourceIndex] : v[si + 2];
 
-      let r = c[si + 0];
-      let g = c[si + 1];
-      let b = c[si + 2];
+      let r = colorsRef[3 * l.sourceIndex + 0];
+      let g = colorsRef[3 * l.sourceIndex + 1];
+      let b = colorsRef[3 * l.sourceIndex + 2];
 
       vertices.push(x, y, z);
       colors.push(r, g, b);
-      partnerIndices.push(v[ti + 2]); // target's nodeIndex+1
+      partnerIndices.push(nodeIndex ? nodeIndex.array[l.targetIndex] : v[ti + 2]); // target's nodeIndex+1
 
       x = v[ti + 0];
       y = v[ti + 1];
-      z = v[ti + 2];
+      z = nodeIndex ? nodeIndex.array[l.targetIndex] : v[ti + 2];
 
-      r = c[ti + 0];
-      g = c[ti + 1];
-      b = c[ti + 2];
+      r = colorsRef[3 * l.targetIndex + 0];
+      g = colorsRef[3 * l.targetIndex + 1];
+      b = colorsRef[3 * l.targetIndex + 2];
 
       vertices.push(x, y, z);
       colors.push(r, g, b);
-      partnerIndices.push(v[si + 2]); // source's nodeIndex+1
+      partnerIndices.push(nodeIndex ? nodeIndex.array[l.sourceIndex] : v[si + 2]); // source's nodeIndex+1
 
     }).then(() => {
 
