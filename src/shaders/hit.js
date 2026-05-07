@@ -12,12 +12,28 @@ const hit = {
     uniform float nodeRadius;
     uniform float nodeScale;
     uniform float hitScale;
+    uniform float uBeginning;
+    uniform float uEnding;
+    uniform float uNodeAmount;
     uniform sampler2D texturePositions;
+
+    attribute float pointSize;
 
     varying vec3 vColor;
     varying float vDistance;
 
     void main() {
+
+      float nodeIndex  = position.z - 1.0;
+      float rangeStart = uBeginning * uNodeAmount;
+      float rangeEnd   = uEnding   * uNodeAmount;
+      float inRange    = step( rangeStart, nodeIndex ) * ( 1.0 - step( rangeEnd, nodeIndex ) );
+
+      if ( inRange < 0.5 ) {
+        gl_PointSize = 0.0;
+        gl_Position  = vec4( 0.0, 0.0, 10000.0, 1.0 );
+        return;
+      }
 
       vec4 texel = texture2D( texturePositions, position.xy );
       vec3 vPosition = texel.xyz;
@@ -25,7 +41,7 @@ const hit = {
 
       vec4 mvPosition = modelViewMatrix * vec4( vPosition, 1.0 );
 
-      gl_PointSize = nodeRadius * nodeScale;
+      gl_PointSize = nodeRadius * pointSize * nodeScale;
       gl_PointSize *= mix( 1.0, frustumSize / - mvPosition.z, sizeAttenuation );
       gl_PointSize *= hitScale;
 

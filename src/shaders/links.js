@@ -2,20 +2,85 @@ const links = {
   vertexShader: `
     #include <fog_pars_vertex>
 
+    uniform float frustumSize;
     uniform float is2D;
+    uniform float linewidth;
+    uniform float pixelRatio;
+    uniform float sizeAttenuation;
+    uniform float uBeginning;
+    uniform float uEnding;
+    uniform float uNodeAmount;
+    uniform vec2 resolution;
     uniform sampler2D texturePositions;
 
-    varying vec3 vColor;
+    attribute vec3 source;
+    attribute vec3 target;
+    attribute vec3 sourceColor;
+    attribute vec3 targetColor;
+
+    varying vec2 vSource;
+    varying vec2 vTarget;
+    varying vec3 vSourceColor;
+    varying vec3 vTargetColor;
+    varying float vHalfWidth;
+    varying float inRange;
 
     void main() {
 
-      vec3 vPosition = texture2D( texturePositions, position.xy ).xyz;
-      vPosition.z *= 1.0 - is2D;
+      float sourceIndex    = source.z - 1.0;
+      float targetIndex    = target.z - 1.0;
+      float rangeStart     = uBeginning * uNodeAmount;
+      float rangeEnd       = uEnding * uNodeAmount;
+      float sourceInRange  = step( rangeStart, sourceIndex ) * ( 1.0 - step( rangeEnd, sourceIndex ) );
+      float targetInRange  = step( rangeStart, targetIndex ) * ( 1.0 - step( rangeEnd, targetIndex ) );
 
-      vec4 mvPosition = modelViewMatrix * vec4( vPosition, 1.0 );
-      vColor = color;
+      vec3 sourcePosition = texture2D( texturePositions, source.xy ).xyz;
+      vec3 targetPosition = texture2D( texturePositions, target.xy ).xyz;
+      sourcePosition.z *= 1.0 - is2D;
+      targetPosition.z *= 1.0 - is2D;
 
-      gl_Position = projectionMatrix * mvPosition;
+      vec4 sourceModelView = modelViewMatrix * vec4( sourcePosition, 1.0 );
+      vec4 targetModelView = modelViewMatrix * vec4( targetPosition, 1.0 );
+      vec4 sourceClip = projectionMatrix * sourceModelView;
+      vec4 targetClip = projectionMatrix * targetModelView;
+
+      vec2 safeResolution = max( resolution, vec2( 1.0 ) );
+      vec2 sourceNdc = sourceClip.xy / sourceClip.w;
+      vec2 targetNdc = targetClip.xy / targetClip.w;
+      vec2 sourceScreen = ( sourceNdc * 0.5 + 0.5 ) * safeResolution;
+      vec2 targetScreen = ( targetNdc * 0.5 + 0.5 ) * safeResolution;
+      vec2 delta = targetScreen - sourceScreen;
+
+      float segmentLength = length( delta );
+      vec2 tangent = segmentLength > 0.0 ? delta / segmentLength : vec2( 1.0, 0.0 );
+      vec2 normal = vec2( - tangent.y, tangent.x );
+
+      float centerViewZ = 0.5 * ( sourceModelView.z + targetModelView.z );
+      float widthScale = mix(
+        1.0,
+        frustumSize / max( -centerViewZ, 0.0001 ),
+        sizeAttenuation
+      );
+      float halfWidth = max( 0.5 * linewidth * pixelRatio * widthScale, 0.5 );
+      float expansion = halfWidth + 1.0;
+      float edgeT = position.x * 0.5 + 0.5;
+
+      vec2 base = mix( sourceScreen, targetScreen, edgeT );
+      vec2 screen = base + tangent * position.x * expansion + normal * position.y * expansion;
+      vec2 ndc = ( screen / safeResolution ) * 2.0 - 1.0;
+
+      float clipW = mix( sourceClip.w, targetClip.w, edgeT );
+      float clipZ = mix( sourceClip.z, targetClip.z, edgeT );
+      gl_Position = vec4( ndc * clipW, clipZ, clipW );
+
+      vec4 mvPosition = mix( sourceModelView, targetModelView, edgeT );
+      vSource = sourceScreen;
+      vTarget = targetScreen;
+      vSourceColor = sourceColor;
+      vTargetColor = targetColor;
+      vHalfWidth = halfWidth;
+      inRange = sourceInRange * targetInRange;
+
       #include <fog_vertex>
 
     }
@@ -24,16 +89,120 @@ const links = {
     #include <fog_pars_fragment>
 
     uniform float inheritColors;
+    uniform float linecap;
     uniform vec3 uColor;
     uniform float opacity;
 
-    varying vec3 vColor;
+    varying vec2 vSource;
+    varying vec2 vTarget;
+    varying vec3 vSourceColor;
+    varying vec3 vTargetColor;
+    varying float vHalfWidth;
+    varying float inRange;
+
+    float getSegmentT( vec2 point, vec2 start, vec2 end ) {
+
+      vec2 segment = end - start;
+      float lengthSquared = dot( segment, segment );
+
+      if ( lengthSquared <= 0.0 ) {
+        return 0.0;
+      }
+
+      return clamp( dot( point - start, segment ) / lengthSquared, 0.0, 1.0 );
+
+    }
+
+    float getCapsuleDistance( vec2 point, vec2 start, vec2 end, float radius ) {
+
+      float t = getSegmentT( point, start, end );
+      vec2 closest = mix( start, end, t );
+
+      return length( point - closest ) - radius;
+
+    }
+
+    float getRectDistance( vec2 point, vec2 start, vec2 end, vec2 extent ) {
+
+      vec2 segment = end - start;
+      float segmentLength = length( segment );
+
+      if ( segmentLength <= 0.0 ) {
+        return length( point - start ) - extent.y;
+      }
+
+      vec2 tangent = segment / segmentLength;
+      vec2 normal = vec2( - tangent.y, tangent.x );
+      vec2 local = vec2(
+        dot( point - start, tangent ) - 0.5 * segmentLength,
+        dot( point - start, normal )
+      );
+      vec2 delta = abs( local ) - extent;
+
+      return length( max( delta, 0.0 ) ) + min( max( delta.x, delta.y ), 0.0 );
+
+    }
+
+    float getLinkDistance( vec2 point, vec2 start, vec2 end, float radius ) {
+
+      vec2 segment = end - start;
+      float segmentLength = length( segment );
+
+      if ( segmentLength <= 0.0 ) {
+        return length( point - start ) - radius;
+      }
+
+      if ( linecap < 0.5 ) {
+        return getCapsuleDistance( point, start, end, radius );
+      }
+
+      if ( linecap < 1.5 ) {
+        return getRectDistance(
+          point,
+          start,
+          end,
+          vec2( 0.5 * segmentLength, radius )
+        );
+      }
+
+      return getRectDistance(
+        point,
+        start,
+        end,
+        vec2( 0.5 * segmentLength + radius, radius )
+      );
+
+    }
 
     void main() {
-      gl_FragColor = vec4( mix( vec3( 1.0 ), vColor, inheritColors ) * uColor, opacity );
+
+      if ( inRange < 0.5 ) {
+        discard;
+      }
+
+      float segmentT = getSegmentT( gl_FragCoord.xy, vSource, vTarget );
+      float distanceToCapsule = getLinkDistance(
+        gl_FragCoord.xy,
+        vSource,
+        vTarget,
+        vHalfWidth
+      );
+      float alpha = 1.0 - smoothstep( 0.0, 1.0, distanceToCapsule );
+
+      if ( alpha <= 0.0 ) {
+        discard;
+      }
+
+      vec3 gradient = mix( vSourceColor, vTargetColor, segmentT );
+      gl_FragColor = vec4(
+        mix( vec3( 1.0 ), gradient, inheritColors ) * uColor,
+        opacity * alpha
+      );
+
       #include <fog_fragment>
+
     }
-  `
+  `,
 };
 
 export default links;

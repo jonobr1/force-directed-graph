@@ -124,7 +124,7 @@ var jiggle = `
   }
 `;
 var link = `
-  vec3 link( int id1, vec2 uv2 ) {
+  vec3 link( int id1, vec2 uv2, float rangeStart, float rangeEnd ) {
 
     vec3 result = vec3( 0.0 );
 
@@ -163,7 +163,9 @@ var link = `
 
     result.z *= 1.0 - is2D;
 
-    return result;
+    float siInRange = step( rangeStart, siF ) * ( 1.0 - step( rangeEnd, siF ) );
+    float tiInRange = step( rangeStart, tiF ) * ( 1.0 - step( rangeEnd, tiF ) );
+    return result * siInRange * tiInRange;
 
   }
 `;
@@ -195,6 +197,11 @@ var center = `
     return - p1 * gravity * 0.1;
   }
 `;
+var anchor = `
+  vec3 anchor( vec3 p1, vec3 target ) {
+    return ( target - p1 ) * gravity * 0.1;
+  }
+`;
 
 // src/shaders/velocities.js
 var types = ["simplex", "nested"];
@@ -213,8 +220,12 @@ var simplex = `
   uniform float springLength;
   uniform float stiffness;
   uniform float gravity;
+  uniform float pinStrength;
+  uniform float uBeginning;
+  uniform float uEnding;
   uniform sampler2D textureLinks;
   uniform sampler2D textureLinkRanges;
+  uniform sampler2D textureTargetPositions;
 
   ${getPosition}
   ${getVelocity}
@@ -225,6 +236,7 @@ var simplex = `
   ${link}
   ${charge}
   ${center}
+  ${anchor}
 
   void main() {
 
@@ -233,6 +245,9 @@ var simplex = `
 
     vec3 p1 = getPosition( uv );
     vec3 v1 = getVelocity( uv );
+
+    float rangeStart = uBeginning * nodeAmount;
+    float rangeEnd   = uEnding   * nodeAmount;
 
     vec3 a = vec3( 0.0 ),
         b = vec3( 0.0 ),
@@ -247,7 +262,7 @@ var simplex = `
         break;
       }
       vec2 linkUV = getUVFromIndex( linkStart + i );
-      b += link( id1, linkUV );
+      b += link( id1, linkUV, rangeStart, rangeEnd );
     }
 
     for ( float i = 0.0; i < nodeAmount; i += 1.0 ) {
@@ -255,15 +270,18 @@ var simplex = `
       int id2 = getIndex( uv2 );
       vec3 v2 = getVelocity( uv2 );
       vec3 p2 = getPosition( uv2 );
-      c += charge( i, id1, p1, v1, id2, p2, v2 );
+      float id2InRange = step( rangeStart, i ) * ( 1.0 - step( rangeEnd, i ) );
+      c += charge( i, id1, p1, v1, id2, p2, v2 ) * id2InRange;
     }
 
-    b *= 1.0 - step( nodeAmount, float( id1 ) );
-    c *= 1.0 - step( nodeAmount, float( id1 ) );
+    float id1InRange = step( rangeStart, float( id1 ) ) * ( 1.0 - step( rangeEnd, float( id1 ) ) );
+    b *= id1InRange;
+    c *= id1InRange;
 
     // 4.
-    vec3 d = center( p1 );
-    vec3 acceleration = a + b + c + d;
+    vec4 targetTexel = texture2D( textureTargetPositions, uv );
+    vec3 d = mix( center( p1 ), anchor( p1, targetTexel.xyz ), pinStrength * targetTexel.w );
+    vec3 acceleration = a + b + c + d * id1InRange;
 
     // Calculate Velocity
     vec3 velocity = ( v1 + ( acceleration * timeStep ) ) * damping * alpha;
@@ -289,8 +307,12 @@ var nested = `
   uniform float springLength;
   uniform float stiffness;
   uniform float gravity;
+  uniform float pinStrength;
+  uniform float uBeginning;
+  uniform float uEnding;
   uniform sampler2D textureLinks;
   uniform sampler2D textureLinksLookUp;
+  uniform sampler2D textureTargetPositions;
 
   ${getPosition}
   ${getVelocity}
@@ -301,6 +323,7 @@ var nested = `
   ${link}
   ${charge}
   ${center}
+  ${anchor}
 
   void main() {
 
@@ -310,6 +333,9 @@ var nested = `
     vec3 p1 = getPosition( uv );
     vec3 v1 = getVelocity( uv );
 
+    float rangeStart = uBeginning * nodeAmount;
+    float rangeEnd   = uEnding   * nodeAmount;
+
     vec3 a = vec3( 0.0 ),
         b = vec3( 0.0 ),
         c = vec3( 0.0 );
@@ -317,7 +343,7 @@ var nested = `
     /*
     for ( float i = 0.0; i < linkAmount; i += 1.0 ) {
       // TODO: get all edges and link them
-      b += link( id1, uv2 );
+      b += link( id1, uv2, rangeStart, rangeEnd );
     }
     */
 
@@ -332,18 +358,21 @@ var nested = `
       vec3 v2 = getVelocity( uv2 );
       vec3 p2 = getPosition( uv2 );
 
+      float id2InRange = step( rangeStart, i ) * ( 1.0 - step( rangeEnd, i ) );
       if ( i < nodeAmount) {
-        c += charge( i, id1, p1, v1, id2, p2, v2 );
+        c += charge( i, id1, p1, v1, id2, p2, v2 ) * id2InRange;
       }
 
     }
 
-    b *= 1.0 - step( edgeAmount, float( id1 ) );
-    c *= 1.0 - step( nodeAmount, float( id1 ) );
+    float id1InRange = step( rangeStart, float( id1 ) ) * ( 1.0 - step( rangeEnd, float( id1 ) ) );
+    b *= id1InRange;
+    c *= id1InRange;
 
   // 4.
-  vec3 d = center( p1 );
-  vec3 acceleration = a + b + c + d;
+  vec4 targetTexel = texture2D( textureTargetPositions, uv );
+  vec3 d = mix( center( p1 ), anchor( p1, targetTexel.xyz ), pinStrength * targetTexel.w );
+  vec3 acceleration = a + b + c + d * id1InRange;
 
   // Calculate Velocity
   vec3 velocity = ( v1 + ( acceleration * timeStep ) ) * damping * alpha;
@@ -384,26 +413,42 @@ var points = {
     uniform float is2D;
     uniform float nodeRadius;
     uniform float nodeScale;
+    uniform float uBeginning;
+    uniform float uEnding;
+    uniform float uNodeAmount;
     uniform sampler2D texturePositions;
+    uniform sampler2D textureTargetPositions;
 
     varying vec3 vColor;
     varying float vImageKey;
     varying float vDistance;
     varying float vViewZ;
+    varying vec3 vTargetPosition;
+    varying float vHasTarget;
 
     attribute float imageKey;
     attribute float pointSize;
 
     void main() {
 
+      float nodeIndex  = position.z - 1.0;
+      float rangeStart = uBeginning * uNodeAmount;
+      float rangeEnd   = uEnding    * uNodeAmount;
+      float inRange    = step( rangeStart, nodeIndex ) * ( 1.0 - step( rangeEnd, nodeIndex ) );
+
       vec4 texel = texture2D( texturePositions, position.xy );
       vec3 vPosition = texel.xyz;
       vPosition.z *= 1.0 - is2D;
+
+      vec4 targetTexel = texture2D( textureTargetPositions, position.xy );
+      vTargetPosition = targetTexel.xyz;
+      vHasTarget = targetTexel.w;
 
       vec4 mvPosition = modelViewMatrix * vec4( vPosition, 1.0 );
 
       gl_PointSize = nodeRadius * pointSize * nodeScale;
       gl_PointSize *= mix( 1.0, frustumSize / - mvPosition.z, sizeAttenuation );
+      gl_PointSize *= inRange;
 
       vDistance = 1.0 / - mvPosition.z;
       vViewZ = mvPosition.z;
@@ -445,19 +490,19 @@ var points = {
       // For fragments inside the circle, offset depth proportionally
       #if defined(GL_EXT_frag_depth)
         if (r <= 1.0) {
-          // Closer to edge = larger depth offset (appears further back)
-          // This creates a spherical depth profile
+          // Keep the center of the node slightly closer so coincident links
+          // do not leak through overlapping nodes.
           float depthOffset = (1.0 - r) * 0.0001;
-          gl_FragDepthEXT = gl_FragCoord.z + depthOffset;
+          gl_FragDepthEXT = gl_FragCoord.z - depthOffset;
         } else {
           gl_FragDepthEXT = gl_FragCoord.z;
         }
       #elif __VERSION__ >= 300
         if (r <= 1.0) {
-          // Closer to edge = larger depth offset (appears further back)
-          // This creates a spherical depth profile
+          // Keep the center of the node slightly closer so coincident links
+          // do not leak through overlapping nodes.
           float depthOffset = (1.0 - r) * 0.0001;
-          gl_FragDepth = gl_FragCoord.z + depthOffset;
+          gl_FragDepth = gl_FragCoord.z - depthOffset;
         } else {
           gl_FragDepth = gl_FragCoord.z;
         }
@@ -496,22 +541,22 @@ var points_default = points;
 
 // src/texture-atlas.js
 import { Texture } from "three";
-var anchor;
+var anchor2;
 var TextureAtlas = class _TextureAtlas extends Texture {
   map = [];
   dimensions = 1;
   isTextureAtlas = true;
   constructor() {
-    if (!anchor) {
-      anchor = document.createElement("a");
+    if (!anchor2) {
+      anchor2 = document.createElement("a");
     }
     super(document.createElement("canvas"));
     this.flipY = false;
   }
   static Resolution = 1024;
   static getAbsoluteURL(path) {
-    anchor.href = path;
-    return anchor.href;
+    anchor2.href = path;
+    return anchor2.href;
   }
   add(src) {
     const scope = this;
@@ -599,11 +644,15 @@ var Points = class extends BasePoints {
         nodeScale: uniforms.nodeScale,
         imageDimensions: { value: atlas.dimensions },
         texturePositions: { value: null },
+        textureTargetPositions: { value: null },
         textureAtlas: { value: atlas },
         size: uniforms.size,
         opacity: uniforms.opacity,
         uColor: uniforms.pointColor,
-        inheritColors: uniforms.pointsInheritColor
+        inheritColors: uniforms.pointsInheritColor,
+        uBeginning: uniforms.uBeginning,
+        uEnding: uniforms.uEnding,
+        uNodeAmount: uniforms.uNodeAmount
       } },
       vertexShader: points_default.vertexShader,
       fragmentShader: points_default.fragmentShader,
@@ -616,7 +665,7 @@ var Points = class extends BasePoints {
   }
   static parse(size2, data) {
     const atlas = new TextureAtlas();
-    const vertices = [];
+    const vertices2 = [];
     const colors = [];
     const imageKeys = [];
     const sizes = [];
@@ -625,7 +674,7 @@ var Points = class extends BasePoints {
       const x = i % size2 / size2;
       const y = Math.floor(i / size2) / size2;
       const z = i + 1;
-      vertices.push(x, y, z);
+      vertices2.push(x, y, z);
       if (node.color) {
         color.set(node.color);
         colors.push(color.r, color.g, color.b);
@@ -642,7 +691,7 @@ var Points = class extends BasePoints {
       const geometry = new BufferGeometry();
       geometry.setAttribute(
         "position",
-        new Float32BufferAttribute(vertices, 3)
+        new Float32BufferAttribute(vertices2, 3)
       );
       geometry.setAttribute(
         "color",
@@ -663,9 +712,10 @@ var Points = class extends BasePoints {
 
 // src/links.js
 import {
-  LineSegments,
-  BufferGeometry as BufferGeometry2,
-  Float32BufferAttribute as Float32BufferAttribute2,
+  BufferAttribute,
+  InstancedBufferAttribute,
+  InstancedBufferGeometry,
+  Mesh,
   ShaderMaterial as ShaderMaterial2,
   UniformsLib as UniformsLib2
 } from "three";
@@ -675,20 +725,85 @@ var links = {
   vertexShader: `
     #include <fog_pars_vertex>
 
+    uniform float frustumSize;
     uniform float is2D;
+    uniform float linewidth;
+    uniform float pixelRatio;
+    uniform float sizeAttenuation;
+    uniform float uBeginning;
+    uniform float uEnding;
+    uniform float uNodeAmount;
+    uniform vec2 resolution;
     uniform sampler2D texturePositions;
 
-    varying vec3 vColor;
+    attribute vec3 source;
+    attribute vec3 target;
+    attribute vec3 sourceColor;
+    attribute vec3 targetColor;
+
+    varying vec2 vSource;
+    varying vec2 vTarget;
+    varying vec3 vSourceColor;
+    varying vec3 vTargetColor;
+    varying float vHalfWidth;
+    varying float inRange;
 
     void main() {
 
-      vec3 vPosition = texture2D( texturePositions, position.xy ).xyz;
-      vPosition.z *= 1.0 - is2D;
+      float sourceIndex    = source.z - 1.0;
+      float targetIndex    = target.z - 1.0;
+      float rangeStart     = uBeginning * uNodeAmount;
+      float rangeEnd       = uEnding * uNodeAmount;
+      float sourceInRange  = step( rangeStart, sourceIndex ) * ( 1.0 - step( rangeEnd, sourceIndex ) );
+      float targetInRange  = step( rangeStart, targetIndex ) * ( 1.0 - step( rangeEnd, targetIndex ) );
 
-      vec4 mvPosition = modelViewMatrix * vec4( vPosition, 1.0 );
-      vColor = color;
+      vec3 sourcePosition = texture2D( texturePositions, source.xy ).xyz;
+      vec3 targetPosition = texture2D( texturePositions, target.xy ).xyz;
+      sourcePosition.z *= 1.0 - is2D;
+      targetPosition.z *= 1.0 - is2D;
 
-      gl_Position = projectionMatrix * mvPosition;
+      vec4 sourceModelView = modelViewMatrix * vec4( sourcePosition, 1.0 );
+      vec4 targetModelView = modelViewMatrix * vec4( targetPosition, 1.0 );
+      vec4 sourceClip = projectionMatrix * sourceModelView;
+      vec4 targetClip = projectionMatrix * targetModelView;
+
+      vec2 safeResolution = max( resolution, vec2( 1.0 ) );
+      vec2 sourceNdc = sourceClip.xy / sourceClip.w;
+      vec2 targetNdc = targetClip.xy / targetClip.w;
+      vec2 sourceScreen = ( sourceNdc * 0.5 + 0.5 ) * safeResolution;
+      vec2 targetScreen = ( targetNdc * 0.5 + 0.5 ) * safeResolution;
+      vec2 delta = targetScreen - sourceScreen;
+
+      float segmentLength = length( delta );
+      vec2 tangent = segmentLength > 0.0 ? delta / segmentLength : vec2( 1.0, 0.0 );
+      vec2 normal = vec2( - tangent.y, tangent.x );
+
+      float centerViewZ = 0.5 * ( sourceModelView.z + targetModelView.z );
+      float widthScale = mix(
+        1.0,
+        frustumSize / max( -centerViewZ, 0.0001 ),
+        sizeAttenuation
+      );
+      float halfWidth = max( 0.5 * linewidth * pixelRatio * widthScale, 0.5 );
+      float expansion = halfWidth + 1.0;
+      float edgeT = position.x * 0.5 + 0.5;
+
+      vec2 base = mix( sourceScreen, targetScreen, edgeT );
+      vec2 screen = base + tangent * position.x * expansion + normal * position.y * expansion;
+      vec2 ndc = ( screen / safeResolution ) * 2.0 - 1.0;
+
+      float clipW = mix( sourceClip.w, targetClip.w, edgeT );
+      float clipZ = mix( sourceClip.z, targetClip.z, edgeT );
+      gl_Position = vec4( ndc * clipW, clipZ, clipW );
+
+      vec4 mvPosition = mix( sourceModelView, targetModelView, edgeT );
+      vSource = sourceScreen;
+      vTarget = targetScreen;
+      vSourceColor = sourceColor;
+      vTargetColor = targetColor;
+      vHalfWidth = halfWidth;
+      inRange = sourceInRange * targetInRange;
+
       #include <fog_vertex>
 
     }
@@ -697,74 +812,200 @@ var links = {
     #include <fog_pars_fragment>
 
     uniform float inheritColors;
+    uniform float linecap;
     uniform vec3 uColor;
     uniform float opacity;
 
-    varying vec3 vColor;
+    varying vec2 vSource;
+    varying vec2 vTarget;
+    varying vec3 vSourceColor;
+    varying vec3 vTargetColor;
+    varying float vHalfWidth;
+    varying float inRange;
+
+    float getSegmentT( vec2 point, vec2 start, vec2 end ) {
+
+      vec2 segment = end - start;
+      float lengthSquared = dot( segment, segment );
+
+      if ( lengthSquared <= 0.0 ) {
+        return 0.0;
+      }
+
+      return clamp( dot( point - start, segment ) / lengthSquared, 0.0, 1.0 );
+
+    }
+
+    float getCapsuleDistance( vec2 point, vec2 start, vec2 end, float radius ) {
+
+      float t = getSegmentT( point, start, end );
+      vec2 closest = mix( start, end, t );
+
+      return length( point - closest ) - radius;
+
+    }
+
+    float getRectDistance( vec2 point, vec2 start, vec2 end, vec2 extent ) {
+
+      vec2 segment = end - start;
+      float segmentLength = length( segment );
+
+      if ( segmentLength <= 0.0 ) {
+        return length( point - start ) - extent.y;
+      }
+
+      vec2 tangent = segment / segmentLength;
+      vec2 normal = vec2( - tangent.y, tangent.x );
+      vec2 local = vec2(
+        dot( point - start, tangent ) - 0.5 * segmentLength,
+        dot( point - start, normal )
+      );
+      vec2 delta = abs( local ) - extent;
+
+      return length( max( delta, 0.0 ) ) + min( max( delta.x, delta.y ), 0.0 );
+
+    }
+
+    float getLinkDistance( vec2 point, vec2 start, vec2 end, float radius ) {
+
+      vec2 segment = end - start;
+      float segmentLength = length( segment );
+
+      if ( segmentLength <= 0.0 ) {
+        return length( point - start ) - radius;
+      }
+
+      if ( linecap < 0.5 ) {
+        return getCapsuleDistance( point, start, end, radius );
+      }
+
+      if ( linecap < 1.5 ) {
+        return getRectDistance(
+          point,
+          start,
+          end,
+          vec2( 0.5 * segmentLength, radius )
+        );
+      }
+
+      return getRectDistance(
+        point,
+        start,
+        end,
+        vec2( 0.5 * segmentLength + radius, radius )
+      );
+
+    }
 
     void main() {
-      gl_FragColor = vec4( mix( vec3( 1.0 ), vColor, inheritColors ) * uColor, opacity );
+
+      if ( inRange < 0.5 ) {
+        discard;
+      }
+
+      float segmentT = getSegmentT( gl_FragCoord.xy, vSource, vTarget );
+      float distanceToCapsule = getLinkDistance(
+        gl_FragCoord.xy,
+        vSource,
+        vTarget,
+        vHalfWidth
+      );
+      float alpha = 1.0 - smoothstep( 0.0, 1.0, distanceToCapsule );
+
+      if ( alpha <= 0.0 ) {
+        discard;
+      }
+
+      vec3 gradient = mix( vSourceColor, vTargetColor, segmentT );
+      gl_FragColor = vec4(
+        mix( vec3( 1.0 ), gradient, inheritColors ) * uColor,
+        opacity * alpha
+      );
+
       #include <fog_fragment>
+
     }
   `
 };
 var links_default = links;
 
 // src/links.js
-var Links = class extends LineSegments {
+var vertices = new Float32Array([-1, -1, 0, 1, -1, 0, -1, 1, 0, 1, 1, 0]);
+var indices = [0, 1, 2, 2, 1, 3];
+var Links = class extends Mesh {
   constructor(geometry, uniforms) {
     const material = new ShaderMaterial2({
-      uniforms: { ...UniformsLib2["fog"], ...{
-        is2D: uniforms.is2D,
-        inheritColors: uniforms.linksInheritColor,
-        opacity: uniforms.opacity,
-        texturePositions: { value: null },
-        uColor: uniforms.linkColor
-      } },
+      uniforms: {
+        ...UniformsLib2["fog"],
+        ...{
+          frustumSize: uniforms.frustumSize,
+          is2D: uniforms.is2D,
+          inheritColors: uniforms.linksInheritColor,
+          linecap: uniforms.linecap,
+          linewidth: uniforms.linewidth,
+          opacity: uniforms.opacity,
+          pixelRatio: uniforms.pixelRatio,
+          resolution: uniforms.resolution,
+          sizeAttenuation: uniforms.sizeAttenuation,
+          texturePositions: { value: null },
+          uColor: uniforms.linkColor,
+          uBeginning: uniforms.uBeginning,
+          uEnding: uniforms.uEnding,
+          uNodeAmount: uniforms.uNodeAmount
+        }
+      },
       vertexShader: links_default.vertexShader,
       fragmentShader: links_default.fragmentShader,
       transparent: true,
-      vertexColors: true,
       fog: true
     });
     super(geometry, material);
     this.frustumCulled = false;
   }
   static parse(points2, data) {
-    const geometry = new BufferGeometry2();
-    const vertices = [];
-    const colors = [];
+    const geometry = new InstancedBufferGeometry();
+    const sources = [];
+    const targets = [];
+    const sourceColors = [];
+    const targetColors = [];
     const v = points2.geometry.attributes.position.array;
     const c = points2.geometry.attributes.color.array;
+    geometry.setAttribute("position", new BufferAttribute(vertices, 3));
+    geometry.setIndex(indices);
     return each(data.links, (_, i) => {
-      const l = data.links[i];
-      const si = 3 * l.sourceIndex;
-      const ti = 3 * l.targetIndex;
-      let x = v[si + 0];
-      let y = v[si + 1];
-      let z = v[si + 2];
-      let r = c[si + 0];
-      let g = c[si + 1];
-      let b = c[si + 2];
-      vertices.push(x, y, z);
-      colors.push(r, g, b);
-      x = v[ti + 0];
-      y = v[ti + 1];
-      z = v[ti + 2];
-      r = c[ti + 0];
-      g = c[ti + 1];
-      b = c[ti + 2];
-      vertices.push(x, y, z);
-      colors.push(r, g, b);
+      const link2 = data.links[i];
+      const sourceIndex = 3 * link2.sourceIndex;
+      const targetIndex = 3 * link2.targetIndex;
+      sources.push(v[sourceIndex + 0], v[sourceIndex + 1], v[sourceIndex + 2]);
+      targets.push(v[targetIndex + 0], v[targetIndex + 1], v[targetIndex + 2]);
+      sourceColors.push(
+        c[sourceIndex + 0],
+        c[sourceIndex + 1],
+        c[sourceIndex + 2]
+      );
+      targetColors.push(
+        c[targetIndex + 0],
+        c[targetIndex + 1],
+        c[targetIndex + 2]
+      );
     }).then(() => {
       geometry.setAttribute(
-        "position",
-        new Float32BufferAttribute2(vertices, 3)
+        "source",
+        new InstancedBufferAttribute(new Float32Array(sources), 3)
       );
       geometry.setAttribute(
-        "color",
-        new Float32BufferAttribute2(colors, 3)
+        "target",
+        new InstancedBufferAttribute(new Float32Array(targets), 3)
       );
+      geometry.setAttribute(
+        "sourceColor",
+        new InstancedBufferAttribute(new Float32Array(sourceColors), 3)
+      );
+      geometry.setAttribute(
+        "targetColor",
+        new InstancedBufferAttribute(new Float32Array(targetColors), 3)
+      );
+      geometry.instanceCount = data.links.length;
       return geometry;
     });
   }
@@ -811,12 +1052,28 @@ var hit = {
     uniform float nodeRadius;
     uniform float nodeScale;
     uniform float hitScale;
+    uniform float uBeginning;
+    uniform float uEnding;
+    uniform float uNodeAmount;
     uniform sampler2D texturePositions;
+
+    attribute float pointSize;
 
     varying vec3 vColor;
     varying float vDistance;
 
     void main() {
+
+      float nodeIndex  = position.z - 1.0;
+      float rangeStart = uBeginning * uNodeAmount;
+      float rangeEnd   = uEnding   * uNodeAmount;
+      float inRange    = step( rangeStart, nodeIndex ) * ( 1.0 - step( rangeEnd, nodeIndex ) );
+
+      if ( inRange < 0.5 ) {
+        gl_PointSize = 0.0;
+        gl_Position  = vec4( 0.0, 0.0, 10000.0, 1.0 );
+        return;
+      }
 
       vec4 texel = texture2D( texturePositions, position.xy );
       vec3 vPosition = texel.xyz;
@@ -824,7 +1081,7 @@ var hit = {
 
       vec4 mvPosition = modelViewMatrix * vec4( vPosition, 1.0 );
 
-      gl_PointSize = nodeRadius * nodeScale;
+      gl_PointSize = nodeRadius * pointSize * nodeScale;
       gl_PointSize *= mix( 1.0, frustumSize / - mvPosition.z, sizeAttenuation );
       gl_PointSize *= hitScale;
 
@@ -1590,6 +1847,13 @@ var TextureWorkerManager = class {
 var color3 = new Color3();
 var position = new Vector3();
 var size = new Vector2();
+var drawingBufferSize = new Vector2();
+var LineCaps = ["round", "butt", "square"];
+var LineCapsMap = {
+  round: 0,
+  butt: 1,
+  square: 2
+};
 var buffers = {
   int: new Uint8ClampedArray(4),
   float: new Float32Array(4)
@@ -1666,6 +1930,7 @@ var ForceDirectedGraph = class extends Group {
       springLength: { value: 2 },
       stiffness: { value: 0.1 },
       gravity: { value: 0.1 },
+      pinStrength: { value: 0 },
       nodeRadius: { value: 1 },
       nodeScale: { value: 8 },
       sizeAttenuation: { value: true },
@@ -1674,7 +1939,14 @@ var ForceDirectedGraph = class extends Group {
       pointsInheritColor: { value: true },
       pointColor: { value: new Color3(1, 1, 1) },
       linkColor: { value: new Color3(1, 1, 1) },
-      opacity: { value: 1 }
+      linecap: { value: LineCapsMap.round },
+      linewidth: { value: 1 },
+      opacity: { value: 1 },
+      pixelRatio: { value: 1 },
+      resolution: { value: new Vector2(1, 1) },
+      uBeginning: { value: 0 },
+      uEnding: { value: 1 },
+      uNodeAmount: { value: 0 }
     };
     this.userData.hit = new Hit(this);
     this.userData.workerManager = new TextureWorkerManager();
@@ -1696,6 +1968,7 @@ var ForceDirectedGraph = class extends Group {
     "springLength",
     "stiffness",
     "gravity",
+    "pinStrength",
     "nodeRadius",
     "nodeScale",
     "sizeAttenuation",
@@ -1704,6 +1977,8 @@ var ForceDirectedGraph = class extends Group {
     "pointsInheritColor",
     "pointColor",
     "linkColor",
+    "linecap",
+    "linewidth",
     "opacity",
     "blending"
   ];
@@ -1745,7 +2020,8 @@ var ForceDirectedGraph = class extends Group {
       positions: gpgpu.createTexture(),
       velocities: gpgpu.createTexture(),
       links: gpgpu.createTexture(),
-      linkRanges: gpgpu.createTexture()
+      linkRanges: gpgpu.createTexture(),
+      targetPositions: gpgpu.createTexture()
     };
     const variables = {
       positions: gpgpu.addVariable(
@@ -1761,6 +2037,7 @@ var ForceDirectedGraph = class extends Group {
     };
     this.userData.gpgpu = gpgpu;
     this.userData.variables = variables;
+    this.userData.textures = textures;
     return register().then(fill).then(setup).then(generate).then(complete).catch((error) => {
       console.warn("Force Directed Graph:", error);
     });
@@ -1797,10 +2074,16 @@ var ForceDirectedGraph = class extends Group {
           textures.links.image.data.set(result.links);
           textures.linkRanges.image.data.set(result.linkRanges);
           packedLinkAmount = result.packedLinkAmount;
-          console.log(`Texture processing completed in ${result.processingTime.toFixed(2)}ms using ${workerManager.isWasmAvailable() ? "WASM" : "JavaScript"}`);
+          fillTargetPositions();
+          console.log(
+            `Texture processing completed in ${result.processingTime.toFixed(2)}ms using ${workerManager.isWasmAvailable() ? "WASM" : "JavaScript"}`
+          );
           return Promise.resolve();
         } catch (error) {
-          console.warn("Worker processing failed, falling back to main thread:", error);
+          console.warn(
+            "Worker processing failed, falling back to main thread:",
+            error
+          );
         }
       }
       return fillMainThread(preparedLinks);
@@ -1814,24 +2097,43 @@ var ForceDirectedGraph = class extends Group {
       textures.links.image.data.set(linkTextureData.linksData);
       textures.linkRanges.image.data.set(linkTextureData.linkRangesData);
       packedLinkAmount = linkTextureData.packedLinkAmount;
-      return each(textures.positions.image.data, (_, i) => {
-        const k = i / 4;
-        const x = Math.random() * 2 - 1;
-        const y = Math.random() * 2 - 1;
-        const z = Math.random() * 2 - 1;
-        if (k < data.nodes.length) {
-          const node = data.nodes[k];
-          textures.positions.image.data[i + 0] = typeof node.x !== "undefined" ? node.x : x;
-          textures.positions.image.data[i + 1] = typeof node.y !== "undefined" ? node.y : y;
-          textures.positions.image.data[i + 2] = typeof node.z !== "undefined" ? node.z : z;
-          textures.positions.image.data[i + 3] = node.isStatic ? 1 : 0;
-        } else {
-          textures.positions.image.data[i + 0] = uniforms.frustumSize.value * 10;
-          textures.positions.image.data[i + 1] = uniforms.frustumSize.value * 10;
-          textures.positions.image.data[i + 2] = uniforms.frustumSize.value * 10;
-          textures.positions.image.data[i + 3] = uniforms.frustumSize.value * 10;
-        }
-      }, 4);
+      return each(
+        textures.positions.image.data,
+        (_, i) => {
+          const k = i / 4;
+          const x = Math.random() * 2 - 1;
+          const y = Math.random() * 2 - 1;
+          const z = Math.random() * 2 - 1;
+          if (k < data.nodes.length) {
+            const node = data.nodes[k];
+            textures.positions.image.data[i + 0] = typeof node.x !== "undefined" ? node.x : x;
+            textures.positions.image.data[i + 1] = typeof node.y !== "undefined" ? node.y : y;
+            textures.positions.image.data[i + 2] = typeof node.z !== "undefined" ? node.z : z;
+            textures.positions.image.data[i + 3] = node.isStatic ? 1 : 0;
+          } else {
+            textures.positions.image.data[i + 0] = uniforms.frustumSize.value * 10;
+            textures.positions.image.data[i + 1] = uniforms.frustumSize.value * 10;
+            textures.positions.image.data[i + 2] = uniforms.frustumSize.value * 10;
+            textures.positions.image.data[i + 3] = uniforms.frustumSize.value * 10;
+          }
+        },
+        4
+      ).then(fillTargetPositions);
+    }
+    function fillTargetPositions() {
+      for (let k = 0; k < data.nodes.length; k++) {
+        const node = data.nodes[k];
+        const i = k * 4;
+        const hasX = typeof node.x !== "undefined";
+        const hasY = typeof node.y !== "undefined";
+        const hasZ = typeof node.z !== "undefined";
+        const definedCount = (hasX ? 1 : 0) + (hasY ? 1 : 0) + (hasZ ? 1 : 0);
+        const hasTarget = definedCount >= 2 ? 1 : 0;
+        textures.targetPositions.image.data[i + 0] = hasTarget ? node.x ?? 0 : 0;
+        textures.targetPositions.image.data[i + 1] = hasTarget ? node.y ?? 0 : 0;
+        textures.targetPositions.image.data[i + 2] = hasTarget ? node.z ?? 0 : 0;
+        textures.targetPositions.image.data[i + 3] = hasTarget;
+      }
     }
     function setup() {
       return new Promise((resolve, reject) => {
@@ -1853,6 +2155,9 @@ var ForceDirectedGraph = class extends Group {
         variables.velocities.material.uniforms.nodeAmount = {
           value: data.nodes.length
         };
+        variables.velocities.material.uniforms.uBeginning = uniforms.uBeginning;
+        variables.velocities.material.uniforms.uEnding = uniforms.uEnding;
+        uniforms.uNodeAmount.value = data.nodes.length;
         variables.velocities.material.uniforms.edgeAmount = {
           value: packedLinkAmount
         };
@@ -1869,6 +2174,10 @@ var ForceDirectedGraph = class extends Group {
         variables.velocities.material.uniforms.springLength = uniforms.springLength;
         variables.velocities.material.uniforms.stiffness = uniforms.stiffness;
         variables.velocities.material.uniforms.gravity = uniforms.gravity;
+        variables.velocities.material.uniforms.pinStrength = uniforms.pinStrength;
+        variables.velocities.material.uniforms.textureTargetPositions = {
+          value: textures.targetPositions
+        };
         variables.positions.wrapS = variables.positions.wrapT = RepeatWrapping;
         variables.velocities.wrapS = variables.velocities.wrapT = RepeatWrapping;
         const error = gpgpu.init();
@@ -1906,14 +2215,21 @@ var ForceDirectedGraph = class extends Group {
     if (!this.ready) {
       return this;
     }
-    const { gpgpu, variables, uniforms } = this.userData;
+    const { gpgpu, renderer, textures, variables, uniforms } = this.userData;
     uniforms.alpha.value *= uniforms.decay.value;
     variables.velocities.material.uniforms.time.value = time / 1e3;
     gpgpu.compute();
+    renderer.getSize(size);
+    renderer.getDrawingBufferSize(drawingBufferSize);
+    uniforms.resolution.value.copy(drawingBufferSize);
+    uniforms.pixelRatio.value = size.x > 0 ? drawingBufferSize.x / size.x : 1;
     const texture = this.getTexture("positions");
     for (let i = 0; i < this.children.length; i++) {
       const child = this.children[i];
       child.material.uniforms.texturePositions.value = texture;
+      if (child.material.uniforms.textureTargetPositions) {
+        child.material.uniforms.textureTargetPositions.value = textures.targetPositions;
+      }
     }
     return this;
   }
@@ -2000,20 +2316,26 @@ var ForceDirectedGraph = class extends Group {
   updateLinksColors() {
     const { data } = this.userData;
     const ref = this.points.geometry.attributes.color.array;
-    const attribute = this.links.geometry.getAttribute("color");
-    const colors = attribute.array;
+    const sourceAttribute = this.links.geometry.getAttribute("sourceColor");
+    const targetAttribute = this.links.geometry.getAttribute("targetColor");
+    const sourceColors = sourceAttribute.array;
+    const targetColors = targetAttribute.array;
     return each(data.links, (_, i) => {
       const l = data.links[i];
-      const li = i * 6;
+      const li = i * 3;
       const si = 3 * l.sourceIndex;
       const ti = 3 * l.targetIndex;
-      colors[li + 0] = ref[si + 0];
-      colors[li + 1] = ref[si + 1];
-      colors[li + 2] = ref[si + 2];
-      colors[li + 3] = ref[ti + 0];
-      colors[li + 4] = ref[ti + 1];
-      colors[li + 5] = ref[ti + 2];
-    }).then(() => attribute.needsUpdate = true);
+      sourceColors[li + 0] = ref[si + 0];
+      sourceColors[li + 1] = ref[si + 1];
+      sourceColors[li + 2] = ref[si + 2];
+      targetColors[li + 0] = ref[ti + 0];
+      targetColors[li + 1] = ref[ti + 1];
+      targetColors[li + 2] = ref[ti + 2];
+    }).then(() => {
+      sourceAttribute.needsUpdate = true;
+      targetAttribute.needsUpdate = true;
+      return true;
+    });
   }
   getIndexById(id) {
     const { registry } = this.userData;
@@ -2128,6 +2450,12 @@ var ForceDirectedGraph = class extends Group {
   set gravity(v) {
     this.userData.uniforms.gravity.value = v;
   }
+  get pinStrength() {
+    return this.userData.uniforms.pinStrength.value;
+  }
+  set pinStrength(v) {
+    this.userData.uniforms.pinStrength.value = v;
+  }
   get nodeRadius() {
     return this.userData.uniforms.nodeRadius.value;
   }
@@ -2182,11 +2510,36 @@ var ForceDirectedGraph = class extends Group {
   set linkColor(v) {
     this.userData.uniforms.linkColor.value = v;
   }
+  get linecap() {
+    const index = Math.round(this.userData.uniforms.linecap.value);
+    return LineCaps[index] || "round";
+  }
+  set linecap(v) {
+    this.userData.uniforms.linecap.value = LineCapsMap[v] ?? LineCapsMap.round;
+  }
+  get linewidth() {
+    return this.userData.uniforms.linewidth.value;
+  }
+  set linewidth(v) {
+    this.userData.uniforms.linewidth.value = v;
+  }
   get opacity() {
     return this.userData.uniforms.opacity.value;
   }
   set opacity(v) {
     this.userData.uniforms.opacity.value = v;
+  }
+  get beginning() {
+    return this.userData.uniforms.uBeginning.value;
+  }
+  set beginning(v) {
+    this.userData.uniforms.uBeginning.value = v;
+  }
+  get ending() {
+    return this.userData.uniforms.uEnding.value;
+  }
+  set ending(v) {
+    this.userData.uniforms.uEnding.value = v;
   }
   get blending() {
     return this.children[0].material.blending;
