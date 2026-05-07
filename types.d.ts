@@ -191,6 +191,7 @@ declare module '@jonobr1/force-directed-graph/shaders/planes' {
 declare module '@jonobr1/force-directed-graph/texture-atlas' {
   export class TextureAtlas extends Texture {
     static Resolution: number;
+    static Padding: number;
     static getAbsoluteURL(path: any): string;
     map: any[];
     dimensions: number;

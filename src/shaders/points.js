@@ -66,6 +66,8 @@ const points = {
     uniform vec3 uColor;
     uniform float opacity;
     uniform float imageDimensions;
+    uniform float atlasResolution;
+    uniform float atlasInset;
     uniform sampler2D textureAtlas;
     uniform float inheritColors;
 
@@ -109,14 +111,12 @@ const points = {
       // Calculate texture atlas coordinates for image sprites
       float col = mod( vImageKey, imageDimensions );
       float row = floor( vImageKey / imageDimensions );
+      float cellSize = 1.0 / imageDimensions;
+      float inset = atlasInset / atlasResolution;
 
-      vec2 uv = vec2( 0.0 );
-      uv.x = mix( 0.0, 1.0 / imageDimensions, gl_PointCoord.x );
-      uv.y = mix( 0.0, 1.0 / imageDimensions, gl_PointCoord.y );
-
-      uv = vec2( gl_PointCoord ) / imageDimensions;
-      uv.x += col / imageDimensions;
-      uv.y += row / imageDimensions;
+      vec2 uv = mix( vec2( inset ), vec2( cellSize - inset ), gl_PointCoord );
+      uv.x += col * cellSize;
+      uv.y += row * cellSize;
 
       vec4 texel = texture2D( textureAtlas, uv );
       float useImage = step( 0.0, vImageKey );

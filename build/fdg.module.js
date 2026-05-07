@@ -476,6 +476,8 @@ var planes = {
     uniform vec3 uColor;
     uniform float opacity;
     uniform float imageDimensions;
+    uniform float atlasResolution;
+    uniform float atlasInset;
     uniform sampler2D textureAtlas;
     uniform float inheritColors;
 
@@ -510,10 +512,12 @@ var planes = {
 
       float col = mod( vImageKey, imageDimensions );
       float row = floor( vImageKey / imageDimensions );
+      float cellSize = 1.0 / imageDimensions;
+      float inset = atlasInset / atlasResolution;
 
-      vec2 atlasUv = vec2( vUv ) / imageDimensions;
-      atlasUv.x += col / imageDimensions;
-      atlasUv.y += row / imageDimensions;
+      vec2 atlasUv = mix( vec2( inset ), vec2( cellSize - inset ), vUv );
+      atlasUv.x += col * cellSize;
+      atlasUv.y += row * cellSize;
 
       vec4 texel = texture2D( textureAtlas, atlasUv );
       float useImage = step( 0.0, vImageKey );
@@ -599,7 +603,7 @@ var hitPlanes = {
 var hit_planes_default = hitPlanes;
 
 // src/texture-atlas.js
-import { Texture } from "three";
+import { LinearFilter, Texture } from "three";
 var anchor2;
 var TextureAtlas = class _TextureAtlas extends Texture {
   map = [];
@@ -611,8 +615,12 @@ var TextureAtlas = class _TextureAtlas extends Texture {
     }
     super(document.createElement("canvas"));
     this.flipY = false;
+    this.generateMipmaps = false;
+    this.minFilter = LinearFilter;
+    this.magFilter = LinearFilter;
   }
   static Resolution = 1024;
+  static Padding = 2;
   static getAbsoluteURL(path) {
     anchor2.href = path;
     return anchor2.href;
@@ -667,14 +675,37 @@ var TextureAtlas = class _TextureAtlas extends Texture {
     const dims = this.dimensions = Math.ceil(Math.sqrt(this.map.length));
     const width = image.width / dims;
     const height = image.height / dims;
+    const padding = Math.min(
+      _TextureAtlas.Padding,
+      Math.max(0, Math.floor(Math.min(width, height) / 4))
+    );
+    const innerWidth = Math.max(1, width - padding * 2);
+    const innerHeight = Math.max(1, height - padding * 2);
     ctx.clearRect(0, 0, image.width, image.height);
+    ctx.imageSmoothingEnabled = true;
     for (let i = 0; i < this.map.length; i++) {
       const col = i % dims;
       const row = Math.floor(i / dims);
       const img = this.map[i];
       const x = col / dims * image.width;
       const y = row / dims * image.height;
-      ctx.drawImage(img, x, y, width, height);
+      const innerX = x + padding;
+      const innerY = y + padding;
+      ctx.drawImage(img, innerX, innerY, innerWidth, innerHeight);
+      if (padding > 0) {
+        const sw = img.naturalWidth || img.width;
+        const sh = img.naturalHeight || img.height;
+        const sx = Math.max(sw - 1, 0);
+        const sy = Math.max(sh - 1, 0);
+        ctx.drawImage(img, 0, 0, sw, 1, innerX, y, innerWidth, padding);
+        ctx.drawImage(img, 0, sy, sw, 1, innerX, innerY + innerHeight, innerWidth, padding);
+        ctx.drawImage(img, 0, 0, 1, sh, x, innerY, padding, innerHeight);
+        ctx.drawImage(img, sx, 0, 1, sh, innerX + innerWidth, innerY, padding, innerHeight);
+        ctx.drawImage(img, 0, 0, 1, 1, x, y, padding, padding);
+        ctx.drawImage(img, sx, 0, 1, 1, innerX + innerWidth, y, padding, padding);
+        ctx.drawImage(img, 0, sy, 1, 1, x, innerY + innerHeight, padding, padding);
+        ctx.drawImage(img, sx, sy, 1, 1, innerX + innerWidth, innerY + innerHeight, padding, padding);
+      }
     }
     this.needsUpdate = true;
   }
@@ -693,53 +724,36 @@ var TextureAtlas = class _TextureAtlas extends Texture {
 // src/planes.js
 var color = new Color();
 var viewport = new Vector2(1, 1);
-var quadPositions = [
-  -0.5,
-  -0.5,
-  0,
-  0.5,
-  -0.5,
-  0,
-  0.5,
-  0.5,
-  0,
-  -0.5,
-  0.5,
-  0
-];
-var quadUvs = [
-  0,
-  0,
-  1,
-  0,
-  1,
-  1,
-  0,
-  1
-];
+var quadPositions = [-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0];
+var quadUvs = [0, 0, 1, 0, 1, 1, 0, 1];
 var quadIndices = [0, 1, 2, 0, 2, 3];
 var Planes = class extends Mesh {
   constructor({ atlas, geometry }, uniforms) {
     const material = new ShaderMaterial({
-      uniforms: { ...UniformsLib.fog, ...{
-        is2D: uniforms.is2D,
-        sizeAttenuation: uniforms.sizeAttenuation,
-        frustumSize: uniforms.frustumSize,
-        nodeRadius: uniforms.nodeRadius,
-        nodeScale: uniforms.nodeScale,
-        imageDimensions: { value: atlas.dimensions },
-        texturePositions: { value: null },
-        textureTargetPositions: { value: null },
-        textureAtlas: { value: atlas },
-        size: uniforms.size,
-        opacity: uniforms.opacity,
-        uColor: uniforms.pointColor,
-        inheritColors: uniforms.pointsInheritColor,
-        uBeginning: uniforms.uBeginning,
-        uEnding: uniforms.uEnding,
-        uNodeAmount: uniforms.uNodeAmount,
-        viewport: { value: viewport.clone() }
-      } },
+      uniforms: {
+        ...UniformsLib.fog,
+        ...{
+          is2D: uniforms.is2D,
+          sizeAttenuation: uniforms.sizeAttenuation,
+          frustumSize: uniforms.frustumSize,
+          nodeRadius: uniforms.nodeRadius,
+          nodeScale: uniforms.nodeScale,
+          imageDimensions: { value: atlas.dimensions },
+          atlasResolution: { value: TextureAtlas.Resolution },
+          atlasInset: { value: TextureAtlas.Padding + 0.5 },
+          texturePositions: { value: null },
+          textureTargetPositions: { value: null },
+          textureAtlas: { value: atlas },
+          size: uniforms.size,
+          opacity: uniforms.opacity,
+          uColor: uniforms.pointColor,
+          inheritColors: uniforms.pointsInheritColor,
+          uBeginning: uniforms.uBeginning,
+          uEnding: uniforms.uEnding,
+          uNodeAmount: uniforms.uNodeAmount,
+          viewport: { value: viewport.clone() }
+        }
+      },
       vertexShader: planes_default.vertexShader,
       fragmentShader: planes_default.fragmentShader,
       transparent: true,
@@ -784,10 +798,7 @@ var Planes = class extends Mesh {
         "position",
         new Float32BufferAttribute(quadPositions, 3)
       );
-      geometry.setAttribute(
-        "uv",
-        new Float32BufferAttribute(quadUvs, 2)
-      );
+      geometry.setAttribute("uv", new Float32BufferAttribute(quadUvs, 2));
       geometry.setAttribute(
         "lookup",
         new InstancedBufferAttribute(new Float32Array(lookup), 2)

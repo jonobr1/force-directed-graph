@@ -71,6 +71,8 @@ const planes = {
     uniform vec3 uColor;
     uniform float opacity;
     uniform float imageDimensions;
+    uniform float atlasResolution;
+    uniform float atlasInset;
     uniform sampler2D textureAtlas;
     uniform float inheritColors;
 
@@ -105,10 +107,12 @@ const planes = {
 
       float col = mod( vImageKey, imageDimensions );
       float row = floor( vImageKey / imageDimensions );
+      float cellSize = 1.0 / imageDimensions;
+      float inset = atlasInset / atlasResolution;
 
-      vec2 atlasUv = vec2( vUv ) / imageDimensions;
-      atlasUv.x += col / imageDimensions;
-      atlasUv.y += row / imageDimensions;
+      vec2 atlasUv = mix( vec2( inset ), vec2( cellSize - inset ), vUv );
+      atlasUv.x += col * cellSize;
+      atlasUv.y += row * cellSize;
 
       vec4 texel = texture2D( textureAtlas, atlasUv );
       float useImage = step( 0.0, vImageKey );

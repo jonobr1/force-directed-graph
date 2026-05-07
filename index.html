@@ -184,10 +184,11 @@
           nodes: [],
           links: []
         };
+        const images = ['assets/images/grapes_1f347.png', 'assets/images/lemon_1f34b.png', 'assets/images/melon_1f348.png'];
 
         for (let i = 0; i < amount; i++) {
 
-          data.nodes.push({ id: i });
+          data.nodes.push({ id: i, image: images[i % images.length] });
 
           const target = Math.floor(Math.random() * i);
           const source = i;

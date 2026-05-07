@@ -24,6 +24,8 @@ class Points extends BasePoints {
           nodeRadius: uniforms.nodeRadius,
           nodeScale: uniforms.nodeScale,
           imageDimensions: { value: atlas.dimensions },
+          atlasResolution: { value: TextureAtlas.Resolution },
+          atlasInset: { value: TextureAtlas.Padding + 0.5 },
           texturePositions: { value: null },
           textureTargetPositions: { value: null },
           textureAtlas: { value: atlas },
