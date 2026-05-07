@@ -1,96 +1,103 @@
 import {
-  LineSegments,
-  BufferGeometry,
-  Float32BufferAttribute,
+  BufferAttribute,
+  InstancedBufferAttribute,
+  InstancedBufferGeometry,
+  Mesh,
   ShaderMaterial,
-  UniformsLib
+  UniformsLib,
 } from 'three';
-import { each } from "./math.js";
+import { each } from './math.js';
 import shader from './shaders/links.js';
 
-class Links extends LineSegments {
+const vertices = new Float32Array([-1, -1, 0, 1, -1, 0, -1, 1, 0, 1, 1, 0]);
 
+const indices = [0, 1, 2, 2, 1, 3];
+
+class Links extends Mesh {
   constructor(geometry, uniforms) {
-
     const material = new ShaderMaterial({
-      uniforms: { ...UniformsLib['fog'], ...{
-        is2D: uniforms.is2D,
-        inheritColors: uniforms.linksInheritColor,
-        opacity: uniforms.opacity,
-        texturePositions: { value: null },
-        uColor: uniforms.linkColor,
-        uBeginning: uniforms.uBeginning,
-        uEnding: uniforms.uEnding,
-        uNodeAmount: uniforms.uNodeAmount,
-      } },
+      uniforms: {
+        ...UniformsLib['fog'],
+        ...{
+          frustumSize: uniforms.frustumSize,
+          is2D: uniforms.is2D,
+          inheritColors: uniforms.linksInheritColor,
+          linecap: uniforms.linecap,
+          linewidth: uniforms.linewidth,
+          opacity: uniforms.opacity,
+          pixelRatio: uniforms.pixelRatio,
+          resolution: uniforms.resolution,
+          sizeAttenuation: uniforms.sizeAttenuation,
+          texturePositions: { value: null },
+          uColor: uniforms.linkColor,
+          uBeginning: uniforms.uBeginning,
+          uEnding: uniforms.uEnding,
+          uNodeAmount: uniforms.uNodeAmount,
+        },
+      },
       vertexShader: shader.vertexShader,
       fragmentShader: shader.fragmentShader,
       transparent: true,
-      vertexColors: true,
-      fog: true
+      fog: true,
     });
 
     super(geometry, material);
     this.frustumCulled = false;
-
   }
 
   static parse(points, data) {
-
-    const geometry = new BufferGeometry();
-    const vertices = [];
-    const colors = [];
-    const partnerIndices = [];
+    const geometry = new InstancedBufferGeometry();
+    const sources = [];
+    const targets = [];
+    const sourceColors = [];
+    const targetColors = [];
 
     const v = points.geometry.attributes.position.array;
     const c = points.geometry.attributes.color.array;
 
+    geometry.setAttribute('position', new BufferAttribute(vertices, 3));
+    geometry.setIndex(indices);
+
     return each(data.links, (_, i) => {
+      const link = data.links[i];
 
-      const l = data.links[i];
+      const sourceIndex = 3 * link.sourceIndex;
+      const targetIndex = 3 * link.targetIndex;
 
-      const si = 3 * l.sourceIndex;
-      const ti = 3 * l.targetIndex;
-
-      let x = v[si + 0];
-      let y = v[si + 1];
-      let z = v[si + 2];
-
-      let r = c[si + 0];
-      let g = c[si + 1];
-      let b = c[si + 2];
-
-      vertices.push(x, y, z);
-      colors.push(r, g, b);
-      partnerIndices.push(v[ti + 2]); // target's nodeIndex+1
-
-      x = v[ti + 0];
-      y = v[ti + 1];
-      z = v[ti + 2];
-
-      r = c[ti + 0];
-      g = c[ti + 1];
-      b = c[ti + 2];
-
-      vertices.push(x, y, z);
-      colors.push(r, g, b);
-      partnerIndices.push(v[si + 2]); // source's nodeIndex+1
-
+      sources.push(v[sourceIndex + 0], v[sourceIndex + 1], v[sourceIndex + 2]);
+      targets.push(v[targetIndex + 0], v[targetIndex + 1], v[targetIndex + 2]);
+      sourceColors.push(
+        c[sourceIndex + 0],
+        c[sourceIndex + 1],
+        c[sourceIndex + 2],
+      );
+      targetColors.push(
+        c[targetIndex + 0],
+        c[targetIndex + 1],
+        c[targetIndex + 2],
+      );
     }).then(() => {
-
-      geometry.setAttribute('position',
-        new Float32BufferAttribute(vertices, 3));
-      geometry.setAttribute('color',
-        new Float32BufferAttribute(colors, 3));
-      geometry.setAttribute('partnerIndex',
-        new Float32BufferAttribute(partnerIndices, 1));
+      geometry.setAttribute(
+        'source',
+        new InstancedBufferAttribute(new Float32Array(sources), 3),
+      );
+      geometry.setAttribute(
+        'target',
+        new InstancedBufferAttribute(new Float32Array(targets), 3),
+      );
+      geometry.setAttribute(
+        'sourceColor',
+        new InstancedBufferAttribute(new Float32Array(sourceColors), 3),
+      );
+      geometry.setAttribute(
+        'targetColor',
+        new InstancedBufferAttribute(new Float32Array(targetColors), 3),
+      );
+      geometry.instanceCount = data.links.length;
 
       return geometry;
-
     });
-
   }
-
 }
 
 export { Links };

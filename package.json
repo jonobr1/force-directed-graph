@@ -1,6 +1,6 @@
 {
   "name": "@jonobr1/force-directed-graph",
-  "version": "1.22.1",
+  "version": "1.23.1",
   "description": "GPU supercharged attraction-graph visualizations for the web built on top of Three.js",
   "main": "build/fdg.js",
   "module": "build/fdg.module.js",
@@ -54,11 +54,11 @@
     "three": ">=0.150.0"
   },
   "devDependencies": {
-    "@assemblyscript/loader": "^0.27.0",
-    "assemblyscript": "^0.27.0",
-    "esbuild": "^0.25.0",
-    "eslint": "^9.21.0",
-    "typescript": "^5.8.2",
-    "vitest": "^4.0.18"
+    "@assemblyscript/loader": "^0.28.17",
+    "assemblyscript": "^0.28.17",
+    "esbuild": "^0.28.0",
+    "eslint": "^10.3.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
   }
 }

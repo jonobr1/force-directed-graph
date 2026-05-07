@@ -88,19 +88,19 @@ const points = {
       // For fragments inside the circle, offset depth proportionally
       #if defined(GL_EXT_frag_depth)
         if (r <= 1.0) {
-          // Closer to edge = larger depth offset (appears further back)
-          // This creates a spherical depth profile
+          // Keep the center of the node slightly closer so coincident links
+          // do not leak through overlapping nodes.
           float depthOffset = (1.0 - r) * 0.0001;
-          gl_FragDepthEXT = gl_FragCoord.z + depthOffset;
+          gl_FragDepthEXT = gl_FragCoord.z - depthOffset;
         } else {
           gl_FragDepthEXT = gl_FragCoord.z;
         }
       #elif __VERSION__ >= 300
         if (r <= 1.0) {
-          // Closer to edge = larger depth offset (appears further back)
-          // This creates a spherical depth profile
+          // Keep the center of the node slightly closer so coincident links
+          // do not leak through overlapping nodes.
           float depthOffset = (1.0 - r) * 0.0001;
-          gl_FragDepth = gl_FragCoord.z + depthOffset;
+          gl_FragDepth = gl_FragCoord.z - depthOffset;
         } else {
           gl_FragDepth = gl_FragCoord.z;
         }

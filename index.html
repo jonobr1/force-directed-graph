@@ -232,6 +232,7 @@
             { name: 'gravity', min: 0, max: 1, step: 0.1 },
             { name: 'beginning', min: 0, max: 1, step: 0.01 },
             { name: 'ending', min: 0, max: 1, step: 0.01 },
+            
             { name: 'opacity', min: 0, max: 1, step: 0.1 }
           ].forEach(function({ name, min, max, step }) {
 
@@ -259,6 +260,8 @@
           folders.links.add(fdg.links, 'visible').name('visible');
           folders.links.add(fdg, 'linksInheritColor').name('inheritColor');
           folders.links.addColor(fdg, 'linkColor').name('color');
+          folders.links.add(fdg, 'linewidth', 0.5, 16, 0.5).name('linewidth');
+          folders.links.add(fdg, 'linecap', ['round', 'butt', 'square']).name('cap');
 
           scene.add(fdg);
 

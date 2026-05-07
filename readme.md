@@ -5,10 +5,11 @@ GPU supercharged attraction-graph visualizations for the web built on top of [Th
 1. 🧮 Simulation computed on GPU via render targets
 2. 🕸️ Accepts thousands of nodes and links
 3. 🎨 Configurable point and link colors
-4. 📦 Single library dependent (Three.js)
-5. 🧩 Three.js scene compatible object
-6. 📝 Simple data schema to populate compatible with d3.js JSON samples
-7. 🧊 2d & 3d simulation modes
+4. 〰️ GPU-expanded antialiased line rendering with configurable width
+5. 📦 Single library dependent (Three.js)
+6. 🧩 Three.js scene compatible object
+7. 📝 Simple data schema to populate compatible with d3.js JSON samples
+8. 🧊 2d & 3d simulation modes
 
 Visit the hosted [project page](https://jonobr1.com/force-directed-graph/) for a running demo.
 

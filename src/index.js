@@ -12,6 +12,13 @@ import { TextureWorkerManager } from './texture-worker-manager.js';
 const color = new Color();
 const position = new Vector3();
 const size = new Vector2();
+const drawingBufferSize = new Vector2();
+const LineCaps = ['round', 'butt', 'square'];
+const LineCapsMap = {
+  round: 0,
+  butt: 1,
+  square: 2,
+};
 const buffers = {
   int: new Uint8ClampedArray(4),
   float: new Float32Array(4),
@@ -61,7 +68,7 @@ function buildLinkTextureData(preparedLinks, nodeAmount, size) {
 
   if (packedLinks.length > totalElements) {
     throw new Error(
-      `Packed links (${packedLinks.length}) exceed texture capacity (${totalElements}).`
+      `Packed links (${packedLinks.length}) exceed texture capacity (${totalElements}).`,
     );
   }
 
@@ -118,7 +125,11 @@ class ForceDirectedGraph extends Group {
       pointsInheritColor: { value: true },
       pointColor: { value: new Color(1, 1, 1) },
       linkColor: { value: new Color(1, 1, 1) },
+      linecap: { value: LineCapsMap.round },
+      linewidth: { value: 1 },
       opacity: { value: 1 },
+      pixelRatio: { value: 1 },
+      resolution: { value: new Vector2(1, 1) },
       uBeginning: { value: 0 },
       uEnding: { value: 1 },
       uNodeAmount: { value: 0 },
@@ -154,6 +165,8 @@ class ForceDirectedGraph extends Group {
     'pointsInheritColor',
     'pointColor',
     'linkColor',
+    'linecap',
+    'linewidth',
     'opacity',
     'blending',
   ];
@@ -216,12 +229,12 @@ class ForceDirectedGraph extends Group {
       positions: gpgpu.addVariable(
         'texturePositions',
         simulation.positions,
-        textures.positions
+        textures.positions,
       ),
       velocities: gpgpu.addVariable(
         'textureVelocities',
         simulation.velocities,
-        textures.velocities
+        textures.velocities,
       ),
     };
 
@@ -262,12 +275,12 @@ class ForceDirectedGraph extends Group {
           targetIndex,
         };
       });
-      
+
       // Initialize worker if not already done
       if (!workerManager.isReady()) {
         await workerManager.init();
       }
-      
+
       // Try worker-based processing first
       if (workerManager.isReady()) {
         try {
@@ -277,7 +290,7 @@ class ForceDirectedGraph extends Group {
             textureSize: size,
             frustumSize: uniforms.frustumSize.value,
           });
-          
+
           // Copy results to texture data
           textures.positions.image.data.set(result.positions);
           textures.links.image.data.set(result.links);
@@ -285,53 +298,66 @@ class ForceDirectedGraph extends Group {
           packedLinkAmount = result.packedLinkAmount;
           fillTargetPositions();
 
-          console.log(`Texture processing completed in ${result.processingTime.toFixed(2)}ms using ${workerManager.isWasmAvailable() ? 'WASM' : 'JavaScript'}`);
+          console.log(
+            `Texture processing completed in ${result.processingTime.toFixed(2)}ms using ${workerManager.isWasmAvailable() ? 'WASM' : 'JavaScript'}`,
+          );
 
           return Promise.resolve();
         } catch (error) {
-          console.warn('Worker processing failed, falling back to main thread:', error);
+          console.warn(
+            'Worker processing failed, falling back to main thread:',
+            error,
+          );
           // Fall through to main thread processing
         }
       }
-      
+
       // Fallback to main thread processing
       return fillMainThread(preparedLinks);
     }
-    
+
     function fillMainThread(preparedLinks) {
       const linkTextureData = buildLinkTextureData(
         preparedLinks,
         data.nodes.length,
-        size
+        size,
       );
       textures.links.image.data.set(linkTextureData.linksData);
       textures.linkRanges.image.data.set(linkTextureData.linkRangesData);
       packedLinkAmount = linkTextureData.packedLinkAmount;
 
-      return each(textures.positions.image.data, (_, i) => {
-        const k = i / 4;
-        const x = Math.random() * 2 - 1;
-        const y = Math.random() * 2 - 1;
-        const z = Math.random() * 2 - 1;
+      return each(
+        textures.positions.image.data,
+        (_, i) => {
+          const k = i / 4;
+          const x = Math.random() * 2 - 1;
+          const y = Math.random() * 2 - 1;
+          const z = Math.random() * 2 - 1;
 
-        if (k < data.nodes.length) {
-          const node = data.nodes[k];
+          if (k < data.nodes.length) {
+            const node = data.nodes[k];
 
-          textures.positions.image.data[i + 0] =
-            typeof node.x !== 'undefined' ? node.x : x;
-          textures.positions.image.data[i + 1] =
-            typeof node.y !== 'undefined' ? node.y : y;
-          textures.positions.image.data[i + 2] =
-            typeof node.z !== 'undefined' ? node.z : z;
-          textures.positions.image.data[i + 3] = node.isStatic ? 1 : 0;
-        } else {
-          // Throw all outside "extraneous" nodes generated by texture far far away.
-          textures.positions.image.data[i + 0] = uniforms.frustumSize.value * 10;
-          textures.positions.image.data[i + 1] = uniforms.frustumSize.value * 10;
-          textures.positions.image.data[i + 2] = uniforms.frustumSize.value * 10;
-          textures.positions.image.data[i + 3] = uniforms.frustumSize.value * 10;
-        }
-      }, 4).then(fillTargetPositions);
+            textures.positions.image.data[i + 0] =
+              typeof node.x !== 'undefined' ? node.x : x;
+            textures.positions.image.data[i + 1] =
+              typeof node.y !== 'undefined' ? node.y : y;
+            textures.positions.image.data[i + 2] =
+              typeof node.z !== 'undefined' ? node.z : z;
+            textures.positions.image.data[i + 3] = node.isStatic ? 1 : 0;
+          } else {
+            // Throw all outside "extraneous" nodes generated by texture far far away.
+            textures.positions.image.data[i + 0] =
+              uniforms.frustumSize.value * 10;
+            textures.positions.image.data[i + 1] =
+              uniforms.frustumSize.value * 10;
+            textures.positions.image.data[i + 2] =
+              uniforms.frustumSize.value * 10;
+            textures.positions.image.data[i + 3] =
+              uniforms.frustumSize.value * 10;
+          }
+        },
+        4,
+      ).then(fillTargetPositions);
     }
 
     function fillTargetPositions() {
@@ -343,9 +369,15 @@ class ForceDirectedGraph extends Group {
         const hasZ = typeof node.z !== 'undefined';
         const definedCount = (hasX ? 1 : 0) + (hasY ? 1 : 0) + (hasZ ? 1 : 0);
         const hasTarget = definedCount >= 2 ? 1.0 : 0.0;
-        textures.targetPositions.image.data[i + 0] = hasTarget ? (node.x ?? 0) : 0;
-        textures.targetPositions.image.data[i + 1] = hasTarget ? (node.y ?? 0) : 0;
-        textures.targetPositions.image.data[i + 2] = hasTarget ? (node.z ?? 0) : 0;
+        textures.targetPositions.image.data[i + 0] = hasTarget
+          ? (node.x ?? 0)
+          : 0;
+        textures.targetPositions.image.data[i + 1] = hasTarget
+          ? (node.y ?? 0)
+          : 0;
+        textures.targetPositions.image.data[i + 2] = hasTarget
+          ? (node.z ?? 0)
+          : 0;
         textures.targetPositions.image.data[i + 3] = hasTarget;
       }
     }
@@ -392,7 +424,8 @@ class ForceDirectedGraph extends Group {
           uniforms.springLength;
         variables.velocities.material.uniforms.stiffness = uniforms.stiffness;
         variables.velocities.material.uniforms.gravity = uniforms.gravity;
-        variables.velocities.material.uniforms.pinStrength = uniforms.pinStrength;
+        variables.velocities.material.uniforms.pinStrength =
+          uniforms.pinStrength;
         variables.velocities.material.uniforms.textureTargetPositions = {
           value: textures.targetPositions,
         };
@@ -444,12 +477,18 @@ class ForceDirectedGraph extends Group {
       return this;
     }
 
-    const { gpgpu, textures, variables, uniforms } = this.userData;
+    const { gpgpu, renderer, textures, variables, uniforms } = this.userData;
 
     uniforms.alpha.value *= uniforms.decay.value;
 
     variables.velocities.material.uniforms.time.value = time / 1000;
     gpgpu.compute();
+
+    renderer.getSize(size);
+    renderer.getDrawingBufferSize(drawingBufferSize);
+
+    uniforms.resolution.value.copy(drawingBufferSize);
+    uniforms.pixelRatio.value = size.x > 0 ? drawingBufferSize.x / size.x : 1;
 
     const texture = this.getTexture('positions');
 
@@ -488,7 +527,7 @@ class ForceDirectedGraph extends Group {
       y - 0.5,
       1,
       1,
-      buffers.int
+      buffers.int,
     );
 
     const [r, g, b, a] = buffers.int;
@@ -521,7 +560,7 @@ class ForceDirectedGraph extends Group {
     if (!points || !renderer || !size) {
       console.warn(
         'Force Directed Graph:',
-        'unable to calculate position without points or renderer.'
+        'unable to calculate position without points or renderer.',
       );
       return;
     }
@@ -538,7 +577,7 @@ class ForceDirectedGraph extends Group {
       uvy,
       1,
       1,
-      buffers.float
+      buffers.float,
     );
 
     const [x, y, z] = buffers.float;
@@ -569,23 +608,30 @@ class ForceDirectedGraph extends Group {
     const { data } = this.userData;
 
     const ref = this.points.geometry.attributes.color.array;
-    const attribute = this.links.geometry.getAttribute('color');
-    const colors = attribute.array;
+    const sourceAttribute = this.links.geometry.getAttribute('sourceColor');
+    const targetAttribute = this.links.geometry.getAttribute('targetColor');
+    const sourceColors = sourceAttribute.array;
+    const targetColors = targetAttribute.array;
 
     return each(data.links, (_, i) => {
       const l = data.links[i];
-      const li = i * 6;
+      const li = i * 3;
       const si = 3 * l.sourceIndex;
       const ti = 3 * l.targetIndex;
 
-      colors[li + 0] = ref[si + 0];
-      colors[li + 1] = ref[si + 1];
-      colors[li + 2] = ref[si + 2];
+      sourceColors[li + 0] = ref[si + 0];
+      sourceColors[li + 1] = ref[si + 1];
+      sourceColors[li + 2] = ref[si + 2];
 
-      colors[li + 3] = ref[ti + 0];
-      colors[li + 4] = ref[ti + 1];
-      colors[li + 5] = ref[ti + 2];
-    }).then(() => (attribute.needsUpdate = true));
+      targetColors[li + 0] = ref[ti + 0];
+      targetColors[li + 1] = ref[ti + 1];
+      targetColors[li + 2] = ref[ti + 2];
+    }).then(() => {
+      sourceAttribute.needsUpdate = true;
+      targetAttribute.needsUpdate = true;
+
+      return true;
+    });
   }
 
   getIndexById(id) {
@@ -766,6 +812,19 @@ class ForceDirectedGraph extends Group {
   set linkColor(v) {
     this.userData.uniforms.linkColor.value = v;
   }
+  get linecap() {
+    const index = Math.round(this.userData.uniforms.linecap.value);
+    return LineCaps[index] || 'round';
+  }
+  set linecap(v) {
+    this.userData.uniforms.linecap.value = LineCapsMap[v] ?? LineCapsMap.round;
+  }
+  get linewidth() {
+    return this.userData.uniforms.linewidth.value;
+  }
+  set linewidth(v) {
+    this.userData.uniforms.linewidth.value = v;
+  }
   get opacity() {
     return this.userData.uniforms.opacity.value;
   }
@@ -811,21 +870,23 @@ class ForceDirectedGraph extends Group {
     const { variables } = this.userData;
     return variables.velocities.material.uniforms.edgeAmount.value;
   }
-  
+
   /**
    * Get performance information about texture processing
    * @returns {Object} Performance statistics
    */
   getPerformanceInfo() {
     const { workerManager } = this.userData;
-    return workerManager ? workerManager.getPerformanceInfo() : {
-      workerSupported: false,
-      workerReady: false,
-      wasmReady: false,
-      pendingRequests: 0
-    };
+    return workerManager
+      ? workerManager.getPerformanceInfo()
+      : {
+          workerSupported: false,
+          workerReady: false,
+          wasmReady: false,
+          pendingRequests: 0,
+        };
   }
-  
+
   /**
    * Check if worker-based processing is available
    * @returns {boolean} True if worker processing is available
@@ -834,7 +895,7 @@ class ForceDirectedGraph extends Group {
     const { workerManager } = this.userData;
     return workerManager && workerManager.isReady();
   }
-  
+
   /**
    * Check if WASM acceleration is available
    * @returns {boolean} True if WASM is available
