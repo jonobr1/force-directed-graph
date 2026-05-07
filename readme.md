@@ -49,11 +49,12 @@ type NodeData = {
   isStatic?: boolean;  // Optional, pins node when true
   color?: string;      // Optional CSS color (ex: '#ff6600', 'rgb(255,0,0)')
   image?: string;      // Optional image URL for sprite atlas
+  size?: number        // Optional size for per-node sizing
 };
 
 type LinkData = {
-  source: string | number; // Node reference (must match a node id)
-  target: string | number; // Node reference (must match a node id)
+  source: string | number; // Node reference (must match a node.id)
+  target: string | number; // Node reference (must match a node.id)
 };
 ```
 
