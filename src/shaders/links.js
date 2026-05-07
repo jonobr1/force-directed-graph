@@ -89,6 +89,7 @@ const links = {
     #include <fog_pars_fragment>
 
     uniform float inheritColors;
+    uniform float linecap;
     uniform vec3 uColor;
     uniform float opacity;
 
@@ -121,6 +122,58 @@ const links = {
 
     }
 
+    float getRectDistance( vec2 point, vec2 start, vec2 end, vec2 extent ) {
+
+      vec2 segment = end - start;
+      float segmentLength = length( segment );
+
+      if ( segmentLength <= 0.0 ) {
+        return length( point - start ) - extent.y;
+      }
+
+      vec2 tangent = segment / segmentLength;
+      vec2 normal = vec2( - tangent.y, tangent.x );
+      vec2 local = vec2(
+        dot( point - start, tangent ) - 0.5 * segmentLength,
+        dot( point - start, normal )
+      );
+      vec2 delta = abs( local ) - extent;
+
+      return length( max( delta, 0.0 ) ) + min( max( delta.x, delta.y ), 0.0 );
+
+    }
+
+    float getLinkDistance( vec2 point, vec2 start, vec2 end, float radius ) {
+
+      vec2 segment = end - start;
+      float segmentLength = length( segment );
+
+      if ( segmentLength <= 0.0 ) {
+        return length( point - start ) - radius;
+      }
+
+      if ( linecap < 0.5 ) {
+        return getCapsuleDistance( point, start, end, radius );
+      }
+
+      if ( linecap < 1.5 ) {
+        return getRectDistance(
+          point,
+          start,
+          end,
+          vec2( 0.5 * segmentLength, radius )
+        );
+      }
+
+      return getRectDistance(
+        point,
+        start,
+        end,
+        vec2( 0.5 * segmentLength + radius, radius )
+      );
+
+    }
+
     void main() {
 
       if ( inRange < 0.5 ) {
@@ -128,7 +181,7 @@ const links = {
       }
 
       float segmentT = getSegmentT( gl_FragCoord.xy, vSource, vTarget );
-      float distanceToCapsule = getCapsuleDistance(
+      float distanceToCapsule = getLinkDistance(
         gl_FragCoord.xy,
         vSource,
         vTarget,

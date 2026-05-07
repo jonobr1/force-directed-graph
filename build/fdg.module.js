@@ -812,6 +812,7 @@ var links = {
     #include <fog_pars_fragment>
 
     uniform float inheritColors;
+    uniform float linecap;
     uniform vec3 uColor;
     uniform float opacity;
 
@@ -844,6 +845,58 @@ var links = {
 
     }
 
+    float getRectDistance( vec2 point, vec2 start, vec2 end, vec2 extent ) {
+
+      vec2 segment = end - start;
+      float segmentLength = length( segment );
+
+      if ( segmentLength <= 0.0 ) {
+        return length( point - start ) - extent.y;
+      }
+
+      vec2 tangent = segment / segmentLength;
+      vec2 normal = vec2( - tangent.y, tangent.x );
+      vec2 local = vec2(
+        dot( point - start, tangent ) - 0.5 * segmentLength,
+        dot( point - start, normal )
+      );
+      vec2 delta = abs( local ) - extent;
+
+      return length( max( delta, 0.0 ) ) + min( max( delta.x, delta.y ), 0.0 );
+
+    }
+
+    float getLinkDistance( vec2 point, vec2 start, vec2 end, float radius ) {
+
+      vec2 segment = end - start;
+      float segmentLength = length( segment );
+
+      if ( segmentLength <= 0.0 ) {
+        return length( point - start ) - radius;
+      }
+
+      if ( linecap < 0.5 ) {
+        return getCapsuleDistance( point, start, end, radius );
+      }
+
+      if ( linecap < 1.5 ) {
+        return getRectDistance(
+          point,
+          start,
+          end,
+          vec2( 0.5 * segmentLength, radius )
+        );
+      }
+
+      return getRectDistance(
+        point,
+        start,
+        end,
+        vec2( 0.5 * segmentLength + radius, radius )
+      );
+
+    }
+
     void main() {
 
       if ( inRange < 0.5 ) {
@@ -851,7 +904,7 @@ var links = {
       }
 
       float segmentT = getSegmentT( gl_FragCoord.xy, vSource, vTarget );
-      float distanceToCapsule = getCapsuleDistance(
+      float distanceToCapsule = getLinkDistance(
         gl_FragCoord.xy,
         vSource,
         vTarget,
@@ -888,6 +941,7 @@ var Links = class extends Mesh {
           frustumSize: uniforms.frustumSize,
           is2D: uniforms.is2D,
           inheritColors: uniforms.linksInheritColor,
+          linecap: uniforms.linecap,
           linewidth: uniforms.linewidth,
           opacity: uniforms.opacity,
           pixelRatio: uniforms.pixelRatio,
@@ -1794,6 +1848,12 @@ var color3 = new Color3();
 var position = new Vector3();
 var size = new Vector2();
 var drawingBufferSize = new Vector2();
+var LineCaps = ["round", "butt", "square"];
+var LineCapsMap = {
+  round: 0,
+  butt: 1,
+  square: 2
+};
 var buffers = {
   int: new Uint8ClampedArray(4),
   float: new Float32Array(4)
@@ -1879,6 +1939,7 @@ var ForceDirectedGraph = class extends Group {
       pointsInheritColor: { value: true },
       pointColor: { value: new Color3(1, 1, 1) },
       linkColor: { value: new Color3(1, 1, 1) },
+      linecap: { value: LineCapsMap.round },
       linewidth: { value: 1 },
       opacity: { value: 1 },
       pixelRatio: { value: 1 },
@@ -1916,6 +1977,7 @@ var ForceDirectedGraph = class extends Group {
     "pointsInheritColor",
     "pointColor",
     "linkColor",
+    "linecap",
     "linewidth",
     "opacity",
     "blending"
@@ -2447,6 +2509,13 @@ var ForceDirectedGraph = class extends Group {
   }
   set linkColor(v) {
     this.userData.uniforms.linkColor.value = v;
+  }
+  get linecap() {
+    const index = Math.round(this.userData.uniforms.linecap.value);
+    return LineCaps[index] || "round";
+  }
+  set linecap(v) {
+    this.userData.uniforms.linecap.value = LineCapsMap[v] ?? LineCapsMap.round;
   }
   get linewidth() {
     return this.userData.uniforms.linewidth.value;

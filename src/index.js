@@ -13,6 +13,12 @@ const color = new Color();
 const position = new Vector3();
 const size = new Vector2();
 const drawingBufferSize = new Vector2();
+const LineCaps = ['round', 'butt', 'square'];
+const LineCapsMap = {
+  round: 0,
+  butt: 1,
+  square: 2,
+};
 const buffers = {
   int: new Uint8ClampedArray(4),
   float: new Float32Array(4),
@@ -119,6 +125,7 @@ class ForceDirectedGraph extends Group {
       pointsInheritColor: { value: true },
       pointColor: { value: new Color(1, 1, 1) },
       linkColor: { value: new Color(1, 1, 1) },
+      linecap: { value: LineCapsMap.round },
       linewidth: { value: 1 },
       opacity: { value: 1 },
       pixelRatio: { value: 1 },
@@ -158,6 +165,7 @@ class ForceDirectedGraph extends Group {
     'pointsInheritColor',
     'pointColor',
     'linkColor',
+    'linecap',
     'linewidth',
     'opacity',
     'blending',
@@ -803,6 +811,13 @@ class ForceDirectedGraph extends Group {
   }
   set linkColor(v) {
     this.userData.uniforms.linkColor.value = v;
+  }
+  get linecap() {
+    const index = Math.round(this.userData.uniforms.linecap.value);
+    return LineCaps[index] || 'round';
+  }
+  set linecap(v) {
+    this.userData.uniforms.linecap.value = LineCapsMap[v] ?? LineCapsMap.round;
   }
   get linewidth() {
     return this.userData.uniforms.linewidth.value;

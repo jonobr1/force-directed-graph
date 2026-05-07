@@ -260,6 +260,7 @@
           folders.links.add(fdg.links, 'visible').name('visible');
           folders.links.add(fdg, 'linksInheritColor').name('inheritColor');
           folders.links.addColor(fdg, 'linkColor').name('color');
+          folders.links.add(fdg, 'linecap', ['round', 'butt', 'square']).name('cap');
 
           scene.add(fdg);
 

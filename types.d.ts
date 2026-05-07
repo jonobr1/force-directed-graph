@@ -341,6 +341,8 @@ declare module '@jonobr1/force-directed-graph' {
     get linksColor(): Color;
     set linkColor(arg: Color);
     get linkColor(): Color;
+    set linecap(arg: 'round' | 'butt' | 'square');
+    get linecap(): 'round' | 'butt' | 'square';
     set linewidth(arg: number);
     get linewidth(): number;
     set opacity(arg: number);

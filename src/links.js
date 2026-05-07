@@ -22,6 +22,7 @@ class Links extends Mesh {
           frustumSize: uniforms.frustumSize,
           is2D: uniforms.is2D,
           inheritColors: uniforms.linksInheritColor,
+          linecap: uniforms.linecap,
           linewidth: uniforms.linewidth,
           opacity: uniforms.opacity,
           pixelRatio: uniforms.pixelRatio,
