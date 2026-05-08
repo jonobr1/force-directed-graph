@@ -8,6 +8,7 @@ import {
   UniformsLib,
 } from 'three';
 import { each } from './math.js';
+import { assertValidLink } from './link-validation.js';
 import shader from './shaders/links.js';
 
 const vertices = new Float32Array([-1, -1, 0, 1, -1, 0, -1, 1, 0, 1, 1, 0]);
@@ -56,27 +57,38 @@ class Links extends Mesh {
 
     const v = points.geometry.attributes.position.array;
     const c = points.geometry.attributes.color.array;
+    const nodeCount = points.geometry.attributes.position.count;
 
     geometry.setAttribute('position', new BufferAttribute(vertices, 3));
     geometry.setIndex(indices);
 
     return each(data.links, (_, i) => {
       const link = data.links[i];
+      assertValidLink(link, i, nodeCount);
+      const { sourceIndex, targetIndex } = link;
 
-      const sourceIndex = 3 * link.sourceIndex;
-      const targetIndex = 3 * link.targetIndex;
+      const sourceOffset = 3 * sourceIndex;
+      const targetOffset = 3 * targetIndex;
 
-      sources.push(v[sourceIndex + 0], v[sourceIndex + 1], v[sourceIndex + 2]);
-      targets.push(v[targetIndex + 0], v[targetIndex + 1], v[targetIndex + 2]);
+      sources.push(
+        v[sourceOffset + 0],
+        v[sourceOffset + 1],
+        v[sourceOffset + 2],
+      );
+      targets.push(
+        v[targetOffset + 0],
+        v[targetOffset + 1],
+        v[targetOffset + 2],
+      );
       sourceColors.push(
-        c[sourceIndex + 0],
-        c[sourceIndex + 1],
-        c[sourceIndex + 2],
+        c[sourceOffset + 0],
+        c[sourceOffset + 1],
+        c[sourceOffset + 2],
       );
       targetColors.push(
-        c[targetIndex + 0],
-        c[targetIndex + 1],
-        c[targetIndex + 2],
+        c[targetOffset + 0],
+        c[targetOffset + 1],
+        c[targetOffset + 2],
       );
     }).then(() => {
       geometry.setAttribute(

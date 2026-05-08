@@ -1,6 +1,7 @@
 import { Color, Group, RepeatWrapping, Vector2, Vector3 } from 'three';
 import { GPUComputationRenderer } from 'three/examples/jsm/misc/GPUComputationRenderer.js';
 import { clamp, each, getPotSize, rgbToIndex } from './math.js';
+import { assertValidLink } from './link-validation.js';
 import simulation from './shaders/simulation.js';
 
 import { Points } from './points.js';
@@ -262,18 +263,21 @@ class ForceDirectedGraph extends Group {
 
     async function fill() {
       const { workerManager } = scope.userData;
-      const preparedLinks = data.links.map((link) => {
+      const preparedLinks = data.links.map((link, i) => {
         const sourceIndex = registry.get(link.source);
         const targetIndex = registry.get(link.target);
-
-        link.sourceIndex = sourceIndex;
-        link.targetIndex = targetIndex;
-
-        return {
+        const preparedLink = {
           ...link,
           sourceIndex,
           targetIndex,
         };
+
+        assertValidLink(preparedLink, i, data.nodes.length);
+
+        link.sourceIndex = sourceIndex;
+        link.targetIndex = targetIndex;
+
+        return preparedLink;
       });
 
       // Initialize worker if not already done
@@ -297,10 +301,6 @@ class ForceDirectedGraph extends Group {
           textures.linkRanges.image.data.set(result.linkRanges);
           packedLinkAmount = result.packedLinkAmount;
           fillTargetPositions();
-
-          console.log(
-            `Texture processing completed in ${result.processingTime.toFixed(2)}ms using ${workerManager.isWasmAvailable() ? 'WASM' : 'JavaScript'}`,
-          );
 
           return Promise.resolve();
         } catch (error) {
