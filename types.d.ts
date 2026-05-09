@@ -227,6 +227,21 @@ declare module '@jonobr1/force-directed-graph/links' {
   }
   import { Mesh } from 'three';
 }
+declare module '@jonobr1/force-directed-graph/shaders/labels' {
+  export default labels;
+  namespace labels {
+    const vertexShader: string;
+    const fragmentShader: string;
+  }
+}
+declare module '@jonobr1/force-directed-graph/labels' {
+  export class Labels extends Mesh {
+    static parse(size: number, data: any): Promise<{ geometry: any; texture: any } | null>;
+    constructor(geometry: any, texture: any, uniforms: any);
+    frustumCulled: boolean;
+  }
+  import { Mesh } from 'three';
+}
 declare module '@jonobr1/force-directed-graph/registry' {
   export class Registry {
     constructor(list: any);
@@ -245,6 +260,7 @@ declare module '@jonobr1/force-directed-graph' {
     isStatic?: boolean;
     color?: CSSStyleValue;
     image?: string;
+    label?: string;
     size?: number;
   };
   export type LinkData = { source: number; target: number };
@@ -347,6 +363,8 @@ declare module '@jonobr1/force-directed-graph' {
     get linewidth(): number;
     set opacity(arg: number);
     get opacity(): number;
+    set obscurity(arg: number);
+    get obscurity(): number;
     set blending(
       arg:
         | typeof NoBlending
@@ -365,6 +383,7 @@ declare module '@jonobr1/force-directed-graph' {
       | typeof CustomBlending;
     get points(): Points;
     get links(): Links;
+    get labels(): import('@jonobr1/force-directed-graph/labels').Labels | null;
     get uniforms(): any;
     get nodeCount(): number;
     get edgeCount(): number;

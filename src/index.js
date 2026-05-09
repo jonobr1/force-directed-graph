@@ -5,6 +5,7 @@ import simulation from './shaders/simulation.js';
 
 import { Points } from './points.js';
 import { Links } from './links.js';
+import { Labels } from './labels.js';
 import { Registry } from './registry.js';
 import { Hit } from './hit.js';
 import { TextureWorkerManager } from './texture-worker-manager.js';
@@ -133,6 +134,7 @@ class ForceDirectedGraph extends Group {
       uBeginning: { value: 0 },
       uEnding: { value: 1 },
       uNodeAmount: { value: 0 },
+      obscurity: { value: 0 },
     };
     this.userData.hit = new Hit(this);
     this.userData.workerManager = new TextureWorkerManager();
@@ -169,6 +171,7 @@ class ForceDirectedGraph extends Group {
     'linewidth',
     'opacity',
     'blending',
+    'obscurity',
   ];
 
   /**
@@ -456,6 +459,14 @@ class ForceDirectedGraph extends Group {
           scope.add(points, links);
           points.renderOrder = links.renderOrder + 1;
           scope.userData.hit.inherit(points);
+        })
+        .then(() => Labels.parse(size, data))
+        .then((result) => {
+          if (result) {
+            const { geometry, texture } = result;
+            const labelsObj = new Labels(geometry, texture, uniforms);
+            scope.add(labelsObj);
+          }
         });
     }
 
@@ -843,6 +854,12 @@ class ForceDirectedGraph extends Group {
   set ending(v) {
     this.userData.uniforms.uEnding.value = v;
   }
+  get obscurity() {
+    return this.userData.uniforms.obscurity.value;
+  }
+  set obscurity(v) {
+    this.userData.uniforms.obscurity.value = Math.max(0, Math.min(1, v));
+  }
   get blending() {
     return this.children[0].material.blending;
   }
@@ -858,6 +875,9 @@ class ForceDirectedGraph extends Group {
   }
   get links() {
     return this.children[1];
+  }
+  get labels() {
+    return this.children[2] || null;
   }
   get uniforms() {
     return this.userData.uniforms;
