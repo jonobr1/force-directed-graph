@@ -214,6 +214,7 @@ class ForceDirectedGraph extends Group {
         child.dispose();
       }
     }
+    this.userData.labels = null;
 
     // Initialize new properties
     const size = getPotSize(Math.max(data.nodes.length, data.links.length * 2));
@@ -465,6 +466,7 @@ class ForceDirectedGraph extends Group {
           if (result) {
             const { geometry, texture } = result;
             const labelsObj = new Labels(geometry, texture, uniforms);
+            scope.userData.labels = labelsObj;
             scope.add(labelsObj);
           }
         });
@@ -877,7 +879,7 @@ class ForceDirectedGraph extends Group {
     return this.children[1];
   }
   get labels() {
-    return this.children[2] || null;
+    return this.userData.labels || null;
   }
   get uniforms() {
     return this.userData.uniforms;

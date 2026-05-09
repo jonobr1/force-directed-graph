@@ -33,7 +33,7 @@ function buildTextAtlas(nodes) {
 
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i];
-    if (node.label == null) {
+    if (node.label === null || node.label === undefined) {
       continue;
     }
     const text = String(node.label);
