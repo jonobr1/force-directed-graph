@@ -71,6 +71,56 @@ function rgbToIndex({ r, g, b }) {
   return r + g * 255 + b * Math.pow(255, 2);
 }
 
+// src/link-validation.js
+function formatLinkReference(value) {
+  if (typeof value === "undefined") {
+    return "undefined";
+  }
+  if (value && typeof value === "object") {
+    if ("id" in value && typeof value.id !== "undefined") {
+      return `{ id: ${JSON.stringify(value.id)} }`;
+    }
+    try {
+      return JSON.stringify(value);
+    } catch (error) {
+      return Object.prototype.toString.call(value);
+    }
+  }
+  return JSON.stringify(value);
+}
+function isValidNodeIndex(index, nodeCount) {
+  return Number.isInteger(index) && index >= 0 && index < nodeCount;
+}
+function createInvalidLinkError(link2, linkIndex, nodeCount) {
+  const maxIndex = Math.max(nodeCount - 1, 0);
+  const issues = [];
+  if (!isValidNodeIndex(link2.sourceIndex, nodeCount)) {
+    issues.push(
+      `sourceIndex=${String(link2.sourceIndex)} is outside the valid node range [0, ${maxIndex}]`
+    );
+  }
+  if (!isValidNodeIndex(link2.targetIndex, nodeCount)) {
+    issues.push(
+      `targetIndex=${String(link2.targetIndex)} is outside the valid node range [0, ${maxIndex}]`
+    );
+  }
+  return new Error(
+    `Invalid link at data.links[${linkIndex}]: ${issues.join(
+      "; "
+    )}. Source=${formatLinkReference(link2.source)} Target=${formatLinkReference(
+      link2.target
+    )}. This usually means the link references an unknown node id or a mutated d3-style link object.`
+  );
+}
+function assertValidLink(link2, linkIndex, nodeCount) {
+  if (!isValidNodeIndex(link2.sourceIndex, nodeCount)) {
+    throw createInvalidLinkError(link2, linkIndex, nodeCount);
+  }
+  if (!isValidNodeIndex(link2.targetIndex, nodeCount)) {
+    throw createInvalidLinkError(link2, linkIndex, nodeCount);
+  }
+}
+
 // src/shaders/positions.js
 var positions = `
   uniform float is2D;
@@ -980,23 +1030,34 @@ var Links = class extends import_three3.Mesh {
     const targetColors = [];
     const v = points2.geometry.attributes.position.array;
     const c = points2.geometry.attributes.color.array;
+    const nodeCount = points2.geometry.attributes.position.count;
     geometry.setAttribute("position", new import_three3.BufferAttribute(vertices, 3));
     geometry.setIndex(indices);
     return each(data.links, (_, i) => {
       const link2 = data.links[i];
-      const sourceIndex = 3 * link2.sourceIndex;
-      const targetIndex = 3 * link2.targetIndex;
-      sources.push(v[sourceIndex + 0], v[sourceIndex + 1], v[sourceIndex + 2]);
-      targets.push(v[targetIndex + 0], v[targetIndex + 1], v[targetIndex + 2]);
+      assertValidLink(link2, i, nodeCount);
+      const { sourceIndex, targetIndex } = link2;
+      const sourceOffset = 3 * sourceIndex;
+      const targetOffset = 3 * targetIndex;
+      sources.push(
+        v[sourceOffset + 0],
+        v[sourceOffset + 1],
+        v[sourceOffset + 2]
+      );
+      targets.push(
+        v[targetOffset + 0],
+        v[targetOffset + 1],
+        v[targetOffset + 2]
+      );
       sourceColors.push(
-        c[sourceIndex + 0],
-        c[sourceIndex + 1],
-        c[sourceIndex + 2]
+        c[sourceOffset + 0],
+        c[sourceOffset + 1],
+        c[sourceOffset + 2]
       );
       targetColors.push(
-        c[targetIndex + 0],
-        c[targetIndex + 1],
-        c[targetIndex + 2]
+        c[targetOffset + 0],
+        c[targetOffset + 1],
+        c[targetOffset + 2]
       );
     }).then(() => {
       geometry.setAttribute(
@@ -2053,16 +2114,18 @@ var ForceDirectedGraph = class extends import_three5.Group {
     }
     async function fill() {
       const { workerManager } = scope.userData;
-      const preparedLinks = data.links.map((link2) => {
+      const preparedLinks = data.links.map((link2, i) => {
         const sourceIndex = registry.get(link2.source);
         const targetIndex = registry.get(link2.target);
-        link2.sourceIndex = sourceIndex;
-        link2.targetIndex = targetIndex;
-        return {
+        const preparedLink = {
           ...link2,
           sourceIndex,
           targetIndex
         };
+        assertValidLink(preparedLink, i, data.nodes.length);
+        link2.sourceIndex = sourceIndex;
+        link2.targetIndex = targetIndex;
+        return preparedLink;
       });
       if (!workerManager.isReady()) {
         await workerManager.init();
@@ -2080,9 +2143,6 @@ var ForceDirectedGraph = class extends import_three5.Group {
           textures.linkRanges.image.data.set(result.linkRanges);
           packedLinkAmount = result.packedLinkAmount;
           fillTargetPositions();
-          console.log(
-            `Texture processing completed in ${result.processingTime.toFixed(2)}ms using ${workerManager.isWasmAvailable() ? "WASM" : "JavaScript"}`
-          );
           return Promise.resolve();
         } catch (error) {
           console.warn(
