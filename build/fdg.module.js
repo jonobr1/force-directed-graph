@@ -1013,6 +1013,229 @@ var Links = class extends Mesh {
   }
 };
 
+// src/labels.js
+import {
+  BufferAttribute as BufferAttribute2,
+  CanvasTexture,
+  InstancedBufferAttribute as InstancedBufferAttribute2,
+  InstancedBufferGeometry as InstancedBufferGeometry2,
+  Mesh as Mesh2,
+  ShaderMaterial as ShaderMaterial3,
+  UniformsLib as UniformsLib3
+} from "three";
+
+// src/shaders/labels.js
+var labels = {
+  vertexShader: `
+    #include <fog_pars_vertex>
+
+    uniform sampler2D texturePositions;
+    uniform float frustumSize;
+    uniform float is2D;
+    uniform float sizeAttenuation;
+    uniform float uBeginning;
+    uniform float uEnding;
+    uniform float uNodeAmount;
+    uniform float uObscurity;
+    uniform float nodeRadius;
+    uniform float nodeScale;
+
+    attribute vec3 source;       // .xy = UV into texturePositions, .z = nodeIndex + 1
+    attribute vec4 labelUV;      // .xy = atlas UV offset, .zw = atlas UV extent
+    attribute float aspectRatio; // label quad width / height
+
+    varying vec2 vLabelUV;
+    varying float vAlpha;
+
+    void main() {
+
+      float nodeIndex  = source.z - 1.0;
+      float rangeStart = uBeginning * uNodeAmount;
+      float rangeEnd   = uEnding    * uNodeAmount;
+      float inRange    = step( rangeStart, nodeIndex ) * ( 1.0 - step( rangeEnd, nodeIndex ) );
+
+      vec3 nodePos = texture2D( texturePositions, source.xy ).xyz;
+      nodePos.z *= 1.0 - is2D;
+
+      vec4 mvCenter = modelViewMatrix * vec4( nodePos, 1.0 );
+
+      // Billboard: extract camera right and up from the view matrix columns
+      vec3 right = normalize( vec3( viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0] ) );
+      vec3 up    = normalize( vec3( viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1] ) );
+
+      // Scale label to match node visual size, with optional depth attenuation
+      float sizeScale  = mix( 1.0, frustumSize / max( -mvCenter.z, 0.001 ), sizeAttenuation );
+      float labelH     = nodeRadius * nodeScale * sizeScale;
+      float labelW     = labelH * aspectRatio;
+
+      // Shift the label upward so it sits above the node
+      vec3 worldPos = nodePos
+        + up    * labelH
+        + right * position.x * labelW * 0.5
+        + up    * position.y * labelH * 0.5;
+
+      // Map quad UV [0,1] to the atlas region for this label
+      vLabelUV = labelUV.xy + uv * labelUV.zw;
+
+      // Alpha: obscurity=0 \u2192 fully visible; obscurity=1 \u2192 fully hidden
+      vAlpha = ( 1.0 - uObscurity ) * inRange;
+
+      gl_Position = projectionMatrix * modelViewMatrix * vec4( worldPos, 1.0 );
+
+      #include <fog_vertex>
+
+    }
+  `,
+  fragmentShader: `
+    #include <fog_pars_fragment>
+
+    uniform sampler2D textureAtlas;
+    uniform float opacity;
+
+    varying vec2 vLabelUV;
+    varying float vAlpha;
+
+    void main() {
+
+      vec4 texel = texture2D( textureAtlas, vLabelUV );
+      float alpha = opacity * vAlpha * texel.a;
+
+      if ( alpha <= 0.0 ) {
+        discard;
+      }
+
+      gl_FragColor = vec4( texel.rgb, alpha );
+
+      #include <fog_fragment>
+
+    }
+  `
+};
+var labels_default = labels;
+
+// src/labels.js
+function buildTextAtlas(nodes) {
+  const padding = 6;
+  const fontSize = 14;
+  const fontFamily = "Arial, sans-serif";
+  const textColor = "#ffffff";
+  const temp = document.createElement("canvas");
+  const tempCtx = temp.getContext("2d");
+  tempCtx.font = `${fontSize}px ${fontFamily}`;
+  const items = [];
+  let maxW = 0;
+  const tileH = fontSize + padding * 2;
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    if (node.label === null || node.label === void 0) {
+      continue;
+    }
+    const text = String(node.label);
+    const w = Math.ceil(tempCtx.measureText(text).width) + padding * 2;
+    if (w > maxW) {
+      maxW = w;
+    }
+    items.push({ text, nodeIndex: i });
+  }
+  if (items.length === 0) {
+    return null;
+  }
+  const tileW = maxW || 128;
+  const cols = Math.ceil(Math.sqrt(items.length));
+  const rows = Math.ceil(items.length / cols);
+  const canvas = document.createElement("canvas");
+  canvas.width = cols * tileW;
+  canvas.height = rows * tileH;
+  const ctx = canvas.getContext("2d");
+  ctx.font = `${fontSize}px ${fontFamily}`;
+  ctx.fillStyle = textColor;
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "center";
+  const uvMap = /* @__PURE__ */ new Map();
+  for (let i = 0; i < items.length; i++) {
+    const { text, nodeIndex } = items[i];
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const px = col * tileW;
+    const py = row * tileH;
+    ctx.fillText(text, px + tileW / 2, py + tileH / 2);
+    const u = px / canvas.width;
+    const v = 1 - (py + tileH) / canvas.height;
+    const uw = tileW / canvas.width;
+    const uh = tileH / canvas.height;
+    uvMap.set(nodeIndex, { u, v, uw, uh });
+  }
+  return { canvas, tileW, tileH, uvMap };
+}
+var Labels = class extends Mesh2 {
+  constructor(geometry, texture, uniforms) {
+    const material = new ShaderMaterial3({
+      uniforms: {
+        ...UniformsLib3["fog"],
+        texturePositions: { value: null },
+        textureAtlas: { value: texture },
+        uObscurity: uniforms.obscurity,
+        opacity: uniforms.opacity,
+        frustumSize: uniforms.frustumSize,
+        is2D: uniforms.is2D,
+        sizeAttenuation: uniforms.sizeAttenuation,
+        nodeRadius: uniforms.nodeRadius,
+        nodeScale: uniforms.nodeScale,
+        uBeginning: uniforms.uBeginning,
+        uEnding: uniforms.uEnding,
+        uNodeAmount: uniforms.uNodeAmount
+      },
+      vertexShader: labels_default.vertexShader,
+      fragmentShader: labels_default.fragmentShader,
+      transparent: true,
+      fog: true,
+      depthWrite: false
+    });
+    super(geometry, material);
+    this.frustumCulled = false;
+  }
+  static parse(size2, data) {
+    const atlas = buildTextAtlas(data.nodes);
+    if (!atlas) {
+      return Promise.resolve(null);
+    }
+    const { canvas, tileW, tileH, uvMap } = atlas;
+    const quadVerts = new Float32Array([-1, -1, 0, 1, -1, 0, -1, 1, 0, 1, 1, 0]);
+    const quadUVs = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
+    const quadIdx = [0, 1, 2, 2, 1, 3];
+    const geometry = new InstancedBufferGeometry2();
+    geometry.setAttribute("position", new BufferAttribute2(quadVerts, 3));
+    geometry.setAttribute("uv", new BufferAttribute2(quadUVs, 2));
+    geometry.setIndex(quadIdx);
+    const sources = [];
+    const labelUVs = [];
+    const aspectRatios = [];
+    for (const [nodeIndex, uv] of uvMap) {
+      const x = nodeIndex % size2 / size2;
+      const y = Math.floor(nodeIndex / size2) / size2;
+      const z = nodeIndex + 1;
+      sources.push(x, y, z);
+      labelUVs.push(uv.u, uv.v, uv.uw, uv.uh);
+      aspectRatios.push(tileW / tileH);
+    }
+    geometry.setAttribute(
+      "source",
+      new InstancedBufferAttribute2(new Float32Array(sources), 3)
+    );
+    geometry.setAttribute(
+      "labelUV",
+      new InstancedBufferAttribute2(new Float32Array(labelUVs), 4)
+    );
+    geometry.setAttribute(
+      "aspectRatio",
+      new InstancedBufferAttribute2(new Float32Array(aspectRatios), 1)
+    );
+    geometry.instanceCount = uvMap.size;
+    const texture = new CanvasTexture(canvas);
+    return Promise.resolve({ geometry, texture });
+  }
+};
+
 // src/registry.js
 var Registry = class {
   map = {};
@@ -1039,7 +1262,7 @@ var Registry = class {
 // src/hit.js
 import {
   Color as Color2,
-  ShaderMaterial as ShaderMaterial3,
+  ShaderMaterial as ShaderMaterial4,
   WebGLRenderTarget,
   Sprite,
   SpriteMaterial
@@ -1131,7 +1354,7 @@ var Hit = class {
     this.helper = new Sprite(new SpriteMaterial({
       map: this.renderTarget.texture
     }));
-    this.material = new ShaderMaterial3({
+    this.material = new ShaderMaterial4({
       uniforms: {
         hitScale: { value: 2 }
       },
@@ -1948,7 +2171,8 @@ var ForceDirectedGraph = class extends Group {
       resolution: { value: new Vector2(1, 1) },
       uBeginning: { value: 0 },
       uEnding: { value: 1 },
-      uNodeAmount: { value: 0 }
+      uNodeAmount: { value: 0 },
+      obscurity: { value: 0 }
     };
     this.userData.hit = new Hit(this);
     this.userData.workerManager = new TextureWorkerManager();
@@ -1982,7 +2206,8 @@ var ForceDirectedGraph = class extends Group {
     "linecap",
     "linewidth",
     "opacity",
-    "blending"
+    "blending",
+    "obscurity"
   ];
   /**
    * @param {Object} data - Object with nodes and links properties based on https://observablehq.com/@d3/force-directed-graph-component
@@ -2015,6 +2240,7 @@ var ForceDirectedGraph = class extends Group {
         child.dispose();
       }
     }
+    this.userData.labels = null;
     const size2 = getPotSize(Math.max(data.nodes.length, data.links.length * 2));
     uniforms.size.value = size2;
     gpgpu = new GPUComputationRenderer(size2, size2, renderer);
@@ -2199,6 +2425,13 @@ var ForceDirectedGraph = class extends Group {
         scope.add(points2, links2);
         points2.renderOrder = links2.renderOrder + 1;
         scope.userData.hit.inherit(points2);
+      }).then(() => Labels.parse(size2, data)).then((result) => {
+        if (result) {
+          const { geometry, texture } = result;
+          const labelsObj = new Labels(geometry, texture, uniforms);
+          scope.userData.labels = labelsObj;
+          scope.add(labelsObj);
+        }
       });
     }
     function complete() {
@@ -2543,6 +2776,12 @@ var ForceDirectedGraph = class extends Group {
   set ending(v) {
     this.userData.uniforms.uEnding.value = v;
   }
+  get obscurity() {
+    return this.userData.uniforms.obscurity.value;
+  }
+  set obscurity(v) {
+    this.userData.uniforms.obscurity.value = Math.max(0, Math.min(1, v));
+  }
   get blending() {
     return this.children[0].material.blending;
   }
@@ -2557,6 +2796,9 @@ var ForceDirectedGraph = class extends Group {
   }
   get links() {
     return this.children[1];
+  }
+  get labels() {
+    return this.userData.labels || null;
   }
   get uniforms() {
     return this.userData.uniforms;

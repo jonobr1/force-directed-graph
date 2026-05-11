@@ -196,9 +196,11 @@
           links: []
         };
 
+        const words = ["Lorem","ipsum","dolor","sit","amet","consectetur","adipiscing","elit","Praesent","risus","elit","gravida","et","accumsan","sed","molestie","vitae","massa","In","efficitur","pharetra","vestibulum","Vivamus","tempus","nibh","quis","lorem","tristique","tristique","Morbi","imperdiet","tortor","sodales","lacus","venenatis","ac","dictum","arcu","pulvinar","Etiam","viverra","eget","odio","eget","pretium","Praesent","aliquet","enim","at","euismod","maximus","dolor","lectus","luctus","odio","nec","cursus","nisi","neque","at","libero","Nam","eu","justo","nec","dolor","malesuada","porta","Sed","felis","urna","luctus","vitae","finibus","non","aliquet","sed","est","Suspendisse","porta","nibh","eu","erat","sodales","ultricies","Integer","suscipit","urna","neque","non","tempus","justo","mattis","sed","Sed","leo","nibh","dictum","sit","amet","tellus","blandit","cursus","pellentesque","libero","Fusce","vestibulum","lorem","in","sollicitudin","cursus","nibh","risus","efficitur","ligula","at","posuere","ligula","dui","quis","purus","Fusce","gravida","urna","at","hendrerit","facilisis","Sed","accumsan","dolor","non","hendrerit","interdum",""];
+
         for (let i = 0; i < amount; i++) {
 
-          data.nodes.push({ id: i });
+          data.nodes.push({ id: i, label: words[Math.floor(Math.random() * words.length)] });
 
           const target = Math.floor(Math.random() * i);
           const source = i;
@@ -241,7 +243,8 @@
             { name: 'gravity', min: 0, max: 1, step: 0.1 },
             { name: 'beginning', min: 0, max: 1, step: 0.01 },
             { name: 'ending', min: 0, max: 1, step: 0.01 },
-            { name: 'opacity', min: 0, max: 1, step: 0.1 }
+            { name: 'opacity', min: 0, max: 1, step: 0.1 },
+            { name: 'obscurity', min: 0, max: 1, step: 0.01 },
           ].forEach(function({ name, min, max, step }) {
 
             gui.add(fdg, name, min, max, step).name(name).onChange(reset);
@@ -258,7 +261,8 @@
 
           const folders = {
             points: gui.addFolder('Points'),
-            links: gui.addFolder('Links')
+            links: gui.addFolder('Links'),
+            labels: gui.addFolder('Labels'),
           };
 
           folders.points.add(fdg.points, 'visible').name('visible');
@@ -272,6 +276,8 @@
           folders.links.addColor(fdg, 'linkColor').name('color');
           folders.links.add(fdg, 'linewidth', 0.5, 16, 0.5).name('linewidth');
           folders.links.add(fdg, 'linecap', ['round', 'butt', 'square']).name('cap');
+
+          folders.labels.add(fdg.labels, 'visible').name('visible')
 
           scene.add(fdg);
 

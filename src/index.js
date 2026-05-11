@@ -214,6 +214,7 @@ class ForceDirectedGraph extends Group {
         child.dispose();
       }
     }
+    // TODO: Dispose of previous labels
     this.userData.labels = null;
 
     // Initialize new properties
@@ -465,9 +466,10 @@ class ForceDirectedGraph extends Group {
         .then((result) => {
           if (result) {
             const { geometry, texture } = result;
-            const labelsObj = new Labels(geometry, texture, uniforms);
-            scope.userData.labels = labelsObj;
-            scope.add(labelsObj);
+            const labels = new Labels(geometry, texture, uniforms);
+            scope.userData.labels = labels;
+            labels.renderOrder = points.renderOrder + 1;
+            scope.add(labels);
           }
         });
     }

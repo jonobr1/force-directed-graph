@@ -17,10 +17,10 @@ import shader from './shaders/labels.js';
  * @returns {{ canvas: HTMLCanvasElement, tileW: number, tileH: number, uvMap: Map } | null}
  */
 function buildTextAtlas(nodes) {
-  const padding = 6;
-  const fontSize = 14;
+  const padding = 4;
+  const fontSize = 120;
   const fontFamily = 'Arial, sans-serif';
-  const textColor = '#ffffff';
+  const textColor = '#000';
 
   // Measure text widths using a temporary canvas
   const temp = document.createElement('canvas');
@@ -76,8 +76,8 @@ function buildTextAtlas(nodes) {
 
     // With Three.js default flipY=true the canvas is flipped vertically at
     // upload, so canvas y=0 (top) maps to WebGL v=1 (top of UV space).
-    const u  = px / canvas.width;
-    const v  = 1.0 - (py + tileH) / canvas.height;
+    const u = px / canvas.width;
+    const v = 1.0 - (py + tileH) / canvas.height;
     const uw = tileW / canvas.width;
     const uh = tileH / canvas.height;
 
@@ -88,12 +88,9 @@ function buildTextAtlas(nodes) {
 }
 
 class Labels extends Mesh {
-
   constructor(geometry, texture, uniforms) {
-
     const material = new ShaderMaterial({
       uniforms: {
-        ...UniformsLib['fog'],
         texturePositions: { value: null },
         textureAtlas: { value: texture },
         uObscurity: uniforms.obscurity,
@@ -110,17 +107,15 @@ class Labels extends Mesh {
       vertexShader: shader.vertexShader,
       fragmentShader: shader.fragmentShader,
       transparent: true,
-      fog: true,
       depthWrite: false,
+      depthTest: false,
     });
 
     super(geometry, material);
     this.frustumCulled = false;
-
   }
 
   static parse(size, data) {
-
     const atlas = buildTextAtlas(data.nodes);
 
     if (!atlas) {
@@ -130,17 +125,19 @@ class Labels extends Mesh {
     const { canvas, tileW, tileH, uvMap } = atlas;
 
     // Unit billboard quad: two triangles covering [-1,1] x [-1,1]
-    const quadVerts = new Float32Array([-1, -1, 0,  1, -1, 0,  -1, 1, 0,  1, 1, 0]);
-    const quadUVs   = new Float32Array([ 0,  0,     1,  0,       0, 1,     1, 1]);
-    const quadIdx   = [0, 1, 2,  2, 1, 3];
+    const quadVerts = new Float32Array([
+      -1, -1, 0, 1, -1, 0, -1, 1, 0, 1, 1, 0,
+    ]);
+    const quadUVs = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
+    const quadIdx = [0, 1, 2, 2, 1, 3];
 
     const geometry = new InstancedBufferGeometry();
     geometry.setAttribute('position', new BufferAttribute(quadVerts, 3));
-    geometry.setAttribute('uv',       new BufferAttribute(quadUVs,   2));
+    geometry.setAttribute('uv', new BufferAttribute(quadUVs, 2));
     geometry.setIndex(quadIdx);
 
-    const sources      = [];
-    const labelUVs     = [];
+    const sources = [];
+    const labelUVs = [];
     const aspectRatios = [];
 
     for (const [nodeIndex, uv] of uvMap) {
@@ -170,9 +167,7 @@ class Labels extends Mesh {
     const texture = new CanvasTexture(canvas);
 
     return Promise.resolve({ geometry, texture });
-
   }
-
 }
 
 export { Labels };

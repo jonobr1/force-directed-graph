@@ -7,7 +7,7 @@
   });
 
   // src/index.js
-  var import_three5 = __require("three");
+  var import_three6 = __require("three");
   var import_GPUComputationRenderer = __require("three/examples/jsm/misc/GPUComputationRenderer.js");
 
   // src/math.js
@@ -1006,6 +1006,221 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
     }
   };
 
+  // src/labels.js
+  var import_three4 = __require("three");
+
+  // src/shaders/labels.js
+  var labels = {
+    vertexShader: `
+    #include <fog_pars_vertex>
+
+    uniform sampler2D texturePositions;
+    uniform float frustumSize;
+    uniform float is2D;
+    uniform float sizeAttenuation;
+    uniform float uBeginning;
+    uniform float uEnding;
+    uniform float uNodeAmount;
+    uniform float uObscurity;
+    uniform float nodeRadius;
+    uniform float nodeScale;
+
+    attribute vec3 source;       // .xy = UV into texturePositions, .z = nodeIndex + 1
+    attribute vec4 labelUV;      // .xy = atlas UV offset, .zw = atlas UV extent
+    attribute float aspectRatio; // label quad width / height
+
+    varying vec2 vLabelUV;
+    varying float vAlpha;
+
+    void main() {
+
+      float nodeIndex  = source.z - 1.0;
+      float rangeStart = uBeginning * uNodeAmount;
+      float rangeEnd   = uEnding    * uNodeAmount;
+      float inRange    = step( rangeStart, nodeIndex ) * ( 1.0 - step( rangeEnd, nodeIndex ) );
+
+      vec3 nodePos = texture2D( texturePositions, source.xy ).xyz;
+      nodePos.z *= 1.0 - is2D;
+
+      vec4 mvCenter = modelViewMatrix * vec4( nodePos, 1.0 );
+
+      // Billboard: extract camera right and up from the view matrix columns
+      vec3 right = normalize( vec3( viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0] ) );
+      vec3 up    = normalize( vec3( viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1] ) );
+
+      // Scale label to match node visual size, with optional depth attenuation
+      float sizeScale  = mix( 1.0, frustumSize / max( -mvCenter.z, 0.001 ), sizeAttenuation );
+      float labelH     = nodeRadius * nodeScale * sizeScale;
+      float labelW     = labelH * aspectRatio;
+
+      // Shift the label upward so it sits above the node
+      vec3 worldPos = nodePos
+        + up    * labelH
+        + right * position.x * labelW * 0.5
+        + up    * position.y * labelH * 0.5;
+
+      // Map quad UV [0,1] to the atlas region for this label
+      vLabelUV = labelUV.xy + uv * labelUV.zw;
+
+      // Alpha: obscurity=0 \u2192 fully visible; obscurity=1 \u2192 fully hidden
+      vAlpha = ( 1.0 - uObscurity ) * inRange;
+
+      gl_Position = projectionMatrix * modelViewMatrix * vec4( worldPos, 1.0 );
+
+      #include <fog_vertex>
+
+    }
+  `,
+    fragmentShader: `
+    #include <fog_pars_fragment>
+
+    uniform sampler2D textureAtlas;
+    uniform float opacity;
+
+    varying vec2 vLabelUV;
+    varying float vAlpha;
+
+    void main() {
+
+      vec4 texel = texture2D( textureAtlas, vLabelUV );
+      float alpha = opacity * vAlpha * texel.a;
+
+      if ( alpha <= 0.0 ) {
+        discard;
+      }
+
+      gl_FragColor = vec4( texel.rgb, alpha );
+
+      #include <fog_fragment>
+
+    }
+  `
+  };
+  var labels_default = labels;
+
+  // src/labels.js
+  function buildTextAtlas(nodes) {
+    const padding = 6;
+    const fontSize = 14;
+    const fontFamily = "Arial, sans-serif";
+    const textColor = "#ffffff";
+    const temp = document.createElement("canvas");
+    const tempCtx = temp.getContext("2d");
+    tempCtx.font = `${fontSize}px ${fontFamily}`;
+    const items = [];
+    let maxW = 0;
+    const tileH = fontSize + padding * 2;
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      if (node.label === null || node.label === void 0) {
+        continue;
+      }
+      const text = String(node.label);
+      const w = Math.ceil(tempCtx.measureText(text).width) + padding * 2;
+      if (w > maxW) {
+        maxW = w;
+      }
+      items.push({ text, nodeIndex: i });
+    }
+    if (items.length === 0) {
+      return null;
+    }
+    const tileW = maxW || 128;
+    const cols = Math.ceil(Math.sqrt(items.length));
+    const rows = Math.ceil(items.length / cols);
+    const canvas = document.createElement("canvas");
+    canvas.width = cols * tileW;
+    canvas.height = rows * tileH;
+    const ctx = canvas.getContext("2d");
+    ctx.font = `${fontSize}px ${fontFamily}`;
+    ctx.fillStyle = textColor;
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "center";
+    const uvMap = /* @__PURE__ */ new Map();
+    for (let i = 0; i < items.length; i++) {
+      const { text, nodeIndex } = items[i];
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const px = col * tileW;
+      const py = row * tileH;
+      ctx.fillText(text, px + tileW / 2, py + tileH / 2);
+      const u = px / canvas.width;
+      const v = 1 - (py + tileH) / canvas.height;
+      const uw = tileW / canvas.width;
+      const uh = tileH / canvas.height;
+      uvMap.set(nodeIndex, { u, v, uw, uh });
+    }
+    return { canvas, tileW, tileH, uvMap };
+  }
+  var Labels = class extends import_three4.Mesh {
+    constructor(geometry, texture, uniforms) {
+      const material = new import_three4.ShaderMaterial({
+        uniforms: {
+          ...import_three4.UniformsLib["fog"],
+          texturePositions: { value: null },
+          textureAtlas: { value: texture },
+          uObscurity: uniforms.obscurity,
+          opacity: uniforms.opacity,
+          frustumSize: uniforms.frustumSize,
+          is2D: uniforms.is2D,
+          sizeAttenuation: uniforms.sizeAttenuation,
+          nodeRadius: uniforms.nodeRadius,
+          nodeScale: uniforms.nodeScale,
+          uBeginning: uniforms.uBeginning,
+          uEnding: uniforms.uEnding,
+          uNodeAmount: uniforms.uNodeAmount
+        },
+        vertexShader: labels_default.vertexShader,
+        fragmentShader: labels_default.fragmentShader,
+        transparent: true,
+        fog: true,
+        depthWrite: false
+      });
+      super(geometry, material);
+      this.frustumCulled = false;
+    }
+    static parse(size2, data) {
+      const atlas = buildTextAtlas(data.nodes);
+      if (!atlas) {
+        return Promise.resolve(null);
+      }
+      const { canvas, tileW, tileH, uvMap } = atlas;
+      const quadVerts = new Float32Array([-1, -1, 0, 1, -1, 0, -1, 1, 0, 1, 1, 0]);
+      const quadUVs = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
+      const quadIdx = [0, 1, 2, 2, 1, 3];
+      const geometry = new import_three4.InstancedBufferGeometry();
+      geometry.setAttribute("position", new import_three4.BufferAttribute(quadVerts, 3));
+      geometry.setAttribute("uv", new import_three4.BufferAttribute(quadUVs, 2));
+      geometry.setIndex(quadIdx);
+      const sources = [];
+      const labelUVs = [];
+      const aspectRatios = [];
+      for (const [nodeIndex, uv] of uvMap) {
+        const x = nodeIndex % size2 / size2;
+        const y = Math.floor(nodeIndex / size2) / size2;
+        const z = nodeIndex + 1;
+        sources.push(x, y, z);
+        labelUVs.push(uv.u, uv.v, uv.uw, uv.uh);
+        aspectRatios.push(tileW / tileH);
+      }
+      geometry.setAttribute(
+        "source",
+        new import_three4.InstancedBufferAttribute(new Float32Array(sources), 3)
+      );
+      geometry.setAttribute(
+        "labelUV",
+        new import_three4.InstancedBufferAttribute(new Float32Array(labelUVs), 4)
+      );
+      geometry.setAttribute(
+        "aspectRatio",
+        new import_three4.InstancedBufferAttribute(new Float32Array(aspectRatios), 1)
+      );
+      geometry.instanceCount = uvMap.size;
+      const texture = new import_three4.CanvasTexture(canvas);
+      return Promise.resolve({ geometry, texture });
+    }
+  };
+
   // src/registry.js
   var Registry = class {
     map = {};
@@ -1030,7 +1245,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
   };
 
   // src/hit.js
-  var import_three4 = __require("three");
+  var import_three5 = __require("three");
 
   // src/shaders/hit.js
   var hit = {
@@ -1104,10 +1319,10 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
   var hit_default = hit;
 
   // src/hit.js
-  var color2 = new import_three4.Color();
+  var color2 = new import_three5.Color();
   var Hit = class {
     parent = null;
-    renderTarget = new import_three4.WebGLRenderTarget(1, 1);
+    renderTarget = new import_three5.WebGLRenderTarget(1, 1);
     width = 1;
     height = 1;
     ratio = 1;
@@ -1115,10 +1330,10 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
     helper = null;
     constructor(fdg) {
       this.parent = fdg;
-      this.helper = new import_three4.Sprite(new import_three4.SpriteMaterial({
+      this.helper = new import_three5.Sprite(new import_three5.SpriteMaterial({
         map: this.renderTarget.texture
       }));
-      this.material = new import_three4.ShaderMaterial({
+      this.material = new import_three5.ShaderMaterial({
         uniforms: {
           hitScale: { value: 2 }
         },
@@ -1163,7 +1378,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
     }
     dispose() {
       this.parent = null;
-      this.renderTarget = new import_three4.WebGLRenderTarget(1, 1);
+      this.renderTarget = new import_three5.WebGLRenderTarget(1, 1);
       this.width = 1;
       this.height = 1;
       this.ratio = 1;
@@ -1834,10 +2049,10 @@ initWasm();
   };
 
   // src/index.js
-  var color3 = new import_three5.Color();
-  var position = new import_three5.Vector3();
-  var size = new import_three5.Vector2();
-  var drawingBufferSize = new import_three5.Vector2();
+  var color3 = new import_three6.Color();
+  var position = new import_three6.Vector3();
+  var size = new import_three6.Vector2();
+  var drawingBufferSize = new import_three6.Vector2();
   var LineCaps = ["round", "butt", "square"];
   var LineCapsMap = {
     round: 0,
@@ -1897,7 +2112,7 @@ initWasm();
       packedLinkAmount: packedLinks.length
     };
   }
-  var ForceDirectedGraph =  window.ForceDirectedGraph = class extends import_three5.Group {
+  var ForceDirectedGraph =  window.ForceDirectedGraph = class extends import_three6.Group {
     ready = false;
     /**
      * @param {THREE.WebGLRenderer} renderer - the three.js renderer referenced to create the render targets
@@ -1927,16 +2142,17 @@ initWasm();
         frustumSize: { value: 100 },
         linksInheritColor: { value: false },
         pointsInheritColor: { value: true },
-        pointColor: { value: new import_three5.Color(1, 1, 1) },
-        linkColor: { value: new import_three5.Color(1, 1, 1) },
+        pointColor: { value: new import_three6.Color(1, 1, 1) },
+        linkColor: { value: new import_three6.Color(1, 1, 1) },
         linecap: { value: LineCapsMap.round },
         linewidth: { value: 1 },
         opacity: { value: 1 },
         pixelRatio: { value: 1 },
-        resolution: { value: new import_three5.Vector2(1, 1) },
+        resolution: { value: new import_three6.Vector2(1, 1) },
         uBeginning: { value: 0 },
         uEnding: { value: 1 },
-        uNodeAmount: { value: 0 }
+        uNodeAmount: { value: 0 },
+        obscurity: { value: 0 }
       };
       this.userData.hit = new Hit(this);
       this.userData.workerManager = new TextureWorkerManager();
@@ -1970,7 +2186,8 @@ initWasm();
       "linecap",
       "linewidth",
       "opacity",
-      "blending"
+      "blending",
+      "obscurity"
     ];
     /**
      * @param {Object} data - Object with nodes and links properties based on https://observablehq.com/@d3/force-directed-graph-component
@@ -2003,6 +2220,7 @@ initWasm();
           child.dispose();
         }
       }
+      this.userData.labels = null;
       const size2 = getPotSize(Math.max(data.nodes.length, data.links.length * 2));
       uniforms.size.value = size2;
       gpgpu = new import_GPUComputationRenderer.GPUComputationRenderer(size2, size2, renderer);
@@ -2168,8 +2386,8 @@ initWasm();
           variables.velocities.material.uniforms.textureTargetPositions = {
             value: textures.targetPositions
           };
-          variables.positions.wrapS = variables.positions.wrapT = import_three5.RepeatWrapping;
-          variables.velocities.wrapS = variables.velocities.wrapT = import_three5.RepeatWrapping;
+          variables.positions.wrapS = variables.positions.wrapT = import_three6.RepeatWrapping;
+          variables.velocities.wrapS = variables.velocities.wrapT = import_three6.RepeatWrapping;
           const error = gpgpu.init();
           if (error) {
             reject(error);
@@ -2187,6 +2405,13 @@ initWasm();
           scope.add(points2, links2);
           points2.renderOrder = links2.renderOrder + 1;
           scope.userData.hit.inherit(points2);
+        }).then(() => Labels.parse(size2, data)).then((result) => {
+          if (result) {
+            const { geometry, texture } = result;
+            const labelsObj = new Labels(geometry, texture, uniforms);
+            scope.userData.labels = labelsObj;
+            scope.add(labelsObj);
+          }
         });
       }
       function complete() {
@@ -2531,6 +2756,12 @@ initWasm();
     set ending(v) {
       this.userData.uniforms.uEnding.value = v;
     }
+    get obscurity() {
+      return this.userData.uniforms.obscurity.value;
+    }
+    set obscurity(v) {
+      this.userData.uniforms.obscurity.value = Math.max(0, Math.min(1, v));
+    }
     get blending() {
       return this.children[0].material.blending;
     }
@@ -2545,6 +2776,9 @@ initWasm();
     }
     get links() {
       return this.children[1];
+    }
+    get labels() {
+      return this.userData.labels || null;
     }
     get uniforms() {
       return this.userData.uniforms;

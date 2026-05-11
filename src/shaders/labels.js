@@ -6,8 +6,6 @@
  */
 const labels = {
   vertexShader: `
-    #include <fog_pars_vertex>
-
     uniform sampler2D texturePositions;
     uniform float frustumSize;
     uniform float is2D;
@@ -44,7 +42,7 @@ const labels = {
 
       // Scale label to match node visual size, with optional depth attenuation
       float sizeScale  = mix( 1.0, frustumSize / max( -mvCenter.z, 0.001 ), sizeAttenuation );
-      float labelH     = nodeRadius * nodeScale * sizeScale;
+      float labelH     = 0.1 * nodeRadius * nodeScale * sizeScale;
       float labelW     = labelH * aspectRatio;
 
       // Shift the label upward so it sits above the node
@@ -60,14 +58,9 @@ const labels = {
       vAlpha = ( 1.0 - uObscurity ) * inRange;
 
       gl_Position = projectionMatrix * modelViewMatrix * vec4( worldPos, 1.0 );
-
-      #include <fog_vertex>
-
     }
   `,
   fragmentShader: `
-    #include <fog_pars_fragment>
-
     uniform sampler2D textureAtlas;
     uniform float opacity;
 
@@ -84,9 +77,6 @@ const labels = {
       }
 
       gl_FragColor = vec4( texel.rgb, alpha );
-
-      #include <fog_fragment>
-
     }
   `,
 };
