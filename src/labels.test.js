@@ -25,6 +25,8 @@ describe('label placement helpers', () => {
     expect(__TEST__.getLabelBaselineOffset(1)).toBe(1);
     expect(__TEST__.getLabelBaselineOffset(0)).toBe(0);
     expect(__TEST__.getLabelBaselineOffset(-1)).toBe(-1);
+    expect(__TEST__.getNodeColorComponents({ color: '#ff0000' })).toEqual([1, 0, 0]);
+    expect(__TEST__.getNodeColorComponents({})).toEqual([1, 1, 1]);
   });
 
   it('derives label priority deterministically', () => {

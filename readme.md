@@ -74,6 +74,7 @@ type LinkData = {
 > - `fdg.labels.alignment` (`'center' | 'left' | 'right'`) and `fdg.labels.baseline` (`'top' | 'middle' | 'bottom'`) change label anchoring live.
 > - `fdg.labels.offset` (`THREE.Vector2`) adds extra label padding in label-space x/y.
 > - `fdg.labels.near` (camera-space distance, default `0`) discards labels at or closer than that depth, which is useful when `sizeAttenuation` makes nearby labels too large.
+> - `fdg.labelsInheritColor` toggles whether labels use each node's `color`, and `fdg.labelColor` tints all labels uniformly on top of the white label atlas.
 > - `fdg.labels.fontSize` scales the rendered label planes without rebuilding the atlas; `fdg.labels.fontFamily` rebuilds the atlas with a new CSS font stack.
 
 ### Load Script in HTML file:

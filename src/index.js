@@ -124,9 +124,11 @@ class ForceDirectedGraph extends Group {
       sizeAttenuation: { value: true },
       frustumSize: { value: 100 },
       linksInheritColor: { value: false },
+      labelsInheritColor: { value: false },
       pointsInheritColor: { value: true },
       pointColor: { value: new Color(1, 1, 1) },
       linkColor: { value: new Color(1, 1, 1) },
+      labelColor: { value: new Color(0, 0, 0) },
       linecap: { value: LineCapsMap.round },
       linewidth: { value: 1 },
       opacity: { value: 1 },
@@ -135,11 +137,11 @@ class ForceDirectedGraph extends Group {
       uBeginning: { value: 0 },
       uEnding: { value: 1 },
       uNodeAmount: { value: 0 },
-      obscurity: { value: 0.75 },
+      obscurity: { value: 0.9 },
       labelAlignment: { value: 0 },
       labelBaseline: { value: 1 },
-      labelFontSize: { value: 1 },
-      labelNear: { value: 0 },
+      labelFontSize: { value: 24 },
+      labelNear: { value: 50 },
       labelOffset: { value: new Vector2(0, 0) },
     };
     this.userData.labelFontFamily = DEFAULT_LABEL_FONT_FAMILY;
@@ -171,9 +173,11 @@ class ForceDirectedGraph extends Group {
     'sizeAttenuation',
     'frustumSize',
     'linksInheritColor',
+    'labelsInheritColor',
     'pointsInheritColor',
     'pointColor',
     'linkColor',
+    'labelColor',
     'linecap',
     'linewidth',
     'opacity',
@@ -477,10 +481,12 @@ class ForceDirectedGraph extends Group {
           points.renderOrder = links.renderOrder + 1;
           scope.userData.hit.inherit(points);
         })
-        .then(() => Labels.parse(size, data, {
-          degrees: scope.userData.nodeDegrees,
-          fontFamily: scope.userData.labelFontFamily,
-        }))
+        .then(() =>
+          Labels.parse(size, data, {
+            degrees: scope.userData.nodeDegrees,
+            fontFamily: scope.userData.labelFontFamily,
+          }),
+        )
         .then((result) => {
           if (result) {
             const labels = new Labels(result, uniforms);
@@ -516,55 +522,59 @@ class ForceDirectedGraph extends Group {
       return Promise.resolve(null);
     }
 
-    this.userData.labelRefreshToken = (this.userData.labelRefreshToken || 0) + 1;
+    this.userData.labelRefreshToken =
+      (this.userData.labelRefreshToken || 0) + 1;
     const refreshToken = this.userData.labelRefreshToken;
 
-    return Labels.parse(uniforms.size.value, data, this.getLabelParseOptions())
-      .then((result) => {
-        if (refreshToken !== this.userData.labelRefreshToken) {
-          if (result) {
-            result.texture?.dispose?.();
-            result.geometry?.dispose?.();
-          }
-          return this.userData.labels || null;
+    return Labels.parse(
+      uniforms.size.value,
+      data,
+      this.getLabelParseOptions(),
+    ).then((result) => {
+      if (refreshToken !== this.userData.labelRefreshToken) {
+        if (result) {
+          result.texture?.dispose?.();
+          result.geometry?.dispose?.();
         }
+        return this.userData.labels || null;
+      }
 
-        const previousLabels = this.userData.labels;
-        if (previousLabels) {
-          if (!result) {
-            this.remove(previousLabels);
-            previousLabels.dispose();
-            this.userData.labels = null;
-            return null;
-          }
-
-          previousLabels.replaceData(result);
-
-          if (this.userData.variables?.positions) {
-            previousLabels.material.uniforms.texturePositions.value =
-              this.getTexture('positions');
-          }
-
-          return previousLabels;
-        }
-
+      const previousLabels = this.userData.labels;
+      if (previousLabels) {
         if (!result) {
+          this.remove(previousLabels);
+          previousLabels.dispose();
           this.userData.labels = null;
           return null;
         }
 
-        const nextLabels = new Labels(result, uniforms);
-        nextLabels.renderOrder = this.points.renderOrder + 1;
-        this.userData.labels = nextLabels;
-        this.add(nextLabels);
+        previousLabels.replaceData(result);
 
         if (this.userData.variables?.positions) {
-          nextLabels.material.uniforms.texturePositions.value =
+          previousLabels.material.uniforms.texturePositions.value =
             this.getTexture('positions');
         }
 
-        return nextLabels;
-      });
+        return previousLabels;
+      }
+
+      if (!result) {
+        this.userData.labels = null;
+        return null;
+      }
+
+      const nextLabels = new Labels(result, uniforms);
+      nextLabels.renderOrder = this.points.renderOrder + 1;
+      this.userData.labels = nextLabels;
+      this.add(nextLabels);
+
+      if (this.userData.variables?.positions) {
+        nextLabels.material.uniforms.texturePositions.value =
+          this.getTexture('positions');
+      }
+
+      return nextLabels;
+    });
   }
 
   /**
@@ -894,6 +904,12 @@ class ForceDirectedGraph extends Group {
   set pointsInheritColor(v) {
     this.userData.uniforms.pointsInheritColor.value = v;
   }
+  get labelsInheritColor() {
+    return this.userData.uniforms.labelsInheritColor.value;
+  }
+  set labelsInheritColor(v) {
+    this.userData.uniforms.labelsInheritColor.value = v;
+  }
   get pointColor() {
     return this.userData.uniforms.pointColor.value;
   }
@@ -911,6 +927,18 @@ class ForceDirectedGraph extends Group {
   }
   set linkColor(v) {
     this.userData.uniforms.linkColor.value = v;
+  }
+  get labelsColor() {
+    return this.labelColor;
+  }
+  set labelsColor(v) {
+    this.labelColor = v;
+  }
+  get labelColor() {
+    return this.userData.uniforms.labelColor.value;
+  }
+  set labelColor(v) {
+    this.userData.uniforms.labelColor.value = v;
   }
   get linecap() {
     const index = Math.round(this.userData.uniforms.linecap.value);

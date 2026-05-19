@@ -31,6 +31,7 @@ const labels = {
 
     varying vec2 vLabelUV;
     varying vec2 vVisibilityUV;
+    varying vec3 vColor;
     varying float vInRange;
 
     void main() {
@@ -74,6 +75,7 @@ const labels = {
       // Map quad UV [0,1] to the atlas region for this label
       vLabelUV = labelUV.xy + uv * labelUV.zw;
       vVisibilityUV = visibilityUV;
+      vColor = color;
       vInRange = inRange;
 
       vec4 mvPosition = modelViewMatrix * vec4( worldPos, 1.0 );
@@ -86,10 +88,13 @@ const labels = {
 
     uniform sampler2D textureAtlas;
     uniform sampler2D textureVisibility;
+    uniform float inheritColors;
     uniform float opacity;
+    uniform vec3 uColor;
 
     varying vec2 vLabelUV;
     varying vec2 vVisibilityUV;
+    varying vec3 vColor;
     varying float vInRange;
 
     void main() {
@@ -110,7 +115,10 @@ const labels = {
         discard;
       }
 
-      gl_FragColor = vec4( texel.rgb, alpha );
+      gl_FragColor = vec4(
+        texel.rgb * mix( vec3( 1.0 ), vColor, inheritColors ) * uColor,
+        alpha
+      );
       #include <fog_fragment>
     }
   `,

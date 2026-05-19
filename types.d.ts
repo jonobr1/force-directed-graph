@@ -380,6 +380,8 @@ declare module '@jonobr1/force-directed-graph' {
     get frustumSize(): number;
     set linksInheritColor(arg: boolean);
     get linksInheritColor(): boolean;
+    set labelsInheritColor(arg: boolean);
+    get labelsInheritColor(): boolean;
     set pointsInheritColor(arg: boolean);
     get pointsInheritColor(): boolean;
     set pointColor(arg: Color);
@@ -388,6 +390,10 @@ declare module '@jonobr1/force-directed-graph' {
     get linksColor(): Color;
     set linkColor(arg: Color);
     get linkColor(): Color;
+    set labelsColor(arg: Color);
+    get labelsColor(): Color;
+    set labelColor(arg: Color);
+    get labelColor(): Color;
     set linecap(arg: 'round' | 'butt' | 'square');
     get linecap(): 'round' | 'butt' | 'square';
     set linewidth(arg: number);

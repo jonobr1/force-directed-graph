@@ -200,7 +200,10 @@
 
         for (let i = 0; i < amount; i++) {
 
-          data.nodes.push({ id: i, label: words[Math.floor(Math.random() * words.length)] });
+          const r = Math.floor(Math.random() * 255);
+          const g = Math.floor(Math.random() * 255);
+          const b = Math.floor(Math.random() * 255);
+          data.nodes.push({ id: i, color: `rgb(${r},${g},${b})`, label: words[Math.floor(Math.random() * words.length)] });
 
           const target = Math.floor(Math.random() * i);
           const source = i;
@@ -226,8 +229,7 @@
 
           fdg.pointColor.setRGB(0.3, 0.3, 0.3);
           fdg.linkColor.setRGB(0.9, 0.9, 0.9);
-          fdg.labels.fontSize = 5;
-          fdg.labels.near = 50;
+          fdg.labelColor.setRGB(0, 0, 0);
 
           gui.close();
 
@@ -283,6 +285,8 @@
           folders.links.add(fdg, 'linecap', ['round', 'butt', 'square']).name('cap');
 
           folders.labels.add(fdg.labels, 'visible').name('visible');
+          folders.labels.add(fdg, 'labelsInheritColor').name('inheritColor');
+          folders.labels.addColor(fdg, 'labelColor').name('color');
           folders.labels.add(fdg.labels, 'fontFamily', ['serif', 'sans-serif', 'monospace']).name('fontFamily');
           folders.labels.add(fdg.labels, 'fontSize', 1, 100, 1).name('fontSize');
           folders.labels.add(fdg.labels, 'alignment', ['left', 'center', 'right']).name('alignment');

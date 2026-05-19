@@ -1038,6 +1038,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
 
     varying vec2 vLabelUV;
     varying vec2 vVisibilityUV;
+    varying vec3 vColor;
     varying float vInRange;
 
     void main() {
@@ -1081,6 +1082,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       // Map quad UV [0,1] to the atlas region for this label
       vLabelUV = labelUV.xy + uv * labelUV.zw;
       vVisibilityUV = visibilityUV;
+      vColor = color;
       vInRange = inRange;
 
       vec4 mvPosition = modelViewMatrix * vec4( worldPos, 1.0 );
@@ -1093,10 +1095,13 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
 
     uniform sampler2D textureAtlas;
     uniform sampler2D textureVisibility;
+    uniform float inheritColors;
     uniform float opacity;
+    uniform vec3 uColor;
 
     varying vec2 vLabelUV;
     varying vec2 vVisibilityUV;
+    varying vec3 vColor;
     varying float vInRange;
 
     void main() {
@@ -1117,7 +1122,10 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
         discard;
       }
 
-      gl_FragColor = vec4( texel.rgb, alpha );
+      gl_FragColor = vec4(
+        texel.rgb * mix( vec3( 1.0 ), vColor, inheritColors ) * uColor,
+        alpha
+      );
       #include <fog_fragment>
     }
   `
@@ -1138,6 +1146,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
   var BASE_ATLAS_PADDING = 4;
   var ATLAS_RASTER_SCALE = 2;
   var DEFAULT_FONT_FAMILY = "Arial, sans-serif";
+  var LABEL_NODE_COLOR = new import_three4.Color();
   var LabelAlignmentMap = {
     center: 0,
     left: 1,
@@ -1177,6 +1186,17 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       return 0;
     }
     return Math.max(0, nearDistance);
+  }
+  function getNodeColorComponents(node) {
+    if (node?.color) {
+      LABEL_NODE_COLOR.set(node.color);
+      return [
+        LABEL_NODE_COLOR.r,
+        LABEL_NODE_COLOR.g,
+        LABEL_NODE_COLOR.b
+      ];
+    }
+    return [1, 1, 1];
   }
   function layoutAtlasRows(items, maxTextureSize) {
     if (!Number.isFinite(maxTextureSize) || maxTextureSize <= 0) {
@@ -1304,7 +1324,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
     );
     const fontFamily = options.fontFamily || DEFAULT_FONT_FAMILY;
     const maxTextureSize = Math.max(1, options.maxTextureSize || 16384);
-    const textColor = "#000";
+    const textColor = "#fff";
     const temp = document.createElement("canvas");
     const tempCtx = temp.getContext("2d");
     tempCtx.font = `${requestedFontSize}px ${fontFamily}`;
@@ -1570,11 +1590,13 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
           textureVisibility: { value: visibility.texture },
           opacity: uniforms.opacity,
           frustumSize: uniforms.frustumSize,
+          inheritColors: uniforms.labelsInheritColor,
           is2D: uniforms.is2D,
           sizeAttenuation: uniforms.sizeAttenuation,
           resolution: uniforms.resolution,
           nodeRadius: uniforms.nodeRadius,
           nodeScale: uniforms.nodeScale,
+          uColor: uniforms.labelColor,
           labelAlignment: uniforms.labelAlignment,
           labelBaseline: uniforms.labelBaseline,
           labelFontSize: uniforms.labelFontSize,
@@ -1587,6 +1609,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
         vertexShader: labels_default.vertexShader,
         fragmentShader: labels_default.fragmentShader,
         transparent: true,
+        vertexColors: true,
         depthWrite: false,
         depthTest: false,
         fog: true
@@ -1912,6 +1935,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       geometry.setAttribute("uv", new import_three4.BufferAttribute(quadUVs, 2));
       geometry.setIndex(quadIdx);
       const sources = [];
+      const colors = [];
       const labelUVs = [];
       const aspectRatios = [];
       const pointSizes = [];
@@ -1923,6 +1947,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
         const y = Math.floor(entry.nodeIndex / size2) / size2;
         const z = entry.nodeIndex + 1;
         sources.push(x, y, z);
+        colors.push(...getNodeColorComponents(data.nodes[entry.nodeIndex]));
         labelUVs.push(
           entry.atlasUV.u,
           entry.atlasUV.v,
@@ -1939,6 +1964,10 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       geometry.setAttribute(
         "source",
         new import_three4.InstancedBufferAttribute(new Float32Array(sources), 3)
+      );
+      geometry.setAttribute(
+        "color",
+        new import_three4.InstancedBufferAttribute(new Float32Array(colors), 3)
       );
       geometry.setAttribute(
         "labelUV",
@@ -2889,9 +2918,11 @@ initWasm();
         sizeAttenuation: { value: true },
         frustumSize: { value: 100 },
         linksInheritColor: { value: false },
+        labelsInheritColor: { value: false },
         pointsInheritColor: { value: true },
         pointColor: { value: new import_three6.Color(1, 1, 1) },
         linkColor: { value: new import_three6.Color(1, 1, 1) },
+        labelColor: { value: new import_three6.Color(0, 0, 0) },
         linecap: { value: LineCapsMap.round },
         linewidth: { value: 1 },
         opacity: { value: 1 },
@@ -2900,10 +2931,10 @@ initWasm();
         uBeginning: { value: 0 },
         uEnding: { value: 1 },
         uNodeAmount: { value: 0 },
-        obscurity: { value: 0.75 },
+        obscurity: { value: 0.9 },
         labelAlignment: { value: 0 },
         labelBaseline: { value: 1 },
-        labelFontSize: { value: 1 },
+        labelFontSize: { value: 10 },
         labelNear: { value: 0 },
         labelOffset: { value: new import_three6.Vector2(0, 0) }
       };
@@ -2934,9 +2965,11 @@ initWasm();
       "sizeAttenuation",
       "frustumSize",
       "linksInheritColor",
+      "labelsInheritColor",
       "pointsInheritColor",
       "pointColor",
       "linkColor",
+      "labelColor",
       "linecap",
       "linewidth",
       "opacity",
@@ -3166,10 +3199,12 @@ initWasm();
           scope.add(points2, links2);
           points2.renderOrder = links2.renderOrder + 1;
           scope.userData.hit.inherit(points2);
-        }).then(() => Labels.parse(size2, data, {
-          degrees: scope.userData.nodeDegrees,
-          fontFamily: scope.userData.labelFontFamily
-        })).then((result) => {
+        }).then(
+          () => Labels.parse(size2, data, {
+            degrees: scope.userData.nodeDegrees,
+            fontFamily: scope.userData.labelFontFamily
+          })
+        ).then((result) => {
           if (result) {
             const labels2 = new Labels(result, uniforms);
             scope.userData.labels = labels2;
@@ -3201,7 +3236,11 @@ initWasm();
       }
       this.userData.labelRefreshToken = (this.userData.labelRefreshToken || 0) + 1;
       const refreshToken = this.userData.labelRefreshToken;
-      return Labels.parse(uniforms.size.value, data, this.getLabelParseOptions()).then((result) => {
+      return Labels.parse(
+        uniforms.size.value,
+        data,
+        this.getLabelParseOptions()
+      ).then((result) => {
         if (refreshToken !== this.userData.labelRefreshToken) {
           if (result) {
             result.texture?.dispose?.();
@@ -3523,6 +3562,12 @@ initWasm();
     set pointsInheritColor(v) {
       this.userData.uniforms.pointsInheritColor.value = v;
     }
+    get labelsInheritColor() {
+      return this.userData.uniforms.labelsInheritColor.value;
+    }
+    set labelsInheritColor(v) {
+      this.userData.uniforms.labelsInheritColor.value = v;
+    }
     get pointColor() {
       return this.userData.uniforms.pointColor.value;
     }
@@ -3540,6 +3585,18 @@ initWasm();
     }
     set linkColor(v) {
       this.userData.uniforms.linkColor.value = v;
+    }
+    get labelsColor() {
+      return this.labelColor;
+    }
+    set labelsColor(v) {
+      this.labelColor = v;
+    }
+    get labelColor() {
+      return this.userData.uniforms.labelColor.value;
+    }
+    set labelColor(v) {
+      this.userData.uniforms.labelColor.value = v;
     }
     get linecap() {
       const index = Math.round(this.userData.uniforms.linecap.value);

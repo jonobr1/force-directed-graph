@@ -2,6 +2,7 @@ import {
   BufferAttribute,
   CanvasTexture,
   ClampToEdgeWrapping,
+  Color,
   DataTexture,
   InstancedBufferAttribute,
   InstancedBufferGeometry,
@@ -33,6 +34,7 @@ const BASE_ATLAS_FONT_SIZE = 120;
 const BASE_ATLAS_PADDING = 4;
 const ATLAS_RASTER_SCALE = 2;
 const DEFAULT_FONT_FAMILY = 'Arial, sans-serif';
+const LABEL_NODE_COLOR = new Color();
 const LabelAlignmentMap = {
   center: 0,
   left: 1,
@@ -76,6 +78,14 @@ function sanitizeLabelNearDistance(nearDistance) {
     return 0;
   }
   return Math.max(0, nearDistance);
+}
+
+function getNodeColorComponents(node) {
+  if (node?.color) {
+    LABEL_NODE_COLOR.set(node.color);
+    return [LABEL_NODE_COLOR.r, LABEL_NODE_COLOR.g, LABEL_NODE_COLOR.b];
+  }
+  return [1, 1, 1];
 }
 
 function layoutAtlasRows(items, maxTextureSize) {
@@ -128,13 +138,11 @@ function layoutAtlasRows(items, maxTextureSize) {
   };
 }
 
-function measureAtlasCandidate(tempCtx, rawItems, {
-  requestedFontSize,
-  requestedPadding,
-  fontFamily,
-  scale,
-  maxTextureSize,
-}) {
+function measureAtlasCandidate(
+  tempCtx,
+  rawItems,
+  { requestedFontSize, requestedPadding, fontFamily, scale, maxTextureSize },
+) {
   const padding = Math.max(1, Math.round(requestedPadding * scale));
   const fontSize = Math.max(1, Math.round(requestedFontSize * scale));
   const tileH = fontSize + padding * 2;
@@ -146,7 +154,8 @@ function measureAtlasCandidate(tempCtx, rawItems, {
   tempCtx.font = `${fontSize}px ${fontFamily}`;
 
   const items = rawItems.map((item) => {
-    const labelWidth = Math.ceil(tempCtx.measureText(item.text).width) + padding * 2;
+    const labelWidth =
+      Math.ceil(tempCtx.measureText(item.text).width) + padding * 2;
     return {
       ...item,
       labelWidth,
@@ -166,12 +175,11 @@ function measureAtlasCandidate(tempCtx, rawItems, {
   };
 }
 
-function fitAtlasLayout(tempCtx, rawItems, {
-  requestedFontSize,
-  requestedPadding,
-  fontFamily,
-  maxTextureSize,
-}) {
+function fitAtlasLayout(
+  tempCtx,
+  rawItems,
+  { requestedFontSize, requestedPadding, fontFamily, maxTextureSize },
+) {
   let lo = 0;
   let hi = 1;
   let best = null;
@@ -232,7 +240,7 @@ function buildTextAtlas(nodes, degrees = [], options = {}) {
   );
   const fontFamily = options.fontFamily || DEFAULT_FONT_FAMILY;
   const maxTextureSize = Math.max(1, options.maxTextureSize || 16384);
-  const textColor = '#000';
+  const textColor = '#fff';
 
   const temp = document.createElement('canvas');
   const tempCtx = temp.getContext('2d');
@@ -292,7 +300,11 @@ function buildTextAtlas(nodes, degrees = [], options = {}) {
     const px = placement.x;
     const py = placement.y;
 
-    ctx.fillText(item.text, px + placement.width / 2, py + placement.height / 2);
+    ctx.fillText(
+      item.text,
+      px + placement.width / 2,
+      py + placement.height / 2,
+    );
 
     entries.push({
       ...item,
@@ -321,7 +333,10 @@ function getVisibleQuota(obscurity, labelCount) {
 }
 
 function getLabelBasePriority(node, degree = 0) {
-  if (typeof node.labelPriority === 'number' && Number.isFinite(node.labelPriority)) {
+  if (
+    typeof node.labelPriority === 'number' &&
+    Number.isFinite(node.labelPriority)
+  ) {
     return node.labelPriority;
   }
   if (typeof node.size === 'number' && Number.isFinite(node.size)) {
@@ -412,7 +427,12 @@ function getCollisionCellBounds(bounds, cellSize, gridWidth, gridHeight) {
   const minCellY = Math.max(0, Math.floor(bounds.minY / cellSize));
   const maxCellY = Math.min(gridHeight - 1, Math.floor(bounds.maxY / cellSize));
 
-  if (maxCellX < 0 || maxCellY < 0 || minCellX >= gridWidth || minCellY >= gridHeight) {
+  if (
+    maxCellX < 0 ||
+    maxCellY < 0 ||
+    minCellX >= gridWidth ||
+    minCellY >= gridHeight
+  ) {
     return null;
   }
 
@@ -446,7 +466,10 @@ function projectLabelBounds({
   LOCAL_NODE.copy(nodePosition);
   LOCAL_NODE.z *= 1.0 - Number(Boolean(is2D));
 
-  MODEL_VIEW_MATRIX.multiplyMatrices(camera.matrixWorldInverse, objectMatrixWorld);
+  MODEL_VIEW_MATRIX.multiplyMatrices(
+    camera.matrixWorldInverse,
+    objectMatrixWorld,
+  );
   MV_CENTER.set(LOCAL_NODE.x, LOCAL_NODE.y, LOCAL_NODE.z, 1.0);
   MV_CENTER.applyMatrix4(MODEL_VIEW_MATRIX);
 
@@ -465,14 +488,20 @@ function projectLabelBounds({
     ? frustumSize / Math.max(viewDistance, 0.001)
     : 1.0;
   const labelPixelHeight =
-    0.1 * nodeRadius * pointSize * nodeScale * sizeScale * sanitizeLabelFontSize(labelFontSize);
+    0.1 *
+    nodeRadius *
+    pointSize *
+    nodeScale *
+    sizeScale *
+    sanitizeLabelFontSize(labelFontSize);
   const projectionScaleY = Math.max(
     Math.abs(camera.projectionMatrix.elements[5]),
     0.0001,
   );
   const depthScale = camera.isPerspectiveCamera ? viewDistance : 1.0;
   const worldUnitsPerPixel =
-    (2.0 * depthScale) / Math.max(projectionScaleY * Math.max(viewportHeight, 1), 0.001);
+    (2.0 * depthScale) /
+    Math.max(projectionScaleY * Math.max(viewportHeight, 1), 0.001);
   const labelHeight = labelPixelHeight * worldUnitsPerPixel;
   const labelWidth = labelHeight * aspectRatio;
   const offsetX = (labelOffset?.x || 0) * labelHeight;
@@ -482,8 +511,7 @@ function projectLabelBounds({
   CAMERA_RIGHT.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
   CAMERA_UP.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
 
-  const anchor = WORLD_CORNER
-    .copy(WORLD_CENTER)
+  const anchor = WORLD_CORNER.copy(WORLD_CENTER)
     .addScaledVector(
       CAMERA_RIGHT,
       labelWidth * 0.5 * getLabelAlignmentOffset(labelAlignment) + offsetX,
@@ -499,13 +527,15 @@ function projectLabelBounds({
 
   for (let ix = -1; ix <= 1; ix += 2) {
     for (let iy = -1; iy <= 1; iy += 2) {
-      PROJECTED_CORNER
-        .copy(anchor)
+      PROJECTED_CORNER.copy(anchor)
         .addScaledVector(CAMERA_RIGHT, ix * labelWidth * 0.5)
         .addScaledVector(CAMERA_UP, iy * labelHeight * 0.5)
         .project(camera);
 
-      if (!Number.isFinite(PROJECTED_CORNER.x) || !Number.isFinite(PROJECTED_CORNER.y)) {
+      if (
+        !Number.isFinite(PROJECTED_CORNER.x) ||
+        !Number.isFinite(PROJECTED_CORNER.y)
+      ) {
         return null;
       }
 
@@ -519,7 +549,12 @@ function projectLabelBounds({
     }
   }
 
-  if (maxX <= 0 || maxY <= 0 || minX >= viewportWidth || minY >= viewportHeight) {
+  if (
+    maxX <= 0 ||
+    maxY <= 0 ||
+    minX >= viewportWidth ||
+    minY >= viewportHeight
+  ) {
     return null;
   }
 
@@ -535,17 +570,20 @@ function projectLabelBounds({
     viewDistance,
     depthPriority: 1.0 / Math.max(viewDistance, 0.001),
     clipped:
-      minX < 0 ||
-      minY < 0 ||
-      maxX > viewportWidth ||
-      maxY > viewportHeight,
+      minX < 0 || minY < 0 || maxX > viewportWidth || maxY > viewportHeight,
   };
 }
 
 function createVisibilityTexture(labelCount) {
   const { width, height } = getPlacementTextureDimensions(labelCount);
   const data = new Uint8Array(width * height * 4);
-  const texture = new DataTexture(data, width, height, RGBAFormat, UnsignedByteType);
+  const texture = new DataTexture(
+    data,
+    width,
+    height,
+    RGBAFormat,
+    UnsignedByteType,
+  );
 
   texture.minFilter = NearestFilter;
   texture.magFilter = NearestFilter;
@@ -573,29 +611,35 @@ class Labels extends Mesh {
   constructor({ geometry, texture, entries, fontFamily }, uniforms) {
     const visibility = createVisibilityTexture(entries.length);
     const material = new ShaderMaterial({
-      uniforms: { ...UniformsLib.fog, ...{
-        texturePositions: { value: null },
-        textureAtlas: { value: texture },
-        textureVisibility: { value: visibility.texture },
-        opacity: uniforms.opacity,
-        frustumSize: uniforms.frustumSize,
-        is2D: uniforms.is2D,
-        sizeAttenuation: uniforms.sizeAttenuation,
-        resolution: uniforms.resolution,
-        nodeRadius: uniforms.nodeRadius,
-        nodeScale: uniforms.nodeScale,
-        labelAlignment: uniforms.labelAlignment,
-        labelBaseline: uniforms.labelBaseline,
-        labelFontSize: uniforms.labelFontSize,
-        labelNear: uniforms.labelNear,
-        labelOffset: uniforms.labelOffset,
-        uBeginning: uniforms.uBeginning,
-        uEnding: uniforms.uEnding,
-        uNodeAmount: uniforms.uNodeAmount,
-      } },
+      uniforms: {
+        ...UniformsLib.fog,
+        ...{
+          texturePositions: { value: null },
+          textureAtlas: { value: texture },
+          textureVisibility: { value: visibility.texture },
+          opacity: uniforms.opacity,
+          frustumSize: uniforms.frustumSize,
+          inheritColors: uniforms.labelsInheritColor,
+          is2D: uniforms.is2D,
+          sizeAttenuation: uniforms.sizeAttenuation,
+          resolution: uniforms.resolution,
+          nodeRadius: uniforms.nodeRadius,
+          nodeScale: uniforms.nodeScale,
+          uColor: uniforms.labelColor,
+          labelAlignment: uniforms.labelAlignment,
+          labelBaseline: uniforms.labelBaseline,
+          labelFontSize: uniforms.labelFontSize,
+          labelNear: uniforms.labelNear,
+          labelOffset: uniforms.labelOffset,
+          uBeginning: uniforms.uBeginning,
+          uEnding: uniforms.uEnding,
+          uNodeAmount: uniforms.uNodeAmount,
+        },
+      },
       vertexShader: shader.vertexShader,
       fragmentShader: shader.fragmentShader,
       transparent: true,
+      vertexColors: true,
       depthWrite: false,
       depthTest: false,
       fog: true,
@@ -615,8 +659,10 @@ class Labels extends Mesh {
     this.userData.fontFamily = fontFamily || DEFAULT_FONT_FAMILY;
     this.userData.fontSize = uniforms.labelFontSize.value;
     this.userData.near = sanitizeLabelNearDistance(uniforms.labelNear.value);
-    this.onBeforeRender = (renderer, scene, camera) => {
-      this.updateVisibility(renderer, camera);
+    this.onBeforeRender = (renderer, _scene, camera) => {
+      if (this.visible) {
+        this.updateVisibility(renderer, camera);
+      }
     };
   }
 
@@ -676,7 +722,10 @@ class Labels extends Mesh {
       );
     } catch (error) {
       if (!this.userData.didWarnPlacementReadback) {
-        console.warn('Force Directed Graph: label placement readback failed.', error);
+        console.warn(
+          'Force Directed Graph: label placement readback failed.',
+          error,
+        );
         this.userData.didWarnPlacementReadback = true;
       }
       renderer.setRenderTarget(activeRenderTarget);
@@ -778,7 +827,11 @@ class Labels extends Mesh {
       const seen = new Set();
       let collides = false;
 
-      for (let cy = cellBounds.minCellY; cy <= cellBounds.maxCellY && !collides; cy++) {
+      for (
+        let cy = cellBounds.minCellY;
+        cy <= cellBounds.maxCellY && !collides;
+        cy++
+      ) {
         for (let cx = cellBounds.minCellX; cx <= cellBounds.maxCellX; cx++) {
           const key = packCollisionCellKey(cx, cy, gridWidth);
           const bucket = this.selectionGrid.get(key);
@@ -981,6 +1034,7 @@ class Labels extends Mesh {
     geometry.setIndex(quadIdx);
 
     const sources = [];
+    const colors = [];
     const labelUVs = [];
     const aspectRatios = [];
     const pointSizes = [];
@@ -995,6 +1049,7 @@ class Labels extends Mesh {
       const z = entry.nodeIndex + 1;
 
       sources.push(x, y, z);
+      colors.push(...getNodeColorComponents(data.nodes[entry.nodeIndex]));
       labelUVs.push(
         entry.atlasUV.u,
         entry.atlasUV.v,
@@ -1012,6 +1067,10 @@ class Labels extends Mesh {
     geometry.setAttribute(
       'source',
       new InstancedBufferAttribute(new Float32Array(sources), 3),
+    );
+    geometry.setAttribute(
+      'color',
+      new InstancedBufferAttribute(new Float32Array(colors), 3),
     );
     geometry.setAttribute(
       'labelUV',
@@ -1054,6 +1113,7 @@ const __TEST__ = {
   getLabelBaselineOffset,
   getVisibleQuota,
   getPlacementTextureDimensions,
+  getNodeColorComponents,
   sanitizeLabelFontSize,
   sanitizeLabelNearDistance,
   intersectsBounds,
