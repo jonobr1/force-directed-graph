@@ -20,6 +20,7 @@ const LineCapsMap = {
   butt: 1,
   square: 2,
 };
+const DEFAULT_LABEL_FONT_FAMILY = 'Arial, sans-serif';
 const buffers = {
   int: new Uint8ClampedArray(4),
   float: new Float32Array(4),
@@ -135,7 +136,12 @@ class ForceDirectedGraph extends Group {
       uEnding: { value: 1 },
       uNodeAmount: { value: 0 },
       obscurity: { value: 0.75 },
+      labelAlignment: { value: 0 },
+      labelBaseline: { value: 1 },
+      labelFontSize: { value: 1 },
+      labelOffset: { value: new Vector2(0, 0) },
     };
+    this.userData.labelFontFamily = DEFAULT_LABEL_FONT_FAMILY;
     this.userData.hit = new Hit(this);
     this.userData.workerManager = new TextureWorkerManager();
 
@@ -472,6 +478,7 @@ class ForceDirectedGraph extends Group {
         })
         .then(() => Labels.parse(size, data, {
           degrees: scope.userData.nodeDegrees,
+          fontFamily: scope.userData.labelFontFamily,
         }))
         .then((result) => {
           if (result) {
@@ -489,6 +496,73 @@ class ForceDirectedGraph extends Group {
         callback();
       }
     }
+  }
+
+  getLabelParseOptions() {
+    const { nodeDegrees, labelFontFamily, uniforms, renderer } = this.userData;
+    return {
+      degrees: nodeDegrees || [],
+      fontFamily: labelFontFamily,
+      maxTextureSize: renderer?.capabilities?.maxTextureSize || 16384,
+    };
+  }
+
+  refreshLabels() {
+    const { data, uniforms } = this.userData;
+
+    if (!data || !this.ready || !this.points) {
+      return Promise.resolve(null);
+    }
+
+    this.userData.labelRefreshToken = (this.userData.labelRefreshToken || 0) + 1;
+    const refreshToken = this.userData.labelRefreshToken;
+
+    return Labels.parse(uniforms.size.value, data, this.getLabelParseOptions())
+      .then((result) => {
+        if (refreshToken !== this.userData.labelRefreshToken) {
+          if (result) {
+            result.texture?.dispose?.();
+            result.geometry?.dispose?.();
+          }
+          return this.userData.labels || null;
+        }
+
+        const previousLabels = this.userData.labels;
+        if (previousLabels) {
+          if (!result) {
+            this.remove(previousLabels);
+            previousLabels.dispose();
+            this.userData.labels = null;
+            return null;
+          }
+
+          previousLabels.replaceData(result);
+
+          if (this.userData.variables?.positions) {
+            previousLabels.material.uniforms.texturePositions.value =
+              this.getTexture('positions');
+          }
+
+          return previousLabels;
+        }
+
+        if (!result) {
+          this.userData.labels = null;
+          return null;
+        }
+
+        const nextLabels = new Labels(result, uniforms);
+        nextLabels.renderOrder = this.points.renderOrder + 1;
+        this.userData.labels = nextLabels;
+        this.add(nextLabels);
+
+        if (this.userData.variables?.positions) {
+          nextLabels.material.uniforms.texturePositions.value =
+            this.getTexture('positions');
+        }
+
+        return nextLabels;
+      });
   }
 
   /**

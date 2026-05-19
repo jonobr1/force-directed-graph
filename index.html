@@ -280,7 +280,13 @@
           folders.links.add(fdg, 'linewidth', 0.5, 16, 0.5).name('linewidth');
           folders.links.add(fdg, 'linecap', ['round', 'butt', 'square']).name('cap');
 
-          folders.labels.add(fdg.labels, 'visible').name('visible')
+          folders.labels.add(fdg.labels, 'visible').name('visible');
+          folders.labels.add(fdg.labels, 'fontFamily', ['serif', 'sans-serif', 'monospace']).name('fontFamily');
+          folders.labels.add(fdg.labels, 'fontSize', 1, 100, 1).name('fontSize');
+          folders.labels.add(fdg.labels, 'alignment', ['left', 'center', 'right']).name('alignment');
+          folders.labels.add(fdg.labels, 'baseline', ['top', 'middle', 'bottom']).name('baseline');
+          folders.labels.add(fdg.labels.offset, 'x', -5, 5, 0.1).name('offsetX');
+          folders.labels.add(fdg.labels.offset, 'y', -5, 5, 0.1).name('offsetY');
 
           scene.add(fdg);
 

@@ -9,6 +9,14 @@ describe('label placement helpers', () => {
     expect(__TEST__.getVisibleQuota(1, 100)).toBe(0);
     expect(__TEST__.getVisibleQuota(-1, 8)).toBe(8);
     expect(__TEST__.getVisibleQuota(2, 8)).toBe(0);
+    expect(__TEST__.sanitizeLabelFontSize(0)).toBe(0.01);
+    expect(__TEST__.sanitizeLabelFontSize(Number.NaN)).toBe(1);
+    expect(__TEST__.getLabelAlignmentOffset(0)).toBe(0);
+    expect(__TEST__.getLabelAlignmentOffset(1)).toBe(1);
+    expect(__TEST__.getLabelAlignmentOffset(-1)).toBe(-1);
+    expect(__TEST__.getLabelBaselineOffset(1)).toBe(1);
+    expect(__TEST__.getLabelBaselineOffset(0)).toBe(0);
+    expect(__TEST__.getLabelBaselineOffset(-1)).toBe(-1);
   });
 
   it('derives label priority deterministically', () => {
@@ -85,6 +93,62 @@ describe('label placement helpers', () => {
     expect(bounds.centerY).toBeLessThan(100);
     expect(bounds.clipped).toBe(false);
     expect(bounds.depthPriority).toBeGreaterThan(0);
+
+    const leftBottomBounds = __TEST__.projectLabelBounds({
+      nodePosition: { x: 0, y: 0, z: 0 },
+      objectMatrixWorld: new Matrix4(),
+      camera,
+      viewportWidth: 400,
+      viewportHeight: 200,
+      frustumSize: 100,
+      is2D: false,
+      sizeAttenuation: false,
+      nodeRadius: 1,
+      nodeScale: 10,
+      aspectRatio: 4,
+      labelAlignment: 1,
+      labelBaseline: -1,
+      labelFontSize: 2,
+    });
+
+    expect(leftBottomBounds.centerX).toBeGreaterThan(bounds.centerX);
+    expect(leftBottomBounds.centerY).toBeGreaterThan(bounds.centerY);
+    expect(leftBottomBounds.height).toBeGreaterThan(bounds.height);
+
+    const offsetBounds = __TEST__.projectLabelBounds({
+      nodePosition: { x: 0, y: 0, z: 0 },
+      objectMatrixWorld: new Matrix4(),
+      camera,
+      viewportWidth: 400,
+      viewportHeight: 200,
+      frustumSize: 100,
+      is2D: false,
+      sizeAttenuation: false,
+      nodeRadius: 1,
+      nodeScale: 10,
+      aspectRatio: 4,
+      labelOffset: { x: 1, y: -0.5 },
+    });
+
+    expect(offsetBounds.centerX).toBeGreaterThan(bounds.centerX);
+    expect(offsetBounds.centerY).toBeGreaterThan(bounds.centerY);
+
+    const largePointBounds = __TEST__.projectLabelBounds({
+      nodePosition: { x: 0, y: 0, z: 0 },
+      objectMatrixWorld: new Matrix4(),
+      camera,
+      viewportWidth: 400,
+      viewportHeight: 200,
+      frustumSize: 100,
+      is2D: false,
+      sizeAttenuation: false,
+      nodeRadius: 1,
+      nodeScale: 10,
+      aspectRatio: 4,
+      pointSize: 2,
+    });
+
+    expect(largePointBounds.height).toBeGreaterThan(bounds.height);
   });
 
   it('packs collision cells and sort tuples consistently', () => {

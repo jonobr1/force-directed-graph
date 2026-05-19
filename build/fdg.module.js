@@ -1027,6 +1027,7 @@ import {
   RGBAFormat,
   ShaderMaterial as ShaderMaterial3,
   UnsignedByteType,
+  UniformsLib as UniformsLib3,
   Vector2,
   Vector3,
   Vector4
@@ -1035,6 +1036,8 @@ import {
 // src/shaders/labels.js
 var labels = {
   vertexShader: `
+    #include <fog_pars_vertex>
+
     uniform sampler2D texturePositions;
     uniform float frustumSize;
     uniform float is2D;
@@ -1044,10 +1047,15 @@ var labels = {
     uniform float uNodeAmount;
     uniform float nodeRadius;
     uniform float nodeScale;
+    uniform float labelAlignment;
+    uniform float labelBaseline;
+    uniform float labelFontSize;
+    uniform vec2 labelOffset;
 
     attribute vec3 source;       // .xy = UV into texturePositions, .z = nodeIndex + 1
     attribute vec4 labelUV;      // .xy = atlas UV offset, .zw = atlas UV extent
     attribute float aspectRatio; // label quad width / height
+    attribute float pointSize;   // per-node point size scalar
     attribute vec2 visibilityUV; // UV into placement visibility texture
 
     varying vec2 vLabelUV;
@@ -1072,12 +1080,14 @@ var labels = {
 
       // Scale label to match node visual size, with optional depth attenuation
       float sizeScale  = mix( 1.0, frustumSize / max( -mvCenter.z, 0.001 ), sizeAttenuation );
-      float labelH     = 0.1 * nodeRadius * nodeScale * sizeScale;
+      float labelH     = 0.1 * nodeRadius * pointSize * nodeScale * sizeScale * max( labelFontSize, 0.001 );
       float labelW     = labelH * aspectRatio;
+      vec2 offset      = labelOffset * labelH;
 
-      // Shift the label upward so it sits above the node
+      // Shift the label relative to the node according to baseline/alignment.
       vec3 worldPos = nodePos
-        + up    * labelH
+        + right * ( labelW * 0.5 * labelAlignment + offset.x )
+        + up    * ( labelH * labelBaseline + offset.y )
         + right * position.x * labelW * 0.5
         + up    * position.y * labelH * 0.5;
 
@@ -1086,10 +1096,14 @@ var labels = {
       vVisibilityUV = visibilityUV;
       vInRange = inRange;
 
-      gl_Position = projectionMatrix * modelViewMatrix * vec4( worldPos, 1.0 );
+      vec4 mvPosition = modelViewMatrix * vec4( worldPos, 1.0 );
+      gl_Position = projectionMatrix * mvPosition;
+      #include <fog_vertex>
     }
   `,
   fragmentShader: `
+    #include <fog_pars_fragment>
+
     uniform sampler2D textureAtlas;
     uniform sampler2D textureVisibility;
     uniform float opacity;
@@ -1117,6 +1131,7 @@ var labels = {
       }
 
       gl_FragColor = vec4( texel.rgb, alpha );
+      #include <fog_fragment>
     }
   `
 };
@@ -1132,69 +1147,217 @@ var WORLD_CORNER = new Vector3();
 var PROJECTED_CORNER = new Vector3();
 var MV_CENTER = new Vector4();
 var DRAWING_BUFFER_SIZE = new Vector2();
-function buildTextAtlas(nodes, degrees = []) {
-  const padding = 4;
-  const fontSize = 120;
-  const fontFamily = "Arial, sans-serif";
+var BASE_ATLAS_FONT_SIZE = 120;
+var BASE_ATLAS_PADDING = 4;
+var DEFAULT_FONT_FAMILY = "Arial, sans-serif";
+var LabelAlignmentMap = {
+  center: 0,
+  left: 1,
+  right: -1
+};
+var LabelBaselineMap = {
+  top: 1,
+  middle: 0,
+  bottom: -1
+};
+function getLabelAlignmentName(value) {
+  if (value > 0.5) {
+    return "left";
+  }
+  if (value < -0.5) {
+    return "right";
+  }
+  return "center";
+}
+function getLabelBaselineName(value) {
+  if (value > 0.5) {
+    return "top";
+  }
+  if (value < -0.5) {
+    return "bottom";
+  }
+  return "middle";
+}
+function sanitizeLabelFontSize(fontSize) {
+  if (!Number.isFinite(fontSize)) {
+    return 1;
+  }
+  return Math.max(0.01, fontSize);
+}
+function layoutAtlasRows(items, maxTextureSize) {
+  if (!Number.isFinite(maxTextureSize) || maxTextureSize <= 0) {
+    return { fits: false, width: 0, height: 0, placements: [] };
+  }
+  let x = 0;
+  let y = 0;
+  let rowHeight = 0;
+  let maxWidth = 0;
+  const placements = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const width = Math.max(1, Math.ceil(item.labelWidth));
+    const height = Math.max(1, Math.ceil(item.labelHeight));
+    if (width > maxTextureSize || height > maxTextureSize) {
+      return { fits: false, width: 0, height: 0, placements: [] };
+    }
+    if (x > 0 && x + width > maxTextureSize) {
+      x = 0;
+      y += rowHeight;
+      rowHeight = 0;
+    }
+    placements.push({
+      x,
+      y,
+      width,
+      height
+    });
+    x += width;
+    rowHeight = Math.max(rowHeight, height);
+    maxWidth = Math.max(maxWidth, x);
+    if (y + rowHeight > maxTextureSize) {
+      return { fits: false, width: 0, height: 0, placements: [] };
+    }
+  }
+  return {
+    fits: true,
+    width: Math.max(1, maxWidth),
+    height: Math.max(1, y + rowHeight),
+    placements
+  };
+}
+function measureAtlasCandidate(tempCtx, rawItems, {
+  requestedFontSize,
+  requestedPadding,
+  fontFamily,
+  scale,
+  maxTextureSize
+}) {
+  const padding = Math.max(1, Math.round(requestedPadding * scale));
+  const fontSize = Math.max(1, Math.round(requestedFontSize * scale));
+  const tileH = fontSize + padding * 2;
+  if (tileH > maxTextureSize) {
+    return { fits: false };
+  }
+  tempCtx.font = `${fontSize}px ${fontFamily}`;
+  const items = rawItems.map((item) => {
+    const labelWidth = Math.ceil(tempCtx.measureText(item.text).width) + padding * 2;
+    return {
+      ...item,
+      labelWidth,
+      labelHeight: tileH,
+      aspectRatio: labelWidth / tileH
+    };
+  });
+  const layout = layoutAtlasRows(items, maxTextureSize);
+  return {
+    fits: layout.fits,
+    padding,
+    fontSize,
+    tileH,
+    items,
+    layout
+  };
+}
+function fitAtlasLayout(tempCtx, rawItems, {
+  requestedFontSize,
+  requestedPadding,
+  fontFamily,
+  maxTextureSize
+}) {
+  let lo = 0;
+  let hi = 1;
+  let best = null;
+  for (let i = 0; i < 12; i++) {
+    const scale = (lo + hi) * 0.5;
+    const candidate = measureAtlasCandidate(tempCtx, rawItems, {
+      requestedFontSize,
+      requestedPadding,
+      fontFamily,
+      scale,
+      maxTextureSize
+    });
+    if (candidate.fits) {
+      best = {
+        ...candidate,
+        scale
+      };
+      lo = scale;
+    } else {
+      hi = scale;
+    }
+  }
+  if (best) {
+    return best;
+  }
+  return measureAtlasCandidate(tempCtx, rawItems, {
+    requestedFontSize,
+    requestedPadding,
+    fontFamily,
+    scale: 0.01,
+    maxTextureSize
+  });
+}
+function buildTextAtlas(nodes, degrees = [], options = {}) {
+  const fontScale = sanitizeLabelFontSize(options.fontSize);
+  const requestedPadding = Math.max(1, Math.round(BASE_ATLAS_PADDING * fontScale));
+  const requestedFontSize = Math.max(1, Math.round(BASE_ATLAS_FONT_SIZE * fontScale));
+  const fontFamily = options.fontFamily || DEFAULT_FONT_FAMILY;
+  const maxTextureSize = Math.max(1, options.maxTextureSize || 16384);
   const textColor = "#000";
   const temp = document.createElement("canvas");
   const tempCtx = temp.getContext("2d");
-  tempCtx.font = `${fontSize}px ${fontFamily}`;
-  const items = [];
-  let maxTileWidth = 0;
-  const tileH = fontSize + padding * 2;
+  tempCtx.font = `${requestedFontSize}px ${fontFamily}`;
+  const rawItems = [];
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i];
     if (node.label === null || node.label === void 0) {
       continue;
     }
     const text = String(node.label);
-    const labelWidth = Math.ceil(tempCtx.measureText(text).width) + padding * 2;
-    if (labelWidth > maxTileWidth) {
-      maxTileWidth = labelWidth;
-    }
-    items.push({
+    rawItems.push({
       text,
       nodeIndex: i,
-      labelWidth,
-      labelHeight: tileH,
-      aspectRatio: labelWidth / tileH,
+      pointSize: typeof node.size === "number" && Number.isFinite(node.size) ? node.size : 1,
       basePriority: getLabelBasePriority(node, degrees[i] || 0)
     });
   }
-  if (items.length === 0) {
+  if (rawItems.length === 0) {
     return null;
   }
-  const tileW = maxTileWidth || 128;
-  const cols = Math.ceil(Math.sqrt(items.length));
-  const rows = Math.ceil(items.length / cols);
+  const fittedAtlas = fitAtlasLayout(tempCtx, rawItems, {
+    requestedFontSize,
+    requestedPadding,
+    fontFamily,
+    maxTextureSize
+  });
+  if (!fittedAtlas.fits) {
+    return null;
+  }
   const canvas = document.createElement("canvas");
-  canvas.width = cols * tileW;
-  canvas.height = rows * tileH;
+  canvas.width = fittedAtlas.layout.width;
+  canvas.height = fittedAtlas.layout.height;
   const ctx = canvas.getContext("2d");
-  ctx.font = `${fontSize}px ${fontFamily}`;
+  ctx.font = `${fittedAtlas.fontSize}px ${fontFamily}`;
   ctx.fillStyle = textColor;
   ctx.textBaseline = "middle";
   ctx.textAlign = "center";
   const entries = [];
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    const px = col * tileW;
-    const py = row * tileH;
-    const cropOffsetX = (tileW - item.labelWidth) * 0.5;
-    ctx.fillText(item.text, px + tileW / 2, py + tileH / 2);
+  for (let i = 0; i < fittedAtlas.items.length; i++) {
+    const item = fittedAtlas.items[i];
+    const placement = fittedAtlas.layout.placements[i];
+    const px = placement.x;
+    const py = placement.y;
+    ctx.fillText(item.text, px + placement.width / 2, py + placement.height / 2);
     entries.push({
       ...item,
       labelId: i,
       stableId: item.nodeIndex,
       persistence: 0,
       atlasUV: {
-        u: (px + cropOffsetX) / canvas.width,
-        v: 1 - (py + tileH) / canvas.height,
-        uw: item.labelWidth / canvas.width,
-        uh: tileH / canvas.height
+        u: px / canvas.width,
+        v: 1 - (py + placement.height) / canvas.height,
+        uw: placement.width / canvas.width,
+        uh: placement.height / canvas.height
       }
     });
   }
@@ -1247,6 +1410,24 @@ function getPlacementTextureDimensions(itemCount) {
   const height = Math.max(1, Math.ceil(itemCount / width));
   return { width, height };
 }
+function getLabelAlignmentOffset(alignment) {
+  if (alignment > 0.5) {
+    return 1;
+  }
+  if (alignment < -0.5) {
+    return -1;
+  }
+  return 0;
+}
+function getLabelBaselineOffset(baseline) {
+  if (baseline > 0.5) {
+    return 1;
+  }
+  if (baseline < -0.5) {
+    return -1;
+  }
+  return 0;
+}
 function intersectsBounds(a, b, margin = 0) {
   return !(a.maxX + margin <= b.minX || a.minX >= b.maxX + margin || a.maxY + margin <= b.minY || a.minY >= b.maxY + margin);
 }
@@ -1276,7 +1457,12 @@ function projectLabelBounds({
   sizeAttenuation,
   nodeRadius,
   nodeScale,
-  aspectRatio
+  aspectRatio,
+  labelAlignment = 0,
+  labelBaseline = 1,
+  labelFontSize = 1,
+  labelOffset = { x: 0, y: 0 },
+  pointSize = 1
 }) {
   LOCAL_NODE.copy(nodePosition);
   LOCAL_NODE.z *= 1 - Number(Boolean(is2D));
@@ -1287,12 +1473,20 @@ function projectLabelBounds({
     return null;
   }
   const sizeScale = sizeAttenuation ? frustumSize / Math.max(-MV_CENTER.z, 1e-3) : 1;
-  const labelHeight = 0.1 * nodeRadius * nodeScale * sizeScale;
+  const labelHeight = 0.1 * nodeRadius * pointSize * nodeScale * sizeScale * sanitizeLabelFontSize(labelFontSize);
   const labelWidth = labelHeight * aspectRatio;
+  const offsetX = (labelOffset?.x || 0) * labelHeight;
+  const offsetY = (labelOffset?.y || 0) * labelHeight;
   WORLD_CENTER.copy(LOCAL_NODE).applyMatrix4(objectMatrixWorld);
   CAMERA_RIGHT.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
   CAMERA_UP.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
-  const anchor3 = WORLD_CORNER.copy(WORLD_CENTER).addScaledVector(CAMERA_UP, labelHeight);
+  const anchor3 = WORLD_CORNER.copy(WORLD_CENTER).addScaledVector(
+    CAMERA_RIGHT,
+    labelWidth * 0.5 * getLabelAlignmentOffset(labelAlignment) + offsetX
+  ).addScaledVector(
+    CAMERA_UP,
+    labelHeight * getLabelBaselineOffset(labelBaseline) + offsetY
+  );
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -1342,10 +1536,10 @@ function createVisibilityTexture(labelCount) {
   return { data, texture, width, height };
 }
 var Labels = class extends Mesh2 {
-  constructor({ geometry, texture, entries }, uniforms) {
+  constructor({ geometry, texture, entries, fontFamily }, uniforms) {
     const visibility = createVisibilityTexture(entries.length);
     const material = new ShaderMaterial3({
-      uniforms: {
+      uniforms: { ...UniformsLib3.fog, ...{
         texturePositions: { value: null },
         textureAtlas: { value: texture },
         textureVisibility: { value: visibility.texture },
@@ -1355,15 +1549,20 @@ var Labels = class extends Mesh2 {
         sizeAttenuation: uniforms.sizeAttenuation,
         nodeRadius: uniforms.nodeRadius,
         nodeScale: uniforms.nodeScale,
+        labelAlignment: uniforms.labelAlignment,
+        labelBaseline: uniforms.labelBaseline,
+        labelFontSize: uniforms.labelFontSize,
+        labelOffset: uniforms.labelOffset,
         uBeginning: uniforms.uBeginning,
         uEnding: uniforms.uEnding,
         uNodeAmount: uniforms.uNodeAmount
-      },
+      } },
       vertexShader: labels_default.vertexShader,
       fragmentShader: labels_default.fragmentShader,
       transparent: true,
       depthWrite: false,
-      depthTest: false
+      depthTest: false,
+      fog: true
     });
     super(geometry, material);
     this.frustumCulled = false;
@@ -1375,6 +1574,8 @@ var Labels = class extends Mesh2 {
     this.selectionGrid = /* @__PURE__ */ new Map();
     this.acceptedEntries = [];
     this.obscurity = uniforms.obscurity;
+    this.userData.fontFamily = fontFamily || DEFAULT_FONT_FAMILY;
+    this.userData.fontSize = uniforms.labelFontSize.value;
     this.onBeforeRender = (renderer, scene, camera) => {
       this.updateVisibility(renderer, camera);
     };
@@ -1466,7 +1667,12 @@ var Labels = class extends Mesh2 {
         sizeAttenuation: this.material.uniforms.sizeAttenuation.value,
         nodeRadius: this.material.uniforms.nodeRadius.value,
         nodeScale: this.material.uniforms.nodeScale.value,
-        aspectRatio: entry.aspectRatio
+        aspectRatio: entry.aspectRatio,
+        labelAlignment: this.material.uniforms.labelAlignment.value,
+        labelBaseline: this.material.uniforms.labelBaseline.value,
+        labelFontSize: this.material.uniforms.labelFontSize.value,
+        labelOffset: this.material.uniforms.labelOffset.value,
+        pointSize: entry.pointSize
       });
       if (!bounds) {
         continue;
@@ -1558,8 +1764,80 @@ var Labels = class extends Mesh2 {
     this.material.dispose();
     this.geometry.dispose();
   }
+  replaceData({ geometry, texture, entries, fontFamily, fontSize }) {
+    this.geometry.dispose();
+    this.material.uniforms.textureAtlas.value?.dispose?.();
+    this.material.uniforms.textureVisibility.value?.dispose?.();
+    this.geometry = geometry;
+    this.entries = entries;
+    this.sortedEntries = entries.slice().sort(compareLabelEntries);
+    this.visibility = createVisibilityTexture(entries.length);
+    this.material.uniforms.textureAtlas.value = texture;
+    this.material.uniforms.textureVisibility.value = this.visibility.texture;
+    this.projectedEntries.length = 0;
+    this.selectionGrid.clear();
+    this.acceptedEntries.length = 0;
+    this.userData.fontFamily = fontFamily || DEFAULT_FONT_FAMILY;
+    this.userData.fontSize = sanitizeLabelFontSize(fontSize);
+  }
+  get fontSize() {
+    if (this.parent?.userData?.uniforms?.labelFontSize) {
+      return this.parent.userData.uniforms.labelFontSize.value;
+    }
+    return this.userData.fontSize;
+  }
+  set fontSize(v) {
+    const nextValue = sanitizeLabelFontSize(v);
+    this.userData.fontSize = nextValue;
+    if (!this.material?.uniforms?.labelFontSize) {
+      return;
+    }
+    if (this.material.uniforms.labelFontSize.value === nextValue) {
+      return;
+    }
+    this.material.uniforms.labelFontSize.value = nextValue;
+  }
+  get fontFamily() {
+    if (this.parent?.userData?.labelFontFamily) {
+      return this.parent.userData.labelFontFamily;
+    }
+    return this.userData.fontFamily;
+  }
+  set fontFamily(v) {
+    const nextValue = typeof v === "string" && v.trim().length > 0 ? v.trim() : DEFAULT_FONT_FAMILY;
+    this.userData.fontFamily = nextValue;
+    if (!this.parent?.userData) {
+      return;
+    }
+    if (this.parent.userData.labelFontFamily === nextValue) {
+      return;
+    }
+    this.parent.userData.labelFontFamily = nextValue;
+    this.parent.refreshLabels();
+  }
+  get alignment() {
+    return getLabelAlignmentName(this.material.uniforms.labelAlignment.value);
+  }
+  set alignment(v) {
+    this.material.uniforms.labelAlignment.value = LabelAlignmentMap[v] ?? LabelAlignmentMap.center;
+  }
+  get baseline() {
+    return getLabelBaselineName(this.material.uniforms.labelBaseline.value);
+  }
+  set baseline(v) {
+    this.material.uniforms.labelBaseline.value = LabelBaselineMap[v] ?? LabelBaselineMap.top;
+  }
+  get offset() {
+    return this.material.uniforms.labelOffset.value;
+  }
+  set offset(v) {
+    if (!v || !Number.isFinite(v.x) || !Number.isFinite(v.y)) {
+      return;
+    }
+    this.material.uniforms.labelOffset.value.set(v.x, v.y);
+  }
   static parse(size2, data, options = {}) {
-    const atlas = buildTextAtlas(data.nodes, options.degrees || []);
+    const atlas = buildTextAtlas(data.nodes, options.degrees || [], options);
     if (!atlas) {
       return Promise.resolve(null);
     }
@@ -1587,6 +1865,7 @@ var Labels = class extends Mesh2 {
     const sources = [];
     const labelUVs = [];
     const aspectRatios = [];
+    const pointSizes = [];
     const visibilityUVs = [];
     const { width: visibilityWidth, height: visibilityHeight } = getPlacementTextureDimensions(entries.length);
     for (let i = 0; i < entries.length; i++) {
@@ -1602,6 +1881,7 @@ var Labels = class extends Mesh2 {
         entry.atlasUV.uh
       );
       aspectRatios.push(entry.aspectRatio);
+      pointSizes.push(entry.pointSize);
       visibilityUVs.push(
         (entry.labelId % visibilityWidth + 0.5) / visibilityWidth,
         (Math.floor(entry.labelId / visibilityWidth) + 0.5) / visibilityHeight
@@ -1620,6 +1900,10 @@ var Labels = class extends Mesh2 {
       new InstancedBufferAttribute2(new Float32Array(aspectRatios), 1)
     );
     geometry.setAttribute(
+      "pointSize",
+      new InstancedBufferAttribute2(new Float32Array(pointSizes), 1)
+    );
+    geometry.setAttribute(
       "visibilityUV",
       new InstancedBufferAttribute2(new Float32Array(visibilityUVs), 2)
     );
@@ -1628,7 +1912,13 @@ var Labels = class extends Mesh2 {
     texture.minFilter = NearestFilter;
     texture.magFilter = NearestFilter;
     texture.generateMipmaps = false;
-    return Promise.resolve({ geometry, texture, entries });
+    return Promise.resolve({
+      geometry,
+      texture,
+      entries,
+      fontFamily: options.fontFamily || DEFAULT_FONT_FAMILY,
+      fontSize: sanitizeLabelFontSize(options.fontSize)
+    });
   }
 };
 
@@ -2475,6 +2765,7 @@ var LineCapsMap = {
   butt: 1,
   square: 2
 };
+var DEFAULT_LABEL_FONT_FAMILY = "Arial, sans-serif";
 var buffers = {
   int: new Uint8ClampedArray(4),
   float: new Float32Array(4)
@@ -2568,8 +2859,13 @@ var ForceDirectedGraph = class extends Group {
       uBeginning: { value: 0 },
       uEnding: { value: 1 },
       uNodeAmount: { value: 0 },
-      obscurity: { value: 0.75 }
+      obscurity: { value: 0.75 },
+      labelAlignment: { value: 0 },
+      labelBaseline: { value: 1 },
+      labelFontSize: { value: 1 },
+      labelOffset: { value: new Vector22(0, 0) }
     };
+    this.userData.labelFontFamily = DEFAULT_LABEL_FONT_FAMILY;
     this.userData.hit = new Hit(this);
     this.userData.workerManager = new TextureWorkerManager();
     if (data) {
@@ -2829,7 +3125,8 @@ var ForceDirectedGraph = class extends Group {
         points2.renderOrder = links2.renderOrder + 1;
         scope.userData.hit.inherit(points2);
       }).then(() => Labels.parse(size2, data, {
-        degrees: scope.userData.nodeDegrees
+        degrees: scope.userData.nodeDegrees,
+        fontFamily: scope.userData.labelFontFamily
       })).then((result) => {
         if (result) {
           const labels2 = new Labels(result, uniforms);
@@ -2845,6 +3142,57 @@ var ForceDirectedGraph = class extends Group {
         callback();
       }
     }
+  }
+  getLabelParseOptions() {
+    const { nodeDegrees, labelFontFamily, uniforms, renderer } = this.userData;
+    return {
+      degrees: nodeDegrees || [],
+      fontFamily: labelFontFamily,
+      maxTextureSize: renderer?.capabilities?.maxTextureSize || 16384
+    };
+  }
+  refreshLabels() {
+    const { data, uniforms } = this.userData;
+    if (!data || !this.ready || !this.points) {
+      return Promise.resolve(null);
+    }
+    this.userData.labelRefreshToken = (this.userData.labelRefreshToken || 0) + 1;
+    const refreshToken = this.userData.labelRefreshToken;
+    return Labels.parse(uniforms.size.value, data, this.getLabelParseOptions()).then((result) => {
+      if (refreshToken !== this.userData.labelRefreshToken) {
+        if (result) {
+          result.texture?.dispose?.();
+          result.geometry?.dispose?.();
+        }
+        return this.userData.labels || null;
+      }
+      const previousLabels = this.userData.labels;
+      if (previousLabels) {
+        if (!result) {
+          this.remove(previousLabels);
+          previousLabels.dispose();
+          this.userData.labels = null;
+          return null;
+        }
+        previousLabels.replaceData(result);
+        if (this.userData.variables?.positions) {
+          previousLabels.material.uniforms.texturePositions.value = this.getTexture("positions");
+        }
+        return previousLabels;
+      }
+      if (!result) {
+        this.userData.labels = null;
+        return null;
+      }
+      const nextLabels = new Labels(result, uniforms);
+      nextLabels.renderOrder = this.points.renderOrder + 1;
+      this.userData.labels = nextLabels;
+      this.add(nextLabels);
+      if (this.userData.variables?.positions) {
+        nextLabels.material.uniforms.texturePositions.value = this.getTexture("positions");
+      }
+      return nextLabels;
+    });
   }
   /**
    * @param {Number} time

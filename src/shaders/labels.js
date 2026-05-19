@@ -5,6 +5,8 @@
  */
 const labels = {
   vertexShader: `
+    #include <fog_pars_vertex>
+
     uniform sampler2D texturePositions;
     uniform float frustumSize;
     uniform float is2D;
@@ -14,10 +16,15 @@ const labels = {
     uniform float uNodeAmount;
     uniform float nodeRadius;
     uniform float nodeScale;
+    uniform float labelAlignment;
+    uniform float labelBaseline;
+    uniform float labelFontSize;
+    uniform vec2 labelOffset;
 
     attribute vec3 source;       // .xy = UV into texturePositions, .z = nodeIndex + 1
     attribute vec4 labelUV;      // .xy = atlas UV offset, .zw = atlas UV extent
     attribute float aspectRatio; // label quad width / height
+    attribute float pointSize;   // per-node point size scalar
     attribute vec2 visibilityUV; // UV into placement visibility texture
 
     varying vec2 vLabelUV;
@@ -42,12 +49,14 @@ const labels = {
 
       // Scale label to match node visual size, with optional depth attenuation
       float sizeScale  = mix( 1.0, frustumSize / max( -mvCenter.z, 0.001 ), sizeAttenuation );
-      float labelH     = 0.1 * nodeRadius * nodeScale * sizeScale;
+      float labelH     = 0.1 * nodeRadius * pointSize * nodeScale * sizeScale * max( labelFontSize, 0.001 );
       float labelW     = labelH * aspectRatio;
+      vec2 offset      = labelOffset * labelH;
 
-      // Shift the label upward so it sits above the node
+      // Shift the label relative to the node according to baseline/alignment.
       vec3 worldPos = nodePos
-        + up    * labelH
+        + right * ( labelW * 0.5 * labelAlignment + offset.x )
+        + up    * ( labelH * labelBaseline + offset.y )
         + right * position.x * labelW * 0.5
         + up    * position.y * labelH * 0.5;
 
@@ -56,10 +65,14 @@ const labels = {
       vVisibilityUV = visibilityUV;
       vInRange = inRange;
 
-      gl_Position = projectionMatrix * modelViewMatrix * vec4( worldPos, 1.0 );
+      vec4 mvPosition = modelViewMatrix * vec4( worldPos, 1.0 );
+      gl_Position = projectionMatrix * mvPosition;
+      #include <fog_vertex>
     }
   `,
   fragmentShader: `
+    #include <fog_pars_fragment>
+
     uniform sampler2D textureAtlas;
     uniform sampler2D textureVisibility;
     uniform float opacity;
@@ -87,6 +100,7 @@ const labels = {
       }
 
       gl_FragColor = vec4( texel.rgb, alpha );
+      #include <fog_fragment>
     }
   `,
 };

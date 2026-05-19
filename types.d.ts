@@ -239,15 +239,31 @@ declare module '@jonobr1/force-directed-graph/labels' {
     static parse(
       size: number,
       data: any,
-      options?: { degrees?: number[] },
+      options?: { degrees?: number[]; fontSize?: number; fontFamily?: string },
     ): Promise<{ geometry: any; texture: any; entries: any[] } | null>;
     constructor(
-      labelData: { geometry: any; texture: any; entries: any[] },
+      labelData: {
+        geometry: any;
+        texture: any;
+        entries: any[];
+        fontFamily?: string;
+        fontSize?: number;
+      },
       uniforms: any,
     );
     frustumCulled: boolean;
+    set alignment(arg: 'center' | 'left' | 'right');
+    get alignment(): 'center' | 'left' | 'right';
+    set baseline(arg: 'top' | 'middle' | 'bottom');
+    get baseline(): 'top' | 'middle' | 'bottom';
+    set offset(arg: Vector2);
+    get offset(): Vector2;
+    set fontSize(arg: number);
+    get fontSize(): number;
+    set fontFamily(arg: string);
+    get fontFamily(): string;
   }
-  import { Mesh } from 'three';
+  import { Mesh, Vector2 } from 'three';
 }
 declare module '@jonobr1/force-directed-graph/registry' {
   export class Registry {

@@ -71,6 +71,9 @@ type LinkData = {
 > - If `color` is omitted, the node defaults to white.
 > - `set(data[, callback])` returns a `Promise` that resolves when geometry/textures are ready.
 > - `obscurity` is label-density control: `0` keeps as many labels visible as placement allows, `0.75` targets roughly 25% visible labels, and `1` hides all labels.
+> - `fdg.labels.alignment` (`'center' | 'left' | 'right'`) and `fdg.labels.baseline` (`'top' | 'middle' | 'bottom'`) change label anchoring live.
+> - `fdg.labels.offset` (`THREE.Vector2`) adds extra label padding in label-space x/y.
+> - `fdg.labels.fontSize` scales the rendered label planes without rebuilding the atlas; `fdg.labels.fontFamily` rebuilds the atlas with a new CSS font stack.
 
 ### Load Script in HTML file:
 
