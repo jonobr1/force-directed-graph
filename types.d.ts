@@ -236,8 +236,15 @@ declare module '@jonobr1/force-directed-graph/shaders/labels' {
 }
 declare module '@jonobr1/force-directed-graph/labels' {
   export class Labels extends Mesh {
-    static parse(size: number, data: any): Promise<{ geometry: any; texture: any } | null>;
-    constructor(geometry: any, texture: any, uniforms: any);
+    static parse(
+      size: number,
+      data: any,
+      options?: { degrees?: number[] },
+    ): Promise<{ geometry: any; texture: any; entries: any[] } | null>;
+    constructor(
+      labelData: { geometry: any; texture: any; entries: any[] },
+      uniforms: any,
+    );
     frustumCulled: boolean;
   }
   import { Mesh } from 'three';
@@ -261,6 +268,7 @@ declare module '@jonobr1/force-directed-graph' {
     color?: CSSStyleValue;
     image?: string;
     label?: string;
+    labelPriority?: number;
     size?: number;
   };
   export type LinkData = { source: number; target: number };
@@ -363,6 +371,11 @@ declare module '@jonobr1/force-directed-graph' {
     get linewidth(): number;
     set opacity(arg: number);
     get opacity(): number;
+    /**
+     * Label-density control in [0, 1].
+     * 0 keeps as many labels visible as placement allows.
+     * 1 hides all labels.
+     */
     set obscurity(arg: number);
     get obscurity(): number;
     set blending(

@@ -1,8 +1,7 @@
 /**
  * Renders text labels for nodes as camera-facing billboard quads.
- * Label visibility is controlled by the `uObscurity` uniform:
- *   0 → all labels fully visible
- *   1 → all labels fully hidden
+ * Label visibility is driven by a placement-generated visibility texture.
+ * The public `obscurity` property controls the placement quota, not alpha.
  */
 const labels = {
   vertexShader: `
@@ -13,16 +12,17 @@ const labels = {
     uniform float uBeginning;
     uniform float uEnding;
     uniform float uNodeAmount;
-    uniform float uObscurity;
     uniform float nodeRadius;
     uniform float nodeScale;
 
     attribute vec3 source;       // .xy = UV into texturePositions, .z = nodeIndex + 1
     attribute vec4 labelUV;      // .xy = atlas UV offset, .zw = atlas UV extent
     attribute float aspectRatio; // label quad width / height
+    attribute vec2 visibilityUV; // UV into placement visibility texture
 
     varying vec2 vLabelUV;
-    varying float vAlpha;
+    varying vec2 vVisibilityUV;
+    varying float vInRange;
 
     void main() {
 
@@ -53,24 +53,34 @@ const labels = {
 
       // Map quad UV [0,1] to the atlas region for this label
       vLabelUV = labelUV.xy + uv * labelUV.zw;
-
-      // Alpha: obscurity=0 → fully visible; obscurity=1 → fully hidden
-      vAlpha = ( 1.0 - uObscurity ) * inRange;
+      vVisibilityUV = visibilityUV;
+      vInRange = inRange;
 
       gl_Position = projectionMatrix * modelViewMatrix * vec4( worldPos, 1.0 );
     }
   `,
   fragmentShader: `
     uniform sampler2D textureAtlas;
+    uniform sampler2D textureVisibility;
     uniform float opacity;
 
     varying vec2 vLabelUV;
-    varying float vAlpha;
+    varying vec2 vVisibilityUV;
+    varying float vInRange;
 
     void main() {
 
+      if ( vInRange <= 0.0 ) {
+        discard;
+      }
+
+      float visibility = texture2D( textureVisibility, vVisibilityUV ).r;
+      if ( visibility <= 0.0 ) {
+        discard;
+      }
+
       vec4 texel = texture2D( textureAtlas, vLabelUV );
-      float alpha = opacity * vAlpha * texel.a;
+      float alpha = opacity * visibility * texel.a;
 
       if ( alpha <= 0.0 ) {
         discard;

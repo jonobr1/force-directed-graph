@@ -52,6 +52,8 @@ type NodeData = {
   isStatic?: boolean;  // Optional, pins node when true
   color?: string;      // Optional CSS color (ex: '#ff6600', 'rgb(255,0,0)')
   image?: string;      // Optional image URL for sprite atlas
+  label?: string;      // Optional SDF-style text label
+  labelPriority?: number; // Optional label ranking override
   size?: number        // Optional size for per-node sizing
 };
 
@@ -68,6 +70,7 @@ type LinkData = {
 > - `isStatic` defaults to `false`.
 > - If `color` is omitted, the node defaults to white.
 > - `set(data[, callback])` returns a `Promise` that resolves when geometry/textures are ready.
+> - `obscurity` is label-density control: `0` keeps as many labels visible as placement allows, `0.75` targets roughly 25% visible labels, and `1` hides all labels.
 
 ### Load Script in HTML file:
 

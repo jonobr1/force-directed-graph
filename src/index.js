@@ -134,7 +134,7 @@ class ForceDirectedGraph extends Group {
       uBeginning: { value: 0 },
       uEnding: { value: 1 },
       uNodeAmount: { value: 0 },
-      obscurity: { value: 0 },
+      obscurity: { value: 0.75 },
     };
     this.userData.hit = new Hit(this);
     this.userData.workerManager = new TextureWorkerManager();
@@ -214,7 +214,6 @@ class ForceDirectedGraph extends Group {
         child.dispose();
       }
     }
-    // TODO: Dispose of previous labels
     this.userData.labels = null;
 
     // Initialize new properties
@@ -280,6 +279,15 @@ class ForceDirectedGraph extends Group {
           targetIndex,
         };
       });
+      const nodeDegrees = new Array(data.nodes.length).fill(0);
+
+      for (let i = 0; i < preparedLinks.length; i++) {
+        const link = preparedLinks[i];
+        nodeDegrees[link.sourceIndex] += 1;
+        nodeDegrees[link.targetIndex] += 1;
+      }
+
+      scope.userData.nodeDegrees = nodeDegrees;
 
       // Initialize worker if not already done
       if (!workerManager.isReady()) {
@@ -462,11 +470,12 @@ class ForceDirectedGraph extends Group {
           points.renderOrder = links.renderOrder + 1;
           scope.userData.hit.inherit(points);
         })
-        .then(() => Labels.parse(size, data))
+        .then(() => Labels.parse(size, data, {
+          degrees: scope.userData.nodeDegrees,
+        }))
         .then((result) => {
           if (result) {
-            const { geometry, texture } = result;
-            const labels = new Labels(geometry, texture, uniforms);
+            const labels = new Labels(result, uniforms);
             scope.userData.labels = labels;
             labels.renderOrder = points.renderOrder + 1;
             scope.add(labels);
