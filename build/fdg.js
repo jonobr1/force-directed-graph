@@ -1146,6 +1146,16 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
   var BASE_ATLAS_PADDING = 4;
   var ATLAS_RASTER_SCALE = 2;
   var DEFAULT_FONT_FAMILY = "Arial, sans-serif";
+  var DEFAULT_LABEL_CELL_SIZE = 32;
+  var LABEL_CAMERA_MOVE_EPSILON = 1e-4;
+  var LABEL_SOLVE_SETTLE_MS = 160;
+  var LABEL_SOLVE_BUILD_INTERVAL_MS = 80;
+  var LABEL_SOLVE_BATCH_SIZE = 192;
+  var LABEL_COMMIT_BATCH_SIZE = 16;
+  var LABEL_BACKGROUND_REFRESH_MS = 600;
+  var LABEL_PERSISTENCE_DECAY = 1;
+  var LABEL_PERSISTENCE_GAIN = 3;
+  var LABEL_PERSISTENCE_MAX = 12;
   var LABEL_NODE_COLOR = new import_three4.Color();
   var LabelAlignmentMap = {
     center: 0,
@@ -1190,13 +1200,71 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
   function getNodeColorComponents(node) {
     if (node?.color) {
       LABEL_NODE_COLOR.set(node.color);
-      return [
-        LABEL_NODE_COLOR.r,
-        LABEL_NODE_COLOR.g,
-        LABEL_NODE_COLOR.b
-      ];
+      return [LABEL_NODE_COLOR.r, LABEL_NODE_COLOR.g, LABEL_NODE_COLOR.b];
     }
     return [1, 1, 1];
+  }
+  function hasMeaningfulMatrixChange(previous, next, epsilon = LABEL_CAMERA_MOVE_EPSILON) {
+    if (!previous || !next || previous.length !== next.length) {
+      return true;
+    }
+    for (let i = 0; i < previous.length; i++) {
+      if (Math.abs(previous[i] - next[i]) > epsilon) {
+        return true;
+      }
+    }
+    return false;
+  }
+  function serializeVisibilityNumber(value) {
+    if (!Number.isFinite(value)) {
+      return "0";
+    }
+    return Number(value).toFixed(4);
+  }
+  function getVisibilitySettingsKey({
+    viewportWidth,
+    viewportHeight,
+    obscurity,
+    is2D,
+    sizeAttenuation,
+    frustumSize,
+    nodeRadius,
+    nodeScale,
+    labelAlignment,
+    labelBaseline,
+    labelFontSize,
+    labelNear,
+    labelOffsetX,
+    labelOffsetY,
+    beginning,
+    ending
+  }) {
+    return [
+      viewportWidth,
+      viewportHeight,
+      serializeVisibilityNumber(obscurity),
+      Number(Boolean(is2D)),
+      Number(Boolean(sizeAttenuation)),
+      serializeVisibilityNumber(frustumSize),
+      serializeVisibilityNumber(nodeRadius),
+      serializeVisibilityNumber(nodeScale),
+      serializeVisibilityNumber(labelAlignment),
+      serializeVisibilityNumber(labelBaseline),
+      serializeVisibilityNumber(labelFontSize),
+      serializeVisibilityNumber(labelNear),
+      serializeVisibilityNumber(labelOffsetX),
+      serializeVisibilityNumber(labelOffsetY),
+      serializeVisibilityNumber(beginning),
+      serializeVisibilityNumber(ending)
+    ].join("|");
+  }
+  function setLabelVisibility(data, labelId, visible) {
+    const offset = labelId * 4;
+    const value = visible ? 255 : 0;
+    data[offset + 0] = value;
+    data[offset + 1] = value;
+    data[offset + 2] = value;
+    data[offset + 3] = value;
   }
   function layoutAtlasRows(items, maxTextureSize) {
     if (!Number.isFinite(maxTextureSize) || maxTextureSize <= 0) {
@@ -1239,13 +1307,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       placements
     };
   }
-  function measureAtlasCandidate(tempCtx, rawItems, {
-    requestedFontSize,
-    requestedPadding,
-    fontFamily,
-    scale,
-    maxTextureSize
-  }) {
+  function measureAtlasCandidate(tempCtx, rawItems, { requestedFontSize, requestedPadding, fontFamily, scale, maxTextureSize }) {
     const padding = Math.max(1, Math.round(requestedPadding * scale));
     const fontSize = Math.max(1, Math.round(requestedFontSize * scale));
     const tileH = fontSize + padding * 2;
@@ -1272,12 +1334,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       layout
     };
   }
-  function fitAtlasLayout(tempCtx, rawItems, {
-    requestedFontSize,
-    requestedPadding,
-    fontFamily,
-    maxTextureSize
-  }) {
+  function fitAtlasLayout(tempCtx, rawItems, { requestedFontSize, requestedPadding, fontFamily, maxTextureSize }) {
     let lo = 0;
     let hi = 1;
     let best = null;
@@ -1369,7 +1426,11 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       const placement = fittedAtlas.layout.placements[i];
       const px = placement.x;
       const py = placement.y;
-      ctx.fillText(item.text, px + placement.width / 2, py + placement.height / 2);
+      ctx.fillText(
+        item.text,
+        px + placement.width / 2,
+        py + placement.height / 2
+      );
       entries.push({
         ...item,
         labelId: i,
@@ -1489,7 +1550,10 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
   }) {
     LOCAL_NODE.copy(nodePosition);
     LOCAL_NODE.z *= 1 - Number(Boolean(is2D));
-    MODEL_VIEW_MATRIX.multiplyMatrices(camera.matrixWorldInverse, objectMatrixWorld);
+    MODEL_VIEW_MATRIX.multiplyMatrices(
+      camera.matrixWorldInverse,
+      objectMatrixWorld
+    );
     MV_CENTER.set(LOCAL_NODE.x, LOCAL_NODE.y, LOCAL_NODE.z, 1);
     MV_CENTER.applyMatrix4(MODEL_VIEW_MATRIX);
     if (!Number.isFinite(MV_CENTER.z) || MV_CENTER.z >= 0) {
@@ -1560,7 +1624,13 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
   function createVisibilityTexture(labelCount) {
     const { width, height } = getPlacementTextureDimensions(labelCount);
     const data = new Uint8Array(width * height * 4);
-    const texture = new import_three4.DataTexture(data, width, height, import_three4.RGBAFormat, import_three4.UnsignedByteType);
+    const texture = new import_three4.DataTexture(
+      data,
+      width,
+      height,
+      import_three4.RGBAFormat,
+      import_three4.UnsignedByteType
+    );
     texture.minFilter = import_three4.NearestFilter;
     texture.magFilter = import_three4.NearestFilter;
     texture.wrapS = import_three4.ClampToEdgeWrapping;
@@ -1584,28 +1654,31 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
     constructor({ geometry, texture, entries, fontFamily }, uniforms) {
       const visibility = createVisibilityTexture(entries.length);
       const material = new import_three4.ShaderMaterial({
-        uniforms: { ...import_three4.UniformsLib.fog, ...{
-          texturePositions: { value: null },
-          textureAtlas: { value: texture },
-          textureVisibility: { value: visibility.texture },
-          opacity: uniforms.opacity,
-          frustumSize: uniforms.frustumSize,
-          inheritColors: uniforms.labelsInheritColor,
-          is2D: uniforms.is2D,
-          sizeAttenuation: uniforms.sizeAttenuation,
-          resolution: uniforms.resolution,
-          nodeRadius: uniforms.nodeRadius,
-          nodeScale: uniforms.nodeScale,
-          uColor: uniforms.labelColor,
-          labelAlignment: uniforms.labelAlignment,
-          labelBaseline: uniforms.labelBaseline,
-          labelFontSize: uniforms.labelFontSize,
-          labelNear: uniforms.labelNear,
-          labelOffset: uniforms.labelOffset,
-          uBeginning: uniforms.uBeginning,
-          uEnding: uniforms.uEnding,
-          uNodeAmount: uniforms.uNodeAmount
-        } },
+        uniforms: {
+          ...import_three4.UniformsLib.fog,
+          ...{
+            texturePositions: { value: null },
+            textureAtlas: { value: texture },
+            textureVisibility: { value: visibility.texture },
+            opacity: uniforms.opacity,
+            frustumSize: uniforms.frustumSize,
+            inheritColors: uniforms.labelsInheritColor,
+            is2D: uniforms.is2D,
+            sizeAttenuation: uniforms.sizeAttenuation,
+            resolution: uniforms.resolution,
+            nodeRadius: uniforms.nodeRadius,
+            nodeScale: uniforms.nodeScale,
+            uColor: uniforms.labelColor,
+            labelAlignment: uniforms.labelAlignment,
+            labelBaseline: uniforms.labelBaseline,
+            labelFontSize: uniforms.labelFontSize,
+            labelNear: uniforms.labelNear,
+            labelOffset: uniforms.labelOffset,
+            uBeginning: uniforms.uBeginning,
+            uEnding: uniforms.uEnding,
+            uNodeAmount: uniforms.uNodeAmount
+          }
+        },
         vertexShader: labels_default.vertexShader,
         fragmentShader: labels_default.fragmentShader,
         transparent: true,
@@ -1627,8 +1700,10 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       this.userData.fontFamily = fontFamily || DEFAULT_FONT_FAMILY;
       this.userData.fontSize = uniforms.labelFontSize.value;
       this.userData.near = sanitizeLabelNearDistance(uniforms.labelNear.value);
-      this.onBeforeRender = (renderer, scene, camera) => {
-        this.updateVisibility(renderer, camera);
+      this.onBeforeRender = (renderer, _scene, camera) => {
+        if (this.visible) {
+          this.updateVisibility(renderer, camera);
+        }
       };
     }
     ensurePositionsBuffer(size2) {
@@ -1637,16 +1712,336 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
         this.positionsBuffer = new Float32Array(requiredLength);
       }
     }
+    invalidateVisibility({ deferUntilSettled = true } = {}) {
+      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+      this.userData.visibilityDirty = true;
+      this.userData.resolveState = null;
+      if (deferUntilSettled) {
+        this.userData.lastCameraMotionTime = now;
+      }
+    }
+    updateCameraState(camera, now) {
+      const nextMatrix = camera.matrixWorld.elements;
+      const nextProjection = camera.projectionMatrix.elements;
+      if (!this.userData.cameraMatrix) {
+        this.userData.cameraMatrix = new Float32Array(nextMatrix);
+        this.userData.cameraProjection = new Float32Array(nextProjection);
+        return false;
+      }
+      const moved = hasMeaningfulMatrixChange(this.userData.cameraMatrix, nextMatrix) || hasMeaningfulMatrixChange(this.userData.cameraProjection, nextProjection);
+      if (moved) {
+        this.userData.cameraMatrix.set(nextMatrix);
+        this.userData.cameraProjection.set(nextProjection);
+        this.userData.lastCameraMotionTime = now;
+        this.userData.visibilityDirty = true;
+        this.userData.resolveState = null;
+      }
+      return moved;
+    }
+    getVisibilitySettingsKey(viewportWidth, viewportHeight) {
+      const uniforms = this.material.uniforms;
+      return getVisibilitySettingsKey({
+        viewportWidth,
+        viewportHeight,
+        obscurity: this.obscurity.value,
+        is2D: uniforms.is2D.value,
+        sizeAttenuation: uniforms.sizeAttenuation.value,
+        frustumSize: uniforms.frustumSize.value,
+        nodeRadius: uniforms.nodeRadius.value,
+        nodeScale: uniforms.nodeScale.value,
+        labelAlignment: uniforms.labelAlignment.value,
+        labelBaseline: uniforms.labelBaseline.value,
+        labelFontSize: uniforms.labelFontSize.value,
+        labelNear: uniforms.labelNear.value,
+        labelOffsetX: uniforms.labelOffset.value.x,
+        labelOffsetY: uniforms.labelOffset.value.y,
+        beginning: uniforms.uBeginning.value,
+        ending: uniforms.uEnding.value
+      });
+    }
+    decayPersistence() {
+      if (!this.userData.persistentEntries) {
+        this.userData.persistentEntries = /* @__PURE__ */ new Set();
+      }
+      for (const entry of this.userData.persistentEntries) {
+        entry.persistence = Math.max(
+          0,
+          (entry.persistence || 0) - LABEL_PERSISTENCE_DECAY
+        );
+        if (entry.persistence <= 0) {
+          this.userData.persistentEntries.delete(entry);
+        }
+      }
+    }
+    boostPersistence(entries) {
+      if (!this.userData.persistentEntries) {
+        this.userData.persistentEntries = /* @__PURE__ */ new Set();
+      }
+      for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i].entry;
+        entry.persistence = Math.min(
+          (entry.persistence || 0) + LABEL_PERSISTENCE_GAIN,
+          LABEL_PERSISTENCE_MAX
+        );
+        this.userData.persistentEntries.add(entry);
+      }
+    }
+    projectEntry(entry, camera, viewportWidth, viewportHeight) {
+      const index = entry.nodeIndex * 4;
+      const bounds = projectLabelBounds({
+        nodePosition: {
+          x: this.positionsBuffer[index + 0],
+          y: this.positionsBuffer[index + 1],
+          z: this.positionsBuffer[index + 2]
+        },
+        objectMatrixWorld: this.matrixWorld,
+        camera,
+        viewportWidth,
+        viewportHeight,
+        frustumSize: this.material.uniforms.frustumSize.value,
+        is2D: this.material.uniforms.is2D.value,
+        sizeAttenuation: this.material.uniforms.sizeAttenuation.value,
+        nodeRadius: this.material.uniforms.nodeRadius.value,
+        nodeScale: this.material.uniforms.nodeScale.value,
+        aspectRatio: entry.aspectRatio,
+        labelAlignment: this.material.uniforms.labelAlignment.value,
+        labelBaseline: this.material.uniforms.labelBaseline.value,
+        labelFontSize: this.material.uniforms.labelFontSize.value,
+        labelNear: this.material.uniforms.labelNear.value,
+        labelOffset: this.material.uniforms.labelOffset.value,
+        pointSize: entry.pointSize
+      });
+      if (!bounds) {
+        return null;
+      }
+      return {
+        entry,
+        bounds,
+        depthPriority: bounds.depthPriority
+      };
+    }
+    computeCellSize(entries) {
+      if (!entries || entries.length === 0) {
+        return this.userData.cachedCellSize || DEFAULT_LABEL_CELL_SIZE;
+      }
+      let totalHeight = 0;
+      for (let i = 0; i < entries.length; i++) {
+        totalHeight += entries[i].bounds.height;
+      }
+      return Math.max(
+        12,
+        Math.min(
+          96,
+          totalHeight / Math.max(entries.length, 1) || this.userData.cachedCellSize || DEFAULT_LABEL_CELL_SIZE
+        )
+      );
+    }
+    tryAcceptProjected(projected, state) {
+      const cellBounds = getCollisionCellBounds(
+        projected.bounds,
+        state.cellSize,
+        state.gridWidth,
+        state.gridHeight
+      );
+      if (!cellBounds) {
+        return false;
+      }
+      const seen = /* @__PURE__ */ new Set();
+      let collides = false;
+      for (let cy = cellBounds.minCellY; cy <= cellBounds.maxCellY && !collides; cy++) {
+        for (let cx = cellBounds.minCellX; cx <= cellBounds.maxCellX; cx++) {
+          const key = packCollisionCellKey(cx, cy, state.gridWidth);
+          const bucket = state.targetSelectionGrid.get(key);
+          if (!bucket) {
+            continue;
+          }
+          for (let j = 0; j < bucket.length; j++) {
+            const accepted = bucket[j];
+            if (seen.has(accepted.entry.labelId)) {
+              continue;
+            }
+            seen.add(accepted.entry.labelId);
+            if (intersectsBounds(projected.bounds, accepted.bounds, 2)) {
+              collides = true;
+              break;
+            }
+          }
+        }
+      }
+      if (collides) {
+        return false;
+      }
+      state.targetAcceptedEntries.push(projected);
+      state.targetAcceptedLabelIds.add(projected.entry.labelId);
+      for (let cy = cellBounds.minCellY; cy <= cellBounds.maxCellY; cy++) {
+        for (let cx = cellBounds.minCellX; cx <= cellBounds.maxCellX; cx++) {
+          const key = packCollisionCellKey(cx, cy, state.gridWidth);
+          const bucket = state.targetSelectionGrid.get(key);
+          if (bucket) {
+            bucket.push(projected);
+          } else {
+            state.targetSelectionGrid.set(key, [projected]);
+          }
+        }
+      }
+      return true;
+    }
+    readPositions(renderer, size2, renderTarget) {
+      this.ensurePositionsBuffer(size2);
+      const activeRenderTarget = renderer.getRenderTarget();
+      try {
+        renderer.readRenderTargetPixels(
+          renderTarget,
+          0,
+          0,
+          size2,
+          size2,
+          this.positionsBuffer
+        );
+        renderer.setRenderTarget(activeRenderTarget);
+        return true;
+      } catch (error) {
+        if (!this.userData.didWarnPlacementReadback) {
+          console.warn(
+            "Force Directed Graph: label placement readback failed.",
+            error
+          );
+          this.userData.didWarnPlacementReadback = true;
+        }
+        renderer.setRenderTarget(activeRenderTarget);
+        return false;
+      }
+    }
+    beginResolveSession(renderer, camera, size2, renderTarget, viewportWidth, viewportHeight, quota, now) {
+      if (!this.readPositions(renderer, size2, renderTarget)) {
+        this.applyPriorityQuotaOnly();
+        this.userData.visibilityDirty = false;
+        this.userData.resolveState = null;
+        return;
+      }
+      this.decayPersistence();
+      const estimateEntries = [];
+      for (let i = 0; i < this.acceptedEntries.length; i++) {
+        const projected = this.projectEntry(
+          this.acceptedEntries[i].entry,
+          camera,
+          viewportWidth,
+          viewportHeight
+        );
+        if (projected) {
+          estimateEntries.push(projected);
+        }
+      }
+      const cellSize = this.computeCellSize(estimateEntries);
+      const gridWidth = Math.max(1, Math.ceil(viewportWidth / cellSize));
+      const gridHeight = Math.max(1, Math.ceil(viewportHeight / cellSize));
+      this.userData.resolveState = {
+        phase: "building",
+        quota,
+        cellSize,
+        gridWidth,
+        gridHeight,
+        viewportWidth,
+        viewportHeight,
+        candidateCursor: 0,
+        targetAcceptedEntries: [],
+        targetAcceptedLabelIds: /* @__PURE__ */ new Set(),
+        targetSelectionGrid: /* @__PURE__ */ new Map(),
+        pendingAdditions: [],
+        pendingRemovals: [],
+        currentEntriesById: /* @__PURE__ */ new Map(),
+        targetEntriesById: /* @__PURE__ */ new Map()
+      };
+      this.userData.lastResolveBuildTime = now;
+    }
+    buildResolveBatch(renderer, camera, size2, renderTarget, now) {
+      const state = this.userData.resolveState;
+      if (!state || state.phase !== "building" || now - (this.userData.lastResolveBuildTime || 0) < LABEL_SOLVE_BUILD_INTERVAL_MS) {
+        return;
+      }
+      this.userData.lastResolveBuildTime = now;
+      if (!this.readPositions(renderer, size2, renderTarget)) {
+        this.applyPriorityQuotaOnly();
+        this.userData.visibilityDirty = false;
+        this.userData.resolveState = null;
+        return;
+      }
+      const batch = [];
+      while (batch.length < LABEL_SOLVE_BATCH_SIZE && state.candidateCursor < this.sortedEntries.length) {
+        const entry = this.sortedEntries[state.candidateCursor++];
+        const projected = this.projectEntry(
+          entry,
+          camera,
+          state.viewportWidth,
+          state.viewportHeight
+        );
+        if (projected) {
+          batch.push(projected);
+        }
+      }
+      batch.sort(compareProjectedEntries);
+      for (let i = 0; i < batch.length; i++) {
+        if (state.targetAcceptedEntries.length >= state.quota) {
+          break;
+        }
+        this.tryAcceptProjected(batch[i], state);
+      }
+      if (state.targetAcceptedEntries.length >= state.quota || state.candidateCursor >= this.sortedEntries.length) {
+        state.phase = "committing";
+        state.currentEntriesById = new Map(
+          this.acceptedEntries.map((projected) => [projected.entry.labelId, projected])
+        );
+        state.targetEntriesById = new Map(
+          state.targetAcceptedEntries.map((projected) => [
+            projected.entry.labelId,
+            projected
+          ])
+        );
+        state.pendingRemovals = this.acceptedEntries.filter(
+          (projected) => !state.targetEntriesById.has(projected.entry.labelId)
+        );
+        state.pendingAdditions = state.targetAcceptedEntries.filter(
+          (projected) => !state.currentEntriesById.has(projected.entry.labelId)
+        );
+      }
+    }
+    applyCommitBatch() {
+      const state = this.userData.resolveState;
+      if (!state || state.phase !== "committing") {
+        return;
+      }
+      let processed = 0;
+      while (processed < LABEL_COMMIT_BATCH_SIZE && (state.pendingRemovals.length > 0 || state.pendingAdditions.length > 0)) {
+        if (state.pendingRemovals.length > 0) {
+          const projected = state.pendingRemovals.shift();
+          state.currentEntriesById.delete(projected.entry.labelId);
+          setLabelVisibility(this.visibility.data, projected.entry.labelId, false);
+          processed += 1;
+        }
+        if (processed < LABEL_COMMIT_BATCH_SIZE && state.pendingAdditions.length > 0) {
+          const projected = state.pendingAdditions.shift();
+          state.currentEntriesById.set(projected.entry.labelId, projected);
+          setLabelVisibility(this.visibility.data, projected.entry.labelId, true);
+          processed += 1;
+        }
+      }
+      this.acceptedEntries = Array.from(state.currentEntriesById.values());
+      this.visibility.texture.needsUpdate = true;
+      if (state.pendingRemovals.length === 0 && state.pendingAdditions.length === 0) {
+        this.acceptedEntries = state.targetAcceptedEntries.slice();
+        this.userData.cachedCellSize = state.cellSize;
+        this.userData.resolveState = null;
+        this.userData.visibilityDirty = false;
+        this.userData.lastResolvedTime = typeof performance !== "undefined" ? performance.now() : Date.now();
+        this.boostPersistence(this.acceptedEntries);
+      }
+    }
     applyPriorityQuotaOnly() {
       this.visibility.data.fill(0);
       const quota = getVisibleQuota(this.obscurity.value, this.entries.length);
       for (let i = 0; i < quota; i++) {
         const entry = this.sortedEntries[i];
-        const offset = entry.labelId * 4;
-        this.visibility.data[offset + 0] = 255;
-        this.visibility.data[offset + 1] = 255;
-        this.visibility.data[offset + 2] = 255;
-        this.visibility.data[offset + 3] = 255;
+        setLabelVisibility(this.visibility.data, entry.labelId, true);
       }
       this.visibility.texture.needsUpdate = true;
     }
@@ -1664,151 +2059,60 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       if (!renderTarget) {
         return;
       }
-      this.ensurePositionsBuffer(size2);
-      const activeRenderTarget = renderer.getRenderTarget();
-      try {
-        renderer.readRenderTargetPixels(
-          renderTarget,
-          0,
-          0,
-          size2,
-          size2,
-          this.positionsBuffer
-        );
-      } catch (error) {
-        if (!this.userData.didWarnPlacementReadback) {
-          console.warn("Force Directed Graph: label placement readback failed.", error);
-          this.userData.didWarnPlacementReadback = true;
-        }
-        renderer.setRenderTarget(activeRenderTarget);
-        this.applyPriorityQuotaOnly();
-        return;
-      }
-      renderer.setRenderTarget(activeRenderTarget);
       renderer.getDrawingBufferSize(DRAWING_BUFFER_SIZE);
+      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
       const viewportWidth = DRAWING_BUFFER_SIZE.x;
       const viewportHeight = DRAWING_BUFFER_SIZE.y;
       const quota = getVisibleQuota(this.obscurity.value, this.entries.length);
-      this.visibility.data.fill(0);
+      const settingsKey = this.getVisibilitySettingsKey(
+        viewportWidth,
+        viewportHeight
+      );
+      if (this.userData.settingsKey !== settingsKey) {
+        const deferUntilSettled = this.acceptedEntries.length > 0;
+        this.userData.settingsKey = settingsKey;
+        this.invalidateVisibility({ deferUntilSettled });
+      }
+      const cameraMoved = this.updateCameraState(camera, now);
       if (quota <= 0 || viewportWidth <= 0 || viewportHeight <= 0) {
+        this.acceptedEntries.length = 0;
+        this.visibility.data.fill(0);
         this.visibility.texture.needsUpdate = true;
+        this.userData.visibilityDirty = false;
+        this.userData.resolveState = null;
         return;
       }
-      this.projectedEntries.length = 0;
-      for (let i = 0; i < this.entries.length; i++) {
-        const entry = this.entries[i];
-        entry.persistence = Math.max(0, (entry.persistence || 0) - 1);
+      if (cameraMoved) {
+        return;
       }
-      let averageHeight = 0;
-      for (let i = 0; i < this.sortedEntries.length; i++) {
-        const entry = this.sortedEntries[i];
-        const index = entry.nodeIndex * 4;
-        const bounds = projectLabelBounds({
-          nodePosition: {
-            x: this.positionsBuffer[index + 0],
-            y: this.positionsBuffer[index + 1],
-            z: this.positionsBuffer[index + 2]
-          },
-          objectMatrixWorld: this.matrixWorld,
+      if (!this.userData.visibilityDirty && !this.userData.resolveState && now - (this.userData.lastResolvedTime || 0) >= LABEL_BACKGROUND_REFRESH_MS) {
+        this.invalidateVisibility({ deferUntilSettled: false });
+      }
+      if (!this.userData.visibilityDirty && !this.userData.resolveState) {
+        return;
+      }
+      if (now - (this.userData.lastCameraMotionTime || 0) < LABEL_SOLVE_SETTLE_MS) {
+        return;
+      }
+      if (!this.userData.resolveState) {
+        this.beginResolveSession(
+          renderer,
           camera,
+          size2,
+          renderTarget,
           viewportWidth,
           viewportHeight,
-          frustumSize: this.material.uniforms.frustumSize.value,
-          is2D: this.material.uniforms.is2D.value,
-          sizeAttenuation: this.material.uniforms.sizeAttenuation.value,
-          nodeRadius: this.material.uniforms.nodeRadius.value,
-          nodeScale: this.material.uniforms.nodeScale.value,
-          aspectRatio: entry.aspectRatio,
-          labelAlignment: this.material.uniforms.labelAlignment.value,
-          labelBaseline: this.material.uniforms.labelBaseline.value,
-          labelFontSize: this.material.uniforms.labelFontSize.value,
-          labelNear: this.material.uniforms.labelNear.value,
-          labelOffset: this.material.uniforms.labelOffset.value,
-          pointSize: entry.pointSize
-        });
-        if (!bounds) {
-          continue;
-        }
-        averageHeight += bounds.height;
-        this.projectedEntries.push({
-          entry,
-          bounds,
-          depthPriority: bounds.depthPriority
-        });
-      }
-      if (this.projectedEntries.length === 0) {
-        this.visibility.texture.needsUpdate = true;
+          quota,
+          now
+        );
         return;
       }
-      this.projectedEntries.sort(compareProjectedEntries);
-      averageHeight /= this.projectedEntries.length;
-      const cellSize = Math.max(12, Math.min(96, averageHeight || 32));
-      const gridWidth = Math.max(1, Math.ceil(viewportWidth / cellSize));
-      const gridHeight = Math.max(1, Math.ceil(viewportHeight / cellSize));
-      this.selectionGrid.clear();
-      this.acceptedEntries.length = 0;
-      for (let i = 0; i < this.projectedEntries.length; i++) {
-        if (this.acceptedEntries.length >= quota) {
-          break;
-        }
-        const projected = this.projectedEntries[i];
-        const cellBounds = getCollisionCellBounds(
-          projected.bounds,
-          cellSize,
-          gridWidth,
-          gridHeight
-        );
-        if (!cellBounds) {
-          continue;
-        }
-        const seen = /* @__PURE__ */ new Set();
-        let collides = false;
-        for (let cy = cellBounds.minCellY; cy <= cellBounds.maxCellY && !collides; cy++) {
-          for (let cx = cellBounds.minCellX; cx <= cellBounds.maxCellX; cx++) {
-            const key = packCollisionCellKey(cx, cy, gridWidth);
-            const bucket = this.selectionGrid.get(key);
-            if (!bucket) {
-              continue;
-            }
-            for (let j = 0; j < bucket.length; j++) {
-              const accepted = bucket[j];
-              if (seen.has(accepted.entry.labelId)) {
-                continue;
-              }
-              seen.add(accepted.entry.labelId);
-              if (intersectsBounds(projected.bounds, accepted.bounds, 2)) {
-                collides = true;
-                break;
-              }
-            }
-          }
-        }
-        if (collides) {
-          continue;
-        }
-        const offset = projected.entry.labelId * 4;
-        this.visibility.data[offset + 0] = 255;
-        this.visibility.data[offset + 1] = 255;
-        this.visibility.data[offset + 2] = 255;
-        this.visibility.data[offset + 3] = 255;
-        projected.entry.persistence = Math.min(
-          (projected.entry.persistence || 0) + 3,
-          12
-        );
-        this.acceptedEntries.push(projected);
-        for (let cy = cellBounds.minCellY; cy <= cellBounds.maxCellY; cy++) {
-          for (let cx = cellBounds.minCellX; cx <= cellBounds.maxCellX; cx++) {
-            const key = packCollisionCellKey(cx, cy, gridWidth);
-            const bucket = this.selectionGrid.get(key);
-            if (bucket) {
-              bucket.push(projected);
-            } else {
-              this.selectionGrid.set(key, [projected]);
-            }
-          }
-        }
+      if (this.userData.resolveState?.phase === "building") {
+        this.buildResolveBatch(renderer, camera, size2, renderTarget, now);
       }
-      this.visibility.texture.needsUpdate = true;
+      if (this.userData.resolveState?.phase === "committing") {
+        this.applyCommitBatch();
+      }
     }
     dispose() {
       this.material.uniforms.textureAtlas.value?.dispose?.();
@@ -1834,6 +2138,10 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
       this.userData.near = sanitizeLabelNearDistance(
         this.material.uniforms.labelNear.value
       );
+      this.userData.cachedCellSize = DEFAULT_LABEL_CELL_SIZE;
+      this.visibility.data.fill(0);
+      this.visibility.texture.needsUpdate = true;
+      this.invalidateVisibility({ deferUntilSettled: false });
     }
     get fontSize() {
       if (this.parent?.userData?.uniforms?.labelFontSize) {
@@ -1851,6 +2159,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
         return;
       }
       this.material.uniforms.labelFontSize.value = nextValue;
+      this.invalidateVisibility({ deferUntilSettled: false });
     }
     get fontFamily() {
       if (this.parent?.userData?.labelFontFamily) {
@@ -1875,12 +2184,14 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
     }
     set alignment(v) {
       this.material.uniforms.labelAlignment.value = LabelAlignmentMap[v] ?? LabelAlignmentMap.center;
+      this.invalidateVisibility({ deferUntilSettled: false });
     }
     get baseline() {
       return getLabelBaselineName(this.material.uniforms.labelBaseline.value);
     }
     set baseline(v) {
       this.material.uniforms.labelBaseline.value = LabelBaselineMap[v] ?? LabelBaselineMap.top;
+      this.invalidateVisibility({ deferUntilSettled: false });
     }
     get offset() {
       return this.material.uniforms.labelOffset.value;
@@ -1890,6 +2201,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
         return;
       }
       this.material.uniforms.labelOffset.value.set(v.x, v.y);
+      this.invalidateVisibility({ deferUntilSettled: false });
     }
     get near() {
       if (this.parent?.userData?.uniforms?.labelNear) {
@@ -1907,6 +2219,7 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
         return;
       }
       this.material.uniforms.labelNear.value = nextValue;
+      this.invalidateVisibility({ deferUntilSettled: false });
     }
     static parse(size2, data, options = {}) {
       const atlas = buildTextAtlas(data.nodes, options.degrees || [], options);
@@ -2934,8 +3247,8 @@ initWasm();
         obscurity: { value: 0.9 },
         labelAlignment: { value: 0 },
         labelBaseline: { value: 1 },
-        labelFontSize: { value: 10 },
-        labelNear: { value: 0 },
+        labelFontSize: { value: 24 },
+        labelNear: { value: 50 },
         labelOffset: { value: new import_three6.Vector2(0, 0) }
       };
       this.userData.labelFontFamily = DEFAULT_LABEL_FONT_FAMILY;

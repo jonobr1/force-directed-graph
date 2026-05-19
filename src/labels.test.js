@@ -27,6 +27,56 @@ describe('label placement helpers', () => {
     expect(__TEST__.getLabelBaselineOffset(-1)).toBe(-1);
     expect(__TEST__.getNodeColorComponents({ color: '#ff0000' })).toEqual([1, 0, 0]);
     expect(__TEST__.getNodeColorComponents({})).toEqual([1, 1, 1]);
+    expect(
+      __TEST__.hasMeaningfulMatrixChange(
+        new Float32Array([0, 1]),
+        new Float32Array([0, 1.0002]),
+      ),
+    ).toBe(true);
+    expect(
+      __TEST__.hasMeaningfulMatrixChange(
+        new Float32Array([0, 1]),
+        new Float32Array([0, 1.00001]),
+      ),
+    ).toBe(false);
+
+    const settingsKey = __TEST__.getVisibilitySettingsKey({
+      viewportWidth: 800,
+      viewportHeight: 600,
+      obscurity: 0.75,
+      is2D: false,
+      sizeAttenuation: true,
+      frustumSize: 100,
+      nodeRadius: 1,
+      nodeScale: 8,
+      labelAlignment: 0,
+      labelBaseline: 1,
+      labelFontSize: 5,
+      labelNear: 50,
+      labelOffsetX: 0,
+      labelOffsetY: 0,
+      beginning: 0,
+      ending: 1,
+    });
+    const changedSettingsKey = __TEST__.getVisibilitySettingsKey({
+      viewportWidth: 800,
+      viewportHeight: 600,
+      obscurity: 0.5,
+      is2D: false,
+      sizeAttenuation: true,
+      frustumSize: 100,
+      nodeRadius: 1,
+      nodeScale: 8,
+      labelAlignment: 0,
+      labelBaseline: 1,
+      labelFontSize: 5,
+      labelNear: 50,
+      labelOffsetX: 0,
+      labelOffsetY: 0,
+      beginning: 0,
+      ending: 1,
+    });
+    expect(settingsKey).not.toBe(changedSettingsKey);
   });
 
   it('derives label priority deterministically', () => {
