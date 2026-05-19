@@ -116,6 +116,10 @@ const labels = {
         alpha
       );
       #include <fog_fragment>
+
+      if ( fogFactor > 0.5 ) {
+        discard;
+      }
     }
   `,
 };
