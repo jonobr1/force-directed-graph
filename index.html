@@ -120,7 +120,7 @@
   </head>
   <body>
     <div id="stage"></div>
-    <div class="content column">
+    <div id="info" class="content column">
       <h1 id="title">
         Force Directed Graph
       </h1>
@@ -229,6 +229,9 @@
 
           gui.close();
 
+          gui.add({ visible: true }, 'visible').name('domElement').onChange((v) => {
+            document.body.querySelector('#info').style.display = !!v ? 'block' : 'none'
+          })
           gui.add(fog, 'near', 0, 700, 1).name('fogNear');
           gui.add(fog, 'far', 250, 1000).name('fogFar');
 
