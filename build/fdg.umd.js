@@ -1161,16 +1161,7 @@ var BASE_ATLAS_FONT_SIZE = 120;
 var BASE_ATLAS_PADDING = 4;
 var ATLAS_RASTER_SCALE = 2;
 var DEFAULT_FONT_FAMILY = "Arial, sans-serif";
-var DEFAULT_LABEL_CELL_SIZE = 32;
-var LABEL_CAMERA_MOVE_EPSILON = 1e-4;
-var LABEL_SOLVE_SETTLE_MS = 160;
-var LABEL_SOLVE_BUILD_INTERVAL_MS = 80;
-var LABEL_SOLVE_BATCH_SIZE = 192;
-var LABEL_COMMIT_BATCH_SIZE = 16;
-var LABEL_BACKGROUND_REFRESH_MS = 600;
-var LABEL_PERSISTENCE_DECAY = 1;
-var LABEL_PERSISTENCE_GAIN = 3;
-var LABEL_PERSISTENCE_MAX = 12;
+var LABEL_GRAPH_DISTANCE_HOPS = 6;
 var LABEL_NODE_COLOR = new import_three4.Color();
 var LabelAlignmentMap = {
   center: 0,
@@ -1219,60 +1210,6 @@ function getNodeColorComponents(node) {
   }
   return [1, 1, 1];
 }
-function hasMeaningfulMatrixChange(previous, next, epsilon = LABEL_CAMERA_MOVE_EPSILON) {
-  if (!previous || !next || previous.length !== next.length) {
-    return true;
-  }
-  for (let i = 0; i < previous.length; i++) {
-    if (Math.abs(previous[i] - next[i]) > epsilon) {
-      return true;
-    }
-  }
-  return false;
-}
-function serializeVisibilityNumber(value) {
-  if (!Number.isFinite(value)) {
-    return "0";
-  }
-  return Number(value).toFixed(4);
-}
-function getVisibilitySettingsKey({
-  viewportWidth,
-  viewportHeight,
-  obscurity,
-  is2D,
-  sizeAttenuation,
-  frustumSize,
-  nodeRadius,
-  nodeScale,
-  labelAlignment,
-  labelBaseline,
-  labelFontSize,
-  labelNear,
-  labelOffsetX,
-  labelOffsetY,
-  beginning,
-  ending
-}) {
-  return [
-    viewportWidth,
-    viewportHeight,
-    serializeVisibilityNumber(obscurity),
-    Number(Boolean(is2D)),
-    Number(Boolean(sizeAttenuation)),
-    serializeVisibilityNumber(frustumSize),
-    serializeVisibilityNumber(nodeRadius),
-    serializeVisibilityNumber(nodeScale),
-    serializeVisibilityNumber(labelAlignment),
-    serializeVisibilityNumber(labelBaseline),
-    serializeVisibilityNumber(labelFontSize),
-    serializeVisibilityNumber(labelNear),
-    serializeVisibilityNumber(labelOffsetX),
-    serializeVisibilityNumber(labelOffsetY),
-    serializeVisibilityNumber(beginning),
-    serializeVisibilityNumber(ending)
-  ].join("|");
-}
 function setLabelVisibility(data, labelId, visible) {
   const offset = labelId * 4;
   const value = visible ? 255 : 0;
@@ -1280,6 +1217,102 @@ function setLabelVisibility(data, labelId, visible) {
   data[offset + 1] = value;
   data[offset + 2] = value;
   data[offset + 3] = value;
+}
+function compareSelectionCandidates(a, b) {
+  if (b.hasManualPriority !== a.hasManualPriority) {
+    return Number(b.hasManualPriority) - Number(a.hasManualPriority);
+  }
+  if (b.manualPriority !== a.manualPriority) {
+    return b.manualPriority - a.manualPriority;
+  }
+  if (b.degree !== a.degree) {
+    return b.degree - a.degree;
+  }
+  return a.entry.stableId - b.entry.stableId;
+}
+function relaxGraphDistances(sourceIndex, adjacency, distances, maxHops) {
+  if (!Number.isInteger(sourceIndex) || sourceIndex < 0) {
+    return;
+  }
+  const visited = new Int16Array(adjacency.length || distances.length);
+  visited.fill(-1);
+  const queue = [sourceIndex];
+  const depths = [0];
+  visited[sourceIndex] = 0;
+  distances[sourceIndex] = 0;
+  for (let i = 0; i < queue.length; i++) {
+    const nodeIndex = queue[i];
+    const depth = depths[i];
+    if (depth >= maxHops) {
+      continue;
+    }
+    const neighbors = adjacency[nodeIndex] || [];
+    for (let j = 0; j < neighbors.length; j++) {
+      const neighbor = neighbors[j];
+      if (!Number.isInteger(neighbor) || neighbor < 0 || neighbor >= visited.length) {
+        continue;
+      }
+      if (visited[neighbor] >= 0) {
+        continue;
+      }
+      const nextDepth = depth + 1;
+      visited[neighbor] = nextDepth;
+      if (nextDepth < distances[neighbor]) {
+        distances[neighbor] = nextDepth;
+      }
+      queue.push(neighbor);
+      depths.push(nextDepth);
+    }
+  }
+}
+function buildLabelSelectionOrder(entries, adjacency = [], nodes = [], degrees = [], maxHops = LABEL_GRAPH_DISTANCE_HOPS) {
+  if (!entries || entries.length === 0) {
+    return [];
+  }
+  const candidates = entries.map((entry) => {
+    const node = nodes[entry.nodeIndex] || {};
+    const manualPriority = typeof node.labelPriority === "number" && Number.isFinite(node.labelPriority) ? node.labelPriority : -Infinity;
+    return {
+      entry,
+      degree: typeof degrees[entry.nodeIndex] === "number" && Number.isFinite(degrees[entry.nodeIndex]) ? degrees[entry.nodeIndex] : 0,
+      hasManualPriority: Number.isFinite(manualPriority),
+      manualPriority,
+      selected: false
+    };
+  }).sort(compareSelectionCandidates);
+  const distances = new Int16Array(
+    Math.max(
+      1,
+      nodes.length,
+      adjacency.length,
+      ...entries.map((entry) => entry.nodeIndex + 1)
+    )
+  );
+  distances.fill(maxHops + 1);
+  const order = [];
+  let hasSelection = false;
+  for (let threshold = maxHops + 1; threshold >= 0; threshold--) {
+    for (let i = 0; i < candidates.length; i++) {
+      const candidate = candidates[i];
+      if (candidate.selected) {
+        continue;
+      }
+      const distance = distances[candidate.entry.nodeIndex];
+      if (hasSelection && distance < threshold) {
+        continue;
+      }
+      candidate.selected = true;
+      order.push(candidate.entry);
+      relaxGraphDistances(
+        candidate.entry.nodeIndex,
+        adjacency,
+        distances,
+        maxHops
+      );
+      hasSelection = true;
+    }
+  }
+  return order;
 }
 function layoutAtlasRows(items, maxTextureSize) {
   if (!Number.isFinite(maxTextureSize) || maxTextureSize <= 0) {
@@ -1486,155 +1519,10 @@ function compareLabelEntries(a, b) {
   }
   return a.stableId - b.stableId;
 }
-function compareProjectedEntries(a, b) {
-  if (b.entry.basePriority !== a.entry.basePriority) {
-    return b.entry.basePriority - a.entry.basePriority;
-  }
-  const aPersistence = a.entry.persistence || 0;
-  const bPersistence = b.entry.persistence || 0;
-  if (bPersistence !== aPersistence) {
-    return bPersistence - aPersistence;
-  }
-  if (b.depthPriority !== a.depthPriority) {
-    return b.depthPriority - a.depthPriority;
-  }
-  return a.entry.stableId - b.entry.stableId;
-}
-function packCollisionCellKey(cellX, cellY, gridWidth) {
-  return cellY * gridWidth + cellX;
-}
 function getPlacementTextureDimensions(itemCount) {
   const width = Math.max(1, Math.ceil(Math.sqrt(itemCount)));
   const height = Math.max(1, Math.ceil(itemCount / width));
   return { width, height };
-}
-function getLabelAlignmentOffset(alignment) {
-  if (alignment > 0.5) {
-    return 1;
-  }
-  if (alignment < -0.5) {
-    return -1;
-  }
-  return 0;
-}
-function getLabelBaselineOffset(baseline) {
-  if (baseline > 0.5) {
-    return 1;
-  }
-  if (baseline < -0.5) {
-    return -1;
-  }
-  return 0;
-}
-function intersectsBounds(a, b, margin = 0) {
-  return !(a.maxX + margin <= b.minX || a.minX >= b.maxX + margin || a.maxY + margin <= b.minY || a.minY >= b.maxY + margin);
-}
-function getCollisionCellBounds(bounds, cellSize, gridWidth, gridHeight) {
-  const minCellX = Math.max(0, Math.floor(bounds.minX / cellSize));
-  const maxCellX = Math.min(gridWidth - 1, Math.floor(bounds.maxX / cellSize));
-  const minCellY = Math.max(0, Math.floor(bounds.minY / cellSize));
-  const maxCellY = Math.min(gridHeight - 1, Math.floor(bounds.maxY / cellSize));
-  if (maxCellX < 0 || maxCellY < 0 || minCellX >= gridWidth || minCellY >= gridHeight) {
-    return null;
-  }
-  return {
-    minCellX,
-    maxCellX,
-    minCellY,
-    maxCellY
-  };
-}
-function projectLabelBounds({
-  nodePosition,
-  objectMatrixWorld,
-  camera,
-  viewportWidth,
-  viewportHeight,
-  frustumSize,
-  is2D,
-  sizeAttenuation,
-  nodeRadius,
-  nodeScale,
-  aspectRatio,
-  labelAlignment = 0,
-  labelBaseline = 1,
-  labelFontSize = 1,
-  labelNear = 0,
-  labelOffset = { x: 0, y: 0 },
-  pointSize = 1
-}) {
-  LOCAL_NODE.copy(nodePosition);
-  LOCAL_NODE.z *= 1 - Number(Boolean(is2D));
-  MODEL_VIEW_MATRIX.multiplyMatrices(
-    camera.matrixWorldInverse,
-    objectMatrixWorld
-  );
-  MV_CENTER.set(LOCAL_NODE.x, LOCAL_NODE.y, LOCAL_NODE.z, 1);
-  MV_CENTER.applyMatrix4(MODEL_VIEW_MATRIX);
-  if (!Number.isFinite(MV_CENTER.z) || MV_CENTER.z >= 0) {
-    return null;
-  }
-  const viewDistance = -MV_CENTER.z;
-  const nearDistance = sanitizeLabelNearDistance(labelNear);
-  if (viewDistance <= nearDistance) {
-    return null;
-  }
-  const sizeScale = sizeAttenuation ? frustumSize / Math.max(viewDistance, 1e-3) : 1;
-  const labelPixelHeight = 0.1 * nodeRadius * pointSize * nodeScale * sizeScale * sanitizeLabelFontSize(labelFontSize);
-  const projectionScaleY = Math.max(
-    Math.abs(camera.projectionMatrix.elements[5]),
-    1e-4
-  );
-  const depthScale = camera.isPerspectiveCamera ? viewDistance : 1;
-  const worldUnitsPerPixel = 2 * depthScale / Math.max(projectionScaleY * Math.max(viewportHeight, 1), 1e-3);
-  const labelHeight = labelPixelHeight * worldUnitsPerPixel;
-  const labelWidth = labelHeight * aspectRatio;
-  const offsetX = (labelOffset?.x || 0) * labelHeight;
-  const offsetY = (labelOffset?.y || 0) * labelHeight;
-  WORLD_CENTER.copy(LOCAL_NODE).applyMatrix4(objectMatrixWorld);
-  CAMERA_RIGHT.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
-  CAMERA_UP.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
-  const anchor3 = WORLD_CORNER.copy(WORLD_CENTER).addScaledVector(
-    CAMERA_RIGHT,
-    labelWidth * 0.5 * getLabelAlignmentOffset(labelAlignment) + offsetX
-  ).addScaledVector(
-    CAMERA_UP,
-    labelHeight * getLabelBaselineOffset(labelBaseline) + offsetY
-  );
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (let ix = -1; ix <= 1; ix += 2) {
-    for (let iy = -1; iy <= 1; iy += 2) {
-      PROJECTED_CORNER.copy(anchor3).addScaledVector(CAMERA_RIGHT, ix * labelWidth * 0.5).addScaledVector(CAMERA_UP, iy * labelHeight * 0.5).project(camera);
-      if (!Number.isFinite(PROJECTED_CORNER.x) || !Number.isFinite(PROJECTED_CORNER.y)) {
-        return null;
-      }
-      const x = (PROJECTED_CORNER.x * 0.5 + 0.5) * viewportWidth;
-      const y = (1 - (PROJECTED_CORNER.y * 0.5 + 0.5)) * viewportHeight;
-      minX = Math.min(minX, x);
-      minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x);
-      maxY = Math.max(maxY, y);
-    }
-  }
-  if (maxX <= 0 || maxY <= 0 || minX >= viewportWidth || minY >= viewportHeight) {
-    return null;
-  }
-  return {
-    minX,
-    minY,
-    maxX,
-    maxY,
-    width: maxX - minX,
-    height: maxY - minY,
-    centerX: (minX + maxX) * 0.5,
-    centerY: (minY + maxY) * 0.5,
-    viewDistance,
-    depthPriority: 1 / Math.max(viewDistance, 1e-3),
-    clipped: minX < 0 || minY < 0 || maxX > viewportWidth || maxY > viewportHeight
-  };
 }
 function createVisibilityTexture(labelCount) {
   const { width, height } = getPlacementTextureDimensions(labelCount);
@@ -1666,7 +1554,7 @@ function configureAtlasTexture(texture, options = {}) {
   return texture;
 }
 var Labels = class extends import_three4.Mesh {
-  constructor({ geometry, texture, entries, fontFamily }, uniforms) {
+  constructor({ geometry, texture, entries, fontFamily, selectionOrder }, uniforms) {
     const visibility = createVisibilityTexture(entries.length);
     const material = new import_three4.ShaderMaterial({
       uniforms: {
@@ -1712,344 +1600,21 @@ var Labels = class extends import_three4.Mesh {
     this.selectionGrid = /* @__PURE__ */ new Map();
     this.acceptedEntries = [];
     this.obscurity = uniforms.obscurity;
+    this.selectionOrder = selectionOrder || entries.slice().sort(compareLabelEntries);
     this.userData.fontFamily = fontFamily || DEFAULT_FONT_FAMILY;
     this.userData.fontSize = uniforms.labelFontSize.value;
     this.userData.near = sanitizeLabelNearDistance(uniforms.labelNear.value);
-    this.onBeforeRender = (renderer, _scene, camera) => {
-      if (this.visible) {
-        this.updateVisibility(renderer, camera);
-      }
-    };
-  }
-  ensurePositionsBuffer(size2) {
-    const requiredLength = size2 * size2 * 4;
-    if (this.positionsBuffer.length !== requiredLength) {
-      this.positionsBuffer = new Float32Array(requiredLength);
-    }
-  }
-  invalidateVisibility({ deferUntilSettled = true } = {}) {
-    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
     this.userData.visibilityDirty = true;
-    this.userData.resolveState = null;
-    if (deferUntilSettled) {
-      this.userData.lastCameraMotionTime = now;
-    }
-  }
-  updateCameraState(camera, now) {
-    const nextMatrix = camera.matrixWorld.elements;
-    const nextProjection = camera.projectionMatrix.elements;
-    if (!this.userData.cameraMatrix) {
-      this.userData.cameraMatrix = new Float32Array(nextMatrix);
-      this.userData.cameraProjection = new Float32Array(nextProjection);
-      return false;
-    }
-    const moved = hasMeaningfulMatrixChange(this.userData.cameraMatrix, nextMatrix) || hasMeaningfulMatrixChange(this.userData.cameraProjection, nextProjection);
-    if (moved) {
-      this.userData.cameraMatrix.set(nextMatrix);
-      this.userData.cameraProjection.set(nextProjection);
-      this.userData.lastCameraMotionTime = now;
-      this.userData.visibilityDirty = true;
-      this.userData.resolveState = null;
-    }
-    return moved;
-  }
-  getVisibilitySettingsKey(viewportWidth, viewportHeight) {
-    const uniforms = this.material.uniforms;
-    return getVisibilitySettingsKey({
-      viewportWidth,
-      viewportHeight,
-      obscurity: this.obscurity.value,
-      is2D: uniforms.is2D.value,
-      sizeAttenuation: uniforms.sizeAttenuation.value,
-      frustumSize: uniforms.frustumSize.value,
-      nodeRadius: uniforms.nodeRadius.value,
-      nodeScale: uniforms.nodeScale.value,
-      labelAlignment: uniforms.labelAlignment.value,
-      labelBaseline: uniforms.labelBaseline.value,
-      labelFontSize: uniforms.labelFontSize.value,
-      labelNear: uniforms.labelNear.value,
-      labelOffsetX: uniforms.labelOffset.value.x,
-      labelOffsetY: uniforms.labelOffset.value.y,
-      beginning: uniforms.uBeginning.value,
-      ending: uniforms.uEnding.value
-    });
-  }
-  decayPersistence() {
-    if (!this.userData.persistentEntries) {
-      this.userData.persistentEntries = /* @__PURE__ */ new Set();
-    }
-    for (const entry of this.userData.persistentEntries) {
-      entry.persistence = Math.max(
-        0,
-        (entry.persistence || 0) - LABEL_PERSISTENCE_DECAY
-      );
-      if (entry.persistence <= 0) {
-        this.userData.persistentEntries.delete(entry);
+    this.userData.lastAppliedQuota = -1;
+    this.onBeforeRender = () => {
+      if (this.visible) {
+        this.updateVisibility();
       }
-    }
-  }
-  boostPersistence(entries) {
-    if (!this.userData.persistentEntries) {
-      this.userData.persistentEntries = /* @__PURE__ */ new Set();
-    }
-    for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i].entry;
-      entry.persistence = Math.min(
-        (entry.persistence || 0) + LABEL_PERSISTENCE_GAIN,
-        LABEL_PERSISTENCE_MAX
-      );
-      this.userData.persistentEntries.add(entry);
-    }
-  }
-  projectEntry(entry, camera, viewportWidth, viewportHeight) {
-    const index = entry.nodeIndex * 4;
-    const bounds = projectLabelBounds({
-      nodePosition: {
-        x: this.positionsBuffer[index + 0],
-        y: this.positionsBuffer[index + 1],
-        z: this.positionsBuffer[index + 2]
-      },
-      objectMatrixWorld: this.matrixWorld,
-      camera,
-      viewportWidth,
-      viewportHeight,
-      frustumSize: this.material.uniforms.frustumSize.value,
-      is2D: this.material.uniforms.is2D.value,
-      sizeAttenuation: this.material.uniforms.sizeAttenuation.value,
-      nodeRadius: this.material.uniforms.nodeRadius.value,
-      nodeScale: this.material.uniforms.nodeScale.value,
-      aspectRatio: entry.aspectRatio,
-      labelAlignment: this.material.uniforms.labelAlignment.value,
-      labelBaseline: this.material.uniforms.labelBaseline.value,
-      labelFontSize: this.material.uniforms.labelFontSize.value,
-      labelNear: this.material.uniforms.labelNear.value,
-      labelOffset: this.material.uniforms.labelOffset.value,
-      pointSize: entry.pointSize
-    });
-    if (!bounds) {
-      return null;
-    }
-    return {
-      entry,
-      bounds,
-      depthPriority: bounds.depthPriority
     };
   }
-  computeCellSize(entries) {
-    if (!entries || entries.length === 0) {
-      return this.userData.cachedCellSize || DEFAULT_LABEL_CELL_SIZE;
-    }
-    let totalHeight = 0;
-    for (let i = 0; i < entries.length; i++) {
-      totalHeight += entries[i].bounds.height;
-    }
-    return Math.max(
-      12,
-      Math.min(
-        96,
-        totalHeight / Math.max(entries.length, 1) || this.userData.cachedCellSize || DEFAULT_LABEL_CELL_SIZE
-      )
-    );
-  }
-  tryAcceptProjected(projected, state) {
-    const cellBounds = getCollisionCellBounds(
-      projected.bounds,
-      state.cellSize,
-      state.gridWidth,
-      state.gridHeight
-    );
-    if (!cellBounds) {
-      return false;
-    }
-    const seen = /* @__PURE__ */ new Set();
-    let collides = false;
-    for (let cy = cellBounds.minCellY; cy <= cellBounds.maxCellY && !collides; cy++) {
-      for (let cx = cellBounds.minCellX; cx <= cellBounds.maxCellX; cx++) {
-        const key = packCollisionCellKey(cx, cy, state.gridWidth);
-        const bucket = state.targetSelectionGrid.get(key);
-        if (!bucket) {
-          continue;
-        }
-        for (let j = 0; j < bucket.length; j++) {
-          const accepted = bucket[j];
-          if (seen.has(accepted.entry.labelId)) {
-            continue;
-          }
-          seen.add(accepted.entry.labelId);
-          if (intersectsBounds(projected.bounds, accepted.bounds, 2)) {
-            collides = true;
-            break;
-          }
-        }
-      }
-    }
-    if (collides) {
-      return false;
-    }
-    state.targetAcceptedEntries.push(projected);
-    state.targetAcceptedLabelIds.add(projected.entry.labelId);
-    for (let cy = cellBounds.minCellY; cy <= cellBounds.maxCellY; cy++) {
-      for (let cx = cellBounds.minCellX; cx <= cellBounds.maxCellX; cx++) {
-        const key = packCollisionCellKey(cx, cy, state.gridWidth);
-        const bucket = state.targetSelectionGrid.get(key);
-        if (bucket) {
-          bucket.push(projected);
-        } else {
-          state.targetSelectionGrid.set(key, [projected]);
-        }
-      }
-    }
-    return true;
-  }
-  readPositions(renderer, size2, renderTarget) {
-    this.ensurePositionsBuffer(size2);
-    const activeRenderTarget = renderer.getRenderTarget();
-    try {
-      renderer.readRenderTargetPixels(
-        renderTarget,
-        0,
-        0,
-        size2,
-        size2,
-        this.positionsBuffer
-      );
-      renderer.setRenderTarget(activeRenderTarget);
-      return true;
-    } catch (error) {
-      if (!this.userData.didWarnPlacementReadback) {
-        console.warn(
-          "Force Directed Graph: label placement readback failed.",
-          error
-        );
-        this.userData.didWarnPlacementReadback = true;
-      }
-      renderer.setRenderTarget(activeRenderTarget);
-      return false;
-    }
-  }
-  beginResolveSession(renderer, camera, size2, renderTarget, viewportWidth, viewportHeight, quota, now) {
-    if (!this.readPositions(renderer, size2, renderTarget)) {
-      this.applyPriorityQuotaOnly();
-      this.userData.visibilityDirty = false;
-      this.userData.resolveState = null;
-      return;
-    }
-    this.decayPersistence();
-    const estimateEntries = [];
-    for (let i = 0; i < this.acceptedEntries.length; i++) {
-      const projected = this.projectEntry(
-        this.acceptedEntries[i].entry,
-        camera,
-        viewportWidth,
-        viewportHeight
-      );
-      if (projected) {
-        estimateEntries.push(projected);
-      }
-    }
-    const cellSize = this.computeCellSize(estimateEntries);
-    const gridWidth = Math.max(1, Math.ceil(viewportWidth / cellSize));
-    const gridHeight = Math.max(1, Math.ceil(viewportHeight / cellSize));
-    this.userData.resolveState = {
-      phase: "building",
-      quota,
-      cellSize,
-      gridWidth,
-      gridHeight,
-      viewportWidth,
-      viewportHeight,
-      candidateCursor: 0,
-      targetAcceptedEntries: [],
-      targetAcceptedLabelIds: /* @__PURE__ */ new Set(),
-      targetSelectionGrid: /* @__PURE__ */ new Map(),
-      pendingAdditions: [],
-      pendingRemovals: [],
-      currentEntriesById: /* @__PURE__ */ new Map(),
-      targetEntriesById: /* @__PURE__ */ new Map()
-    };
-    this.userData.lastResolveBuildTime = now;
-  }
-  buildResolveBatch(renderer, camera, size2, renderTarget, now) {
-    const state = this.userData.resolveState;
-    if (!state || state.phase !== "building" || now - (this.userData.lastResolveBuildTime || 0) < LABEL_SOLVE_BUILD_INTERVAL_MS) {
-      return;
-    }
-    this.userData.lastResolveBuildTime = now;
-    if (!this.readPositions(renderer, size2, renderTarget)) {
-      this.applyPriorityQuotaOnly();
-      this.userData.visibilityDirty = false;
-      this.userData.resolveState = null;
-      return;
-    }
-    const batch = [];
-    while (batch.length < LABEL_SOLVE_BATCH_SIZE && state.candidateCursor < this.sortedEntries.length) {
-      const entry = this.sortedEntries[state.candidateCursor++];
-      const projected = this.projectEntry(
-        entry,
-        camera,
-        state.viewportWidth,
-        state.viewportHeight
-      );
-      if (projected) {
-        batch.push(projected);
-      }
-    }
-    batch.sort(compareProjectedEntries);
-    for (let i = 0; i < batch.length; i++) {
-      if (state.targetAcceptedEntries.length >= state.quota) {
-        break;
-      }
-      this.tryAcceptProjected(batch[i], state);
-    }
-    if (state.targetAcceptedEntries.length >= state.quota || state.candidateCursor >= this.sortedEntries.length) {
-      state.phase = "committing";
-      state.currentEntriesById = new Map(
-        this.acceptedEntries.map((projected) => [projected.entry.labelId, projected])
-      );
-      state.targetEntriesById = new Map(
-        state.targetAcceptedEntries.map((projected) => [
-          projected.entry.labelId,
-          projected
-        ])
-      );
-      state.pendingRemovals = this.acceptedEntries.filter(
-        (projected) => !state.targetEntriesById.has(projected.entry.labelId)
-      );
-      state.pendingAdditions = state.targetAcceptedEntries.filter(
-        (projected) => !state.currentEntriesById.has(projected.entry.labelId)
-      );
-    }
-  }
-  applyCommitBatch() {
-    const state = this.userData.resolveState;
-    if (!state || state.phase !== "committing") {
-      return;
-    }
-    let processed = 0;
-    while (processed < LABEL_COMMIT_BATCH_SIZE && (state.pendingRemovals.length > 0 || state.pendingAdditions.length > 0)) {
-      if (state.pendingRemovals.length > 0) {
-        const projected = state.pendingRemovals.shift();
-        state.currentEntriesById.delete(projected.entry.labelId);
-        setLabelVisibility(this.visibility.data, projected.entry.labelId, false);
-        processed += 1;
-      }
-      if (processed < LABEL_COMMIT_BATCH_SIZE && state.pendingAdditions.length > 0) {
-        const projected = state.pendingAdditions.shift();
-        state.currentEntriesById.set(projected.entry.labelId, projected);
-        setLabelVisibility(this.visibility.data, projected.entry.labelId, true);
-        processed += 1;
-      }
-    }
-    this.acceptedEntries = Array.from(state.currentEntriesById.values());
-    this.visibility.texture.needsUpdate = true;
-    if (state.pendingRemovals.length === 0 && state.pendingAdditions.length === 0) {
-      this.acceptedEntries = state.targetAcceptedEntries.slice();
-      this.userData.cachedCellSize = state.cellSize;
-      this.userData.resolveState = null;
-      this.userData.visibilityDirty = false;
-      this.userData.lastResolvedTime = typeof performance !== "undefined" ? performance.now() : Date.now();
-      this.boostPersistence(this.acceptedEntries);
-    }
+  invalidateVisibility() {
+    this.userData.visibilityDirty = true;
+    this.userData.lastAppliedQuota = -1;
   }
   applyPriorityQuotaOnly() {
     this.visibility.data.fill(0);
@@ -2060,74 +1625,25 @@ var Labels = class extends import_three4.Mesh {
     }
     this.visibility.texture.needsUpdate = true;
   }
-  updateVisibility(renderer, camera) {
-    const graph = this.parent;
-    const { gpgpu, uniforms, variables } = graph?.userData || {};
-    if (!graph || !gpgpu || !variables?.positions || !uniforms?.size) {
-      return;
-    }
-    const size2 = uniforms.size.value;
-    if (!Number.isFinite(size2) || size2 <= 0) {
-      return;
-    }
-    const renderTarget = gpgpu.getCurrentRenderTarget(variables.positions);
-    if (!renderTarget) {
-      return;
-    }
-    renderer.getDrawingBufferSize(DRAWING_BUFFER_SIZE);
-    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-    const viewportWidth = DRAWING_BUFFER_SIZE.x;
-    const viewportHeight = DRAWING_BUFFER_SIZE.y;
+  updateVisibility() {
     const quota = getVisibleQuota(this.obscurity.value, this.entries.length);
-    const settingsKey = this.getVisibilitySettingsKey(
-      viewportWidth,
-      viewportHeight
-    );
-    if (this.userData.settingsKey !== settingsKey) {
-      const deferUntilSettled = this.acceptedEntries.length > 0;
-      this.userData.settingsKey = settingsKey;
-      this.invalidateVisibility({ deferUntilSettled });
-    }
-    const cameraMoved = this.updateCameraState(camera, now);
-    if (quota <= 0 || viewportWidth <= 0 || viewportHeight <= 0) {
-      this.acceptedEntries.length = 0;
-      this.visibility.data.fill(0);
-      this.visibility.texture.needsUpdate = true;
-      this.userData.visibilityDirty = false;
-      this.userData.resolveState = null;
+    if (!this.userData.visibilityDirty && this.userData.lastAppliedQuota === quota) {
       return;
     }
-    if (cameraMoved) {
-      return;
+    this.visibility.data.fill(0);
+    this.acceptedEntries.length = 0;
+    if (quota > 0) {
+      const orderedEntries = quota >= this.entries.length ? this.entries : this.selectionOrder;
+      const limit = Math.min(quota, orderedEntries.length);
+      for (let i = 0; i < limit; i++) {
+        const entry = orderedEntries[i];
+        setLabelVisibility(this.visibility.data, entry.labelId, true);
+        this.acceptedEntries.push({ entry });
+      }
     }
-    if (!this.userData.visibilityDirty && !this.userData.resolveState && now - (this.userData.lastResolvedTime || 0) >= LABEL_BACKGROUND_REFRESH_MS) {
-      this.invalidateVisibility({ deferUntilSettled: false });
-    }
-    if (!this.userData.visibilityDirty && !this.userData.resolveState) {
-      return;
-    }
-    if (now - (this.userData.lastCameraMotionTime || 0) < LABEL_SOLVE_SETTLE_MS) {
-      return;
-    }
-    if (!this.userData.resolveState) {
-      this.beginResolveSession(
-        renderer,
-        camera,
-        size2,
-        renderTarget,
-        viewportWidth,
-        viewportHeight,
-        quota,
-        now
-      );
-      return;
-    }
-    if (this.userData.resolveState?.phase === "building") {
-      this.buildResolveBatch(renderer, camera, size2, renderTarget, now);
-    }
-    if (this.userData.resolveState?.phase === "committing") {
-      this.applyCommitBatch();
-    }
+    this.visibility.texture.needsUpdate = true;
+    this.userData.visibilityDirty = false;
+    this.userData.lastAppliedQuota = quota;
   }
   dispose() {
     this.material.uniforms.textureAtlas.value?.dispose?.();
@@ -2135,13 +1651,21 @@ var Labels = class extends import_three4.Mesh {
     this.material.dispose();
     this.geometry.dispose();
   }
-  replaceData({ geometry, texture, entries, fontFamily, fontSize }) {
+  replaceData({
+    geometry,
+    texture,
+    entries,
+    fontFamily,
+    fontSize,
+    selectionOrder
+  }) {
     this.geometry.dispose();
     this.material.uniforms.textureAtlas.value?.dispose?.();
     this.material.uniforms.textureVisibility.value?.dispose?.();
     this.geometry = geometry;
     this.entries = entries;
     this.sortedEntries = entries.slice().sort(compareLabelEntries);
+    this.selectionOrder = selectionOrder || entries.slice().sort(compareLabelEntries);
     this.visibility = createVisibilityTexture(entries.length);
     this.material.uniforms.textureAtlas.value = texture;
     this.material.uniforms.textureVisibility.value = this.visibility.texture;
@@ -2153,10 +1677,9 @@ var Labels = class extends import_three4.Mesh {
     this.userData.near = sanitizeLabelNearDistance(
       this.material.uniforms.labelNear.value
     );
-    this.userData.cachedCellSize = DEFAULT_LABEL_CELL_SIZE;
     this.visibility.data.fill(0);
     this.visibility.texture.needsUpdate = true;
-    this.invalidateVisibility({ deferUntilSettled: false });
+    this.invalidateVisibility();
   }
   get fontSize() {
     if (this.parent?.userData?.uniforms?.labelFontSize) {
@@ -2174,7 +1697,6 @@ var Labels = class extends import_three4.Mesh {
       return;
     }
     this.material.uniforms.labelFontSize.value = nextValue;
-    this.invalidateVisibility({ deferUntilSettled: false });
   }
   get fontFamily() {
     if (this.parent?.userData?.labelFontFamily) {
@@ -2199,14 +1721,12 @@ var Labels = class extends import_three4.Mesh {
   }
   set alignment(v) {
     this.material.uniforms.labelAlignment.value = LabelAlignmentMap[v] ?? LabelAlignmentMap.center;
-    this.invalidateVisibility({ deferUntilSettled: false });
   }
   get baseline() {
     return getLabelBaselineName(this.material.uniforms.labelBaseline.value);
   }
   set baseline(v) {
     this.material.uniforms.labelBaseline.value = LabelBaselineMap[v] ?? LabelBaselineMap.top;
-    this.invalidateVisibility({ deferUntilSettled: false });
   }
   get offset() {
     return this.material.uniforms.labelOffset.value;
@@ -2216,7 +1736,6 @@ var Labels = class extends import_three4.Mesh {
       return;
     }
     this.material.uniforms.labelOffset.value.set(v.x, v.y);
-    this.invalidateVisibility({ deferUntilSettled: false });
   }
   get near() {
     if (this.parent?.userData?.uniforms?.labelNear) {
@@ -2234,7 +1753,6 @@ var Labels = class extends import_three4.Mesh {
       return;
     }
     this.material.uniforms.labelNear.value = nextValue;
-    this.invalidateVisibility({ deferUntilSettled: false });
   }
   static parse(size2, data, options = {}) {
     const atlas = buildTextAtlas(data.nodes, options.degrees || [], options);
@@ -2315,12 +1833,19 @@ var Labels = class extends import_three4.Mesh {
     );
     geometry.instanceCount = entries.length;
     const texture = configureAtlasTexture(new import_three4.CanvasTexture(canvas), options);
+    const selectionOrder = buildLabelSelectionOrder(
+      entries,
+      options.adjacency || [],
+      data.nodes,
+      options.degrees || []
+    );
     return Promise.resolve({
       geometry,
       texture,
       entries,
       fontFamily: options.fontFamily || DEFAULT_FONT_FAMILY,
-      fontSize: sanitizeLabelFontSize(options.fontSize)
+      fontSize: sanitizeLabelFontSize(options.fontSize),
+      selectionOrder
     });
   }
 };
@@ -3383,12 +2908,21 @@ var ForceDirectedGraph = class extends import_three6.Group {
         };
       });
       const nodeDegrees = new Array(data.nodes.length).fill(0);
+      const nodeAdjacency = Array.from({ length: data.nodes.length }, () => []);
       for (let i = 0; i < preparedLinks.length; i++) {
         const link2 = preparedLinks[i];
+        if (!Number.isInteger(link2.sourceIndex) || !Number.isInteger(link2.targetIndex) || link2.sourceIndex < 0 || link2.targetIndex < 0 || link2.sourceIndex >= data.nodes.length || link2.targetIndex >= data.nodes.length) {
+          continue;
+        }
         nodeDegrees[link2.sourceIndex] += 1;
         nodeDegrees[link2.targetIndex] += 1;
+        nodeAdjacency[link2.sourceIndex].push(link2.targetIndex);
+        if (link2.targetIndex !== link2.sourceIndex) {
+          nodeAdjacency[link2.targetIndex].push(link2.sourceIndex);
+        }
       }
       scope.userData.nodeDegrees = nodeDegrees;
+      scope.userData.nodeAdjacency = nodeAdjacency;
       if (!workerManager.isReady()) {
         await workerManager.init();
       }
@@ -3549,8 +3083,9 @@ var ForceDirectedGraph = class extends import_three6.Group {
     }
   }
   getLabelParseOptions() {
-    const { nodeDegrees, labelFontFamily, uniforms, renderer } = this.userData;
+    const { nodeAdjacency, nodeDegrees, labelFontFamily, uniforms, renderer } = this.userData;
     return {
+      adjacency: nodeAdjacency || [],
       degrees: nodeDegrees || [],
       fontFamily: labelFontFamily,
       maxTextureSize: renderer?.capabilities?.maxTextureSize || 16384,
@@ -3962,6 +3497,7 @@ var ForceDirectedGraph = class extends import_three6.Group {
   }
   set obscurity(v) {
     this.userData.uniforms.obscurity.value = Math.max(0, Math.min(1, v));
+    this.labels?.invalidateVisibility?.();
   }
   get blending() {
     return this.children[0].material.blending;

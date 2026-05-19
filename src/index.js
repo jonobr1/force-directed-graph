@@ -291,14 +291,30 @@ class ForceDirectedGraph extends Group {
         };
       });
       const nodeDegrees = new Array(data.nodes.length).fill(0);
+      const nodeAdjacency = Array.from({ length: data.nodes.length }, () => []);
 
       for (let i = 0; i < preparedLinks.length; i++) {
         const link = preparedLinks[i];
+        if (
+          !Number.isInteger(link.sourceIndex) ||
+          !Number.isInteger(link.targetIndex) ||
+          link.sourceIndex < 0 ||
+          link.targetIndex < 0 ||
+          link.sourceIndex >= data.nodes.length ||
+          link.targetIndex >= data.nodes.length
+        ) {
+          continue;
+        }
         nodeDegrees[link.sourceIndex] += 1;
         nodeDegrees[link.targetIndex] += 1;
+        nodeAdjacency[link.sourceIndex].push(link.targetIndex);
+        if (link.targetIndex !== link.sourceIndex) {
+          nodeAdjacency[link.targetIndex].push(link.sourceIndex);
+        }
       }
 
       scope.userData.nodeDegrees = nodeDegrees;
+      scope.userData.nodeAdjacency = nodeAdjacency;
 
       // Initialize worker if not already done
       if (!workerManager.isReady()) {
@@ -506,8 +522,10 @@ class ForceDirectedGraph extends Group {
   }
 
   getLabelParseOptions() {
-    const { nodeDegrees, labelFontFamily, uniforms, renderer } = this.userData;
+    const { nodeAdjacency, nodeDegrees, labelFontFamily, uniforms, renderer } =
+      this.userData;
     return {
+      adjacency: nodeAdjacency || [],
       degrees: nodeDegrees || [],
       fontFamily: labelFontFamily,
       maxTextureSize: renderer?.capabilities?.maxTextureSize || 16384,
@@ -976,6 +994,7 @@ class ForceDirectedGraph extends Group {
   }
   set obscurity(v) {
     this.userData.uniforms.obscurity.value = Math.max(0, Math.min(1, v));
+    this.labels?.invalidateVisibility?.();
   }
   get blending() {
     return this.children[0].material.blending;

@@ -240,6 +240,7 @@ declare module '@jonobr1/force-directed-graph/labels' {
       size: number,
       data: any,
       options?: {
+        adjacency?: number[][];
         degrees?: number[];
         fontSize?: number;
         fontFamily?: string;

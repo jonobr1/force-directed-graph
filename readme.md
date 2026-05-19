@@ -70,7 +70,7 @@ type LinkData = {
 > - `isStatic` defaults to `false`.
 > - If `color` is omitted, the node defaults to white.
 > - `set(data[, callback])` returns a `Promise` that resolves when geometry/textures are ready.
-> - `obscurity` is label-density control: `0` keeps as many labels visible as placement allows, `0.75` targets roughly 25% visible labels, and `1` hides all labels.
+> - `obscurity` is label-density control: `0` shows all labels, `0.75` targets roughly 25% visible labels, and `1` hides all labels. The active subset is now chosen from graph topology and priority, not camera clipspace placement.
 > - `fdg.labels.alignment` (`'center' | 'left' | 'right'`) and `fdg.labels.baseline` (`'top' | 'middle' | 'bottom'`) change label anchoring live.
 > - `fdg.labels.offset` (`THREE.Vector2`) adds extra label padding in label-space x/y.
 > - `fdg.labels.near` (camera-space distance, default `0`) discards labels at or closer than that depth, which is useful when `sizeAttenuation` makes nearby labels too large.

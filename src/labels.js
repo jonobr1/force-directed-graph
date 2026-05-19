@@ -34,16 +34,7 @@ const BASE_ATLAS_FONT_SIZE = 120;
 const BASE_ATLAS_PADDING = 4;
 const ATLAS_RASTER_SCALE = 2;
 const DEFAULT_FONT_FAMILY = 'Arial, sans-serif';
-const DEFAULT_LABEL_CELL_SIZE = 32;
-const LABEL_CAMERA_MOVE_EPSILON = 1e-4;
-const LABEL_SOLVE_SETTLE_MS = 160;
-const LABEL_SOLVE_BUILD_INTERVAL_MS = 80;
-const LABEL_SOLVE_BATCH_SIZE = 192;
-const LABEL_COMMIT_BATCH_SIZE = 16;
-const LABEL_BACKGROUND_REFRESH_MS = 600;
-const LABEL_PERSISTENCE_DECAY = 1;
-const LABEL_PERSISTENCE_GAIN = 3;
-const LABEL_PERSISTENCE_MAX = 12;
+const LABEL_GRAPH_DISTANCE_HOPS = 6;
 const LABEL_NODE_COLOR = new Color();
 const LabelAlignmentMap = {
   center: 0,
@@ -98,69 +89,6 @@ function getNodeColorComponents(node) {
   return [1, 1, 1];
 }
 
-function hasMeaningfulMatrixChange(
-  previous,
-  next,
-  epsilon = LABEL_CAMERA_MOVE_EPSILON,
-) {
-  if (!previous || !next || previous.length !== next.length) {
-    return true;
-  }
-
-  for (let i = 0; i < previous.length; i++) {
-    if (Math.abs(previous[i] - next[i]) > epsilon) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-function serializeVisibilityNumber(value) {
-  if (!Number.isFinite(value)) {
-    return '0';
-  }
-  return Number(value).toFixed(4);
-}
-
-function getVisibilitySettingsKey({
-  viewportWidth,
-  viewportHeight,
-  obscurity,
-  is2D,
-  sizeAttenuation,
-  frustumSize,
-  nodeRadius,
-  nodeScale,
-  labelAlignment,
-  labelBaseline,
-  labelFontSize,
-  labelNear,
-  labelOffsetX,
-  labelOffsetY,
-  beginning,
-  ending,
-}) {
-  return [
-    viewportWidth,
-    viewportHeight,
-    serializeVisibilityNumber(obscurity),
-    Number(Boolean(is2D)),
-    Number(Boolean(sizeAttenuation)),
-    serializeVisibilityNumber(frustumSize),
-    serializeVisibilityNumber(nodeRadius),
-    serializeVisibilityNumber(nodeScale),
-    serializeVisibilityNumber(labelAlignment),
-    serializeVisibilityNumber(labelBaseline),
-    serializeVisibilityNumber(labelFontSize),
-    serializeVisibilityNumber(labelNear),
-    serializeVisibilityNumber(labelOffsetX),
-    serializeVisibilityNumber(labelOffsetY),
-    serializeVisibilityNumber(beginning),
-    serializeVisibilityNumber(ending),
-  ].join('|');
-}
-
 function setLabelVisibility(data, labelId, visible) {
   const offset = labelId * 4;
   const value = visible ? 255 : 0;
@@ -168,6 +96,132 @@ function setLabelVisibility(data, labelId, visible) {
   data[offset + 1] = value;
   data[offset + 2] = value;
   data[offset + 3] = value;
+}
+
+function compareSelectionCandidates(a, b) {
+  if (b.hasManualPriority !== a.hasManualPriority) {
+    return Number(b.hasManualPriority) - Number(a.hasManualPriority);
+  }
+  if (b.manualPriority !== a.manualPriority) {
+    return b.manualPriority - a.manualPriority;
+  }
+  if (b.degree !== a.degree) {
+    return b.degree - a.degree;
+  }
+  return a.entry.stableId - b.entry.stableId;
+}
+
+function relaxGraphDistances(sourceIndex, adjacency, distances, maxHops) {
+  if (!Number.isInteger(sourceIndex) || sourceIndex < 0) {
+    return;
+  }
+
+  const visited = new Int16Array(adjacency.length || distances.length);
+  visited.fill(-1);
+  const queue = [sourceIndex];
+  const depths = [0];
+  visited[sourceIndex] = 0;
+  distances[sourceIndex] = 0;
+
+  for (let i = 0; i < queue.length; i++) {
+    const nodeIndex = queue[i];
+    const depth = depths[i];
+
+    if (depth >= maxHops) {
+      continue;
+    }
+
+    const neighbors = adjacency[nodeIndex] || [];
+    for (let j = 0; j < neighbors.length; j++) {
+      const neighbor = neighbors[j];
+      if (!Number.isInteger(neighbor) || neighbor < 0 || neighbor >= visited.length) {
+        continue;
+      }
+      if (visited[neighbor] >= 0) {
+        continue;
+      }
+
+      const nextDepth = depth + 1;
+      visited[neighbor] = nextDepth;
+      if (nextDepth < distances[neighbor]) {
+        distances[neighbor] = nextDepth;
+      }
+      queue.push(neighbor);
+      depths.push(nextDepth);
+    }
+  }
+}
+
+function buildLabelSelectionOrder(
+  entries,
+  adjacency = [],
+  nodes = [],
+  degrees = [],
+  maxHops = LABEL_GRAPH_DISTANCE_HOPS,
+) {
+  if (!entries || entries.length === 0) {
+    return [];
+  }
+
+  const candidates = entries
+    .map((entry) => {
+      const node = nodes[entry.nodeIndex] || {};
+      const manualPriority =
+        typeof node.labelPriority === 'number' && Number.isFinite(node.labelPriority)
+          ? node.labelPriority
+          : -Infinity;
+      return {
+        entry,
+        degree:
+          typeof degrees[entry.nodeIndex] === 'number' &&
+          Number.isFinite(degrees[entry.nodeIndex])
+            ? degrees[entry.nodeIndex]
+            : 0,
+        hasManualPriority: Number.isFinite(manualPriority),
+        manualPriority,
+        selected: false,
+      };
+    })
+    .sort(compareSelectionCandidates);
+
+  const distances = new Int16Array(
+    Math.max(
+      1,
+      nodes.length,
+      adjacency.length,
+      ...entries.map((entry) => entry.nodeIndex + 1),
+    ),
+  );
+  distances.fill(maxHops + 1);
+
+  const order = [];
+  let hasSelection = false;
+
+  for (let threshold = maxHops + 1; threshold >= 0; threshold--) {
+    for (let i = 0; i < candidates.length; i++) {
+      const candidate = candidates[i];
+      if (candidate.selected) {
+        continue;
+      }
+
+      const distance = distances[candidate.entry.nodeIndex];
+      if (hasSelection && distance < threshold) {
+        continue;
+      }
+
+      candidate.selected = true;
+      order.push(candidate.entry);
+      relaxGraphDistances(
+        candidate.entry.nodeIndex,
+        adjacency,
+        distances,
+        maxHops,
+      );
+      hasSelection = true;
+    }
+  }
+
+  return order;
 }
 
 function layoutAtlasRows(items, maxTextureSize) {
@@ -690,7 +744,7 @@ function configureAtlasTexture(texture, options = {}) {
 }
 
 class Labels extends Mesh {
-  constructor({ geometry, texture, entries, fontFamily }, uniforms) {
+  constructor({ geometry, texture, entries, fontFamily, selectionOrder }, uniforms) {
     const visibility = createVisibilityTexture(entries.length);
     const material = new ShaderMaterial({
       uniforms: {
@@ -738,438 +792,23 @@ class Labels extends Mesh {
     this.selectionGrid = new Map();
     this.acceptedEntries = [];
     this.obscurity = uniforms.obscurity;
+    this.selectionOrder =
+      selectionOrder || entries.slice().sort(compareLabelEntries);
     this.userData.fontFamily = fontFamily || DEFAULT_FONT_FAMILY;
     this.userData.fontSize = uniforms.labelFontSize.value;
     this.userData.near = sanitizeLabelNearDistance(uniforms.labelNear.value);
-    this.onBeforeRender = (renderer, _scene, camera) => {
-      if (this.visible) {
-        this.updateVisibility(renderer, camera);
-      }
-    };
-  }
-
-  ensurePositionsBuffer(size) {
-    const requiredLength = size * size * 4;
-    if (this.positionsBuffer.length !== requiredLength) {
-      this.positionsBuffer = new Float32Array(requiredLength);
-    }
-  }
-
-  invalidateVisibility({ deferUntilSettled = true } = {}) {
-    const now =
-      typeof performance !== 'undefined' ? performance.now() : Date.now();
     this.userData.visibilityDirty = true;
-    this.userData.resolveState = null;
-
-    if (deferUntilSettled) {
-      this.userData.lastCameraMotionTime = now;
-    }
-  }
-
-  updateCameraState(camera, now) {
-    const nextMatrix = camera.matrixWorld.elements;
-    const nextProjection = camera.projectionMatrix.elements;
-
-    if (!this.userData.cameraMatrix) {
-      this.userData.cameraMatrix = new Float32Array(nextMatrix);
-      this.userData.cameraProjection = new Float32Array(nextProjection);
-      return false;
-    }
-
-    const moved =
-      hasMeaningfulMatrixChange(this.userData.cameraMatrix, nextMatrix) ||
-      hasMeaningfulMatrixChange(this.userData.cameraProjection, nextProjection);
-
-    if (moved) {
-      this.userData.cameraMatrix.set(nextMatrix);
-      this.userData.cameraProjection.set(nextProjection);
-      this.userData.lastCameraMotionTime = now;
-      this.userData.visibilityDirty = true;
-      this.userData.resolveState = null;
-    }
-
-    return moved;
-  }
-
-  getVisibilitySettingsKey(viewportWidth, viewportHeight) {
-    const uniforms = this.material.uniforms;
-
-    return getVisibilitySettingsKey({
-      viewportWidth,
-      viewportHeight,
-      obscurity: this.obscurity.value,
-      is2D: uniforms.is2D.value,
-      sizeAttenuation: uniforms.sizeAttenuation.value,
-      frustumSize: uniforms.frustumSize.value,
-      nodeRadius: uniforms.nodeRadius.value,
-      nodeScale: uniforms.nodeScale.value,
-      labelAlignment: uniforms.labelAlignment.value,
-      labelBaseline: uniforms.labelBaseline.value,
-      labelFontSize: uniforms.labelFontSize.value,
-      labelNear: uniforms.labelNear.value,
-      labelOffsetX: uniforms.labelOffset.value.x,
-      labelOffsetY: uniforms.labelOffset.value.y,
-      beginning: uniforms.uBeginning.value,
-      ending: uniforms.uEnding.value,
-    });
-  }
-
-  decayPersistence() {
-    if (!this.userData.persistentEntries) {
-      this.userData.persistentEntries = new Set();
-    }
-
-    for (const entry of this.userData.persistentEntries) {
-      entry.persistence = Math.max(
-        0,
-        (entry.persistence || 0) - LABEL_PERSISTENCE_DECAY,
-      );
-
-      if (entry.persistence <= 0) {
-        this.userData.persistentEntries.delete(entry);
+    this.userData.lastAppliedQuota = -1;
+    this.onBeforeRender = () => {
+      if (this.visible) {
+        this.updateVisibility();
       }
-    }
-  }
-
-  boostPersistence(entries) {
-    if (!this.userData.persistentEntries) {
-      this.userData.persistentEntries = new Set();
-    }
-
-    for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i].entry;
-      entry.persistence = Math.min(
-        (entry.persistence || 0) + LABEL_PERSISTENCE_GAIN,
-        LABEL_PERSISTENCE_MAX,
-      );
-      this.userData.persistentEntries.add(entry);
-    }
-  }
-
-  projectEntry(entry, camera, viewportWidth, viewportHeight) {
-    const index = entry.nodeIndex * 4;
-    const bounds = projectLabelBounds({
-      nodePosition: {
-        x: this.positionsBuffer[index + 0],
-        y: this.positionsBuffer[index + 1],
-        z: this.positionsBuffer[index + 2],
-      },
-      objectMatrixWorld: this.matrixWorld,
-      camera,
-      viewportWidth,
-      viewportHeight,
-      frustumSize: this.material.uniforms.frustumSize.value,
-      is2D: this.material.uniforms.is2D.value,
-      sizeAttenuation: this.material.uniforms.sizeAttenuation.value,
-      nodeRadius: this.material.uniforms.nodeRadius.value,
-      nodeScale: this.material.uniforms.nodeScale.value,
-      aspectRatio: entry.aspectRatio,
-      labelAlignment: this.material.uniforms.labelAlignment.value,
-      labelBaseline: this.material.uniforms.labelBaseline.value,
-      labelFontSize: this.material.uniforms.labelFontSize.value,
-      labelNear: this.material.uniforms.labelNear.value,
-      labelOffset: this.material.uniforms.labelOffset.value,
-      pointSize: entry.pointSize,
-    });
-
-    if (!bounds) {
-      return null;
-    }
-
-    return {
-      entry,
-      bounds,
-      depthPriority: bounds.depthPriority,
     };
   }
 
-  computeCellSize(entries) {
-    if (!entries || entries.length === 0) {
-      return this.userData.cachedCellSize || DEFAULT_LABEL_CELL_SIZE;
-    }
-
-    let totalHeight = 0;
-    for (let i = 0; i < entries.length; i++) {
-      totalHeight += entries[i].bounds.height;
-    }
-
-    return Math.max(
-      12,
-      Math.min(
-        96,
-        totalHeight / Math.max(entries.length, 1) ||
-          this.userData.cachedCellSize ||
-          DEFAULT_LABEL_CELL_SIZE,
-      ),
-    );
-  }
-
-  tryAcceptProjected(projected, state) {
-    const cellBounds = getCollisionCellBounds(
-      projected.bounds,
-      state.cellSize,
-      state.gridWidth,
-      state.gridHeight,
-    );
-
-    if (!cellBounds) {
-      return false;
-    }
-
-    const seen = new Set();
-    let collides = false;
-
-    for (
-      let cy = cellBounds.minCellY;
-      cy <= cellBounds.maxCellY && !collides;
-      cy++
-    ) {
-      for (let cx = cellBounds.minCellX; cx <= cellBounds.maxCellX; cx++) {
-        const key = packCollisionCellKey(cx, cy, state.gridWidth);
-        const bucket = state.targetSelectionGrid.get(key);
-        if (!bucket) {
-          continue;
-        }
-
-        for (let j = 0; j < bucket.length; j++) {
-          const accepted = bucket[j];
-          if (seen.has(accepted.entry.labelId)) {
-            continue;
-          }
-          seen.add(accepted.entry.labelId);
-
-          if (intersectsBounds(projected.bounds, accepted.bounds, 2)) {
-            collides = true;
-            break;
-          }
-        }
-      }
-    }
-
-    if (collides) {
-      return false;
-    }
-
-    state.targetAcceptedEntries.push(projected);
-    state.targetAcceptedLabelIds.add(projected.entry.labelId);
-
-    for (let cy = cellBounds.minCellY; cy <= cellBounds.maxCellY; cy++) {
-      for (let cx = cellBounds.minCellX; cx <= cellBounds.maxCellX; cx++) {
-        const key = packCollisionCellKey(cx, cy, state.gridWidth);
-        const bucket = state.targetSelectionGrid.get(key);
-        if (bucket) {
-          bucket.push(projected);
-        } else {
-          state.targetSelectionGrid.set(key, [projected]);
-        }
-      }
-    }
-
-    return true;
-  }
-
-  readPositions(renderer, size, renderTarget) {
-    this.ensurePositionsBuffer(size);
-    const activeRenderTarget = renderer.getRenderTarget();
-
-    try {
-      renderer.readRenderTargetPixels(
-        renderTarget,
-        0,
-        0,
-        size,
-        size,
-        this.positionsBuffer,
-      );
-      renderer.setRenderTarget(activeRenderTarget);
-      return true;
-    } catch (error) {
-      if (!this.userData.didWarnPlacementReadback) {
-        console.warn(
-          'Force Directed Graph: label placement readback failed.',
-          error,
-        );
-        this.userData.didWarnPlacementReadback = true;
-      }
-      renderer.setRenderTarget(activeRenderTarget);
-      return false;
-    }
-  }
-
-  beginResolveSession(
-    renderer,
-    camera,
-    size,
-    renderTarget,
-    viewportWidth,
-    viewportHeight,
-    quota,
-    now,
-  ) {
-    if (!this.readPositions(renderer, size, renderTarget)) {
-      this.applyPriorityQuotaOnly();
-      this.userData.visibilityDirty = false;
-      this.userData.resolveState = null;
-      return;
-    }
-
-    this.decayPersistence();
-
-    const estimateEntries = [];
-    for (let i = 0; i < this.acceptedEntries.length; i++) {
-      const projected = this.projectEntry(
-        this.acceptedEntries[i].entry,
-        camera,
-        viewportWidth,
-        viewportHeight,
-      );
-      if (projected) {
-        estimateEntries.push(projected);
-      }
-    }
-
-    const cellSize = this.computeCellSize(estimateEntries);
-    const gridWidth = Math.max(1, Math.ceil(viewportWidth / cellSize));
-    const gridHeight = Math.max(1, Math.ceil(viewportHeight / cellSize));
-
-    this.userData.resolveState = {
-      phase: 'building',
-      quota,
-      cellSize,
-      gridWidth,
-      gridHeight,
-      viewportWidth,
-      viewportHeight,
-      candidateCursor: 0,
-      targetAcceptedEntries: [],
-      targetAcceptedLabelIds: new Set(),
-      targetSelectionGrid: new Map(),
-      pendingAdditions: [],
-      pendingRemovals: [],
-      currentEntriesById: new Map(),
-      targetEntriesById: new Map(),
-    };
-    this.userData.lastResolveBuildTime = now;
-  }
-
-  buildResolveBatch(renderer, camera, size, renderTarget, now) {
-    const state = this.userData.resolveState;
-
-    if (
-      !state ||
-      state.phase !== 'building' ||
-      now - (this.userData.lastResolveBuildTime || 0) <
-        LABEL_SOLVE_BUILD_INTERVAL_MS
-    ) {
-      return;
-    }
-
-    this.userData.lastResolveBuildTime = now;
-
-    if (!this.readPositions(renderer, size, renderTarget)) {
-      this.applyPriorityQuotaOnly();
-      this.userData.visibilityDirty = false;
-      this.userData.resolveState = null;
-      return;
-    }
-
-    const batch = [];
-
-    while (
-      batch.length < LABEL_SOLVE_BATCH_SIZE &&
-      state.candidateCursor < this.sortedEntries.length
-    ) {
-      const entry = this.sortedEntries[state.candidateCursor++];
-      const projected = this.projectEntry(
-        entry,
-        camera,
-        state.viewportWidth,
-        state.viewportHeight,
-      );
-
-      if (projected) {
-        batch.push(projected);
-      }
-    }
-
-    batch.sort(compareProjectedEntries);
-
-    for (let i = 0; i < batch.length; i++) {
-      if (state.targetAcceptedEntries.length >= state.quota) {
-        break;
-      }
-      this.tryAcceptProjected(batch[i], state);
-    }
-
-    if (
-      state.targetAcceptedEntries.length >= state.quota ||
-      state.candidateCursor >= this.sortedEntries.length
-    ) {
-      state.phase = 'committing';
-      state.currentEntriesById = new Map(
-        this.acceptedEntries.map((projected) => [projected.entry.labelId, projected]),
-      );
-      state.targetEntriesById = new Map(
-        state.targetAcceptedEntries.map((projected) => [
-          projected.entry.labelId,
-          projected,
-        ]),
-      );
-      state.pendingRemovals = this.acceptedEntries.filter(
-        (projected) => !state.targetEntriesById.has(projected.entry.labelId),
-      );
-      state.pendingAdditions = state.targetAcceptedEntries.filter(
-        (projected) => !state.currentEntriesById.has(projected.entry.labelId),
-      );
-    }
-  }
-
-  applyCommitBatch() {
-    const state = this.userData.resolveState;
-
-    if (!state || state.phase !== 'committing') {
-      return;
-    }
-
-    let processed = 0;
-
-    while (
-      processed < LABEL_COMMIT_BATCH_SIZE &&
-      (state.pendingRemovals.length > 0 || state.pendingAdditions.length > 0)
-    ) {
-      if (state.pendingRemovals.length > 0) {
-        const projected = state.pendingRemovals.shift();
-        state.currentEntriesById.delete(projected.entry.labelId);
-        setLabelVisibility(this.visibility.data, projected.entry.labelId, false);
-        processed += 1;
-      }
-
-      if (
-        processed < LABEL_COMMIT_BATCH_SIZE &&
-        state.pendingAdditions.length > 0
-      ) {
-        const projected = state.pendingAdditions.shift();
-        state.currentEntriesById.set(projected.entry.labelId, projected);
-        setLabelVisibility(this.visibility.data, projected.entry.labelId, true);
-        processed += 1;
-      }
-    }
-
-    this.acceptedEntries = Array.from(state.currentEntriesById.values());
-    this.visibility.texture.needsUpdate = true;
-
-    if (
-      state.pendingRemovals.length === 0 &&
-      state.pendingAdditions.length === 0
-    ) {
-      this.acceptedEntries = state.targetAcceptedEntries.slice();
-      this.userData.cachedCellSize = state.cellSize;
-      this.userData.resolveState = null;
-      this.userData.visibilityDirty = false;
-      this.userData.lastResolvedTime =
-        typeof performance !== 'undefined' ? performance.now() : Date.now();
-      this.boostPersistence(this.acceptedEntries);
-    }
+  invalidateVisibility() {
+    this.userData.visibilityDirty = true;
+    this.userData.lastAppliedQuota = -1;
   }
 
   applyPriorityQuotaOnly() {
@@ -1184,97 +823,34 @@ class Labels extends Mesh {
     this.visibility.texture.needsUpdate = true;
   }
 
-  updateVisibility(renderer, camera) {
-    const graph = this.parent;
-    const { gpgpu, uniforms, variables } = graph?.userData || {};
-
-    if (!graph || !gpgpu || !variables?.positions || !uniforms?.size) {
-      return;
-    }
-
-    const size = uniforms.size.value;
-    if (!Number.isFinite(size) || size <= 0) {
-      return;
-    }
-
-    const renderTarget = gpgpu.getCurrentRenderTarget(variables.positions);
-    if (!renderTarget) {
-      return;
-    }
-    renderer.getDrawingBufferSize(DRAWING_BUFFER_SIZE);
-
-    const now =
-      typeof performance !== 'undefined' ? performance.now() : Date.now();
-    const viewportWidth = DRAWING_BUFFER_SIZE.x;
-    const viewportHeight = DRAWING_BUFFER_SIZE.y;
+  updateVisibility() {
     const quota = getVisibleQuota(this.obscurity.value, this.entries.length);
-    const settingsKey = this.getVisibilitySettingsKey(
-      viewportWidth,
-      viewportHeight,
-    );
-
-    if (this.userData.settingsKey !== settingsKey) {
-      const deferUntilSettled = this.acceptedEntries.length > 0;
-      this.userData.settingsKey = settingsKey;
-      this.invalidateVisibility({ deferUntilSettled });
-    }
-
-    const cameraMoved = this.updateCameraState(camera, now);
-
-    if (quota <= 0 || viewportWidth <= 0 || viewportHeight <= 0) {
-      this.acceptedEntries.length = 0;
-      this.visibility.data.fill(0);
-      this.visibility.texture.needsUpdate = true;
-      this.userData.visibilityDirty = false;
-      this.userData.resolveState = null;
-      return;
-    }
-
-    if (cameraMoved) {
-      return;
-    }
 
     if (
       !this.userData.visibilityDirty &&
-      !this.userData.resolveState &&
-      now - (this.userData.lastResolvedTime || 0) >=
-        LABEL_BACKGROUND_REFRESH_MS
-    ) {
-      this.invalidateVisibility({ deferUntilSettled: false });
-    }
-
-    if (!this.userData.visibilityDirty && !this.userData.resolveState) {
-      return;
-    }
-
-    if (
-      now - (this.userData.lastCameraMotionTime || 0) <
-      LABEL_SOLVE_SETTLE_MS
+      this.userData.lastAppliedQuota === quota
     ) {
       return;
     }
 
-    if (!this.userData.resolveState) {
-      this.beginResolveSession(
-        renderer,
-        camera,
-        size,
-        renderTarget,
-        viewportWidth,
-        viewportHeight,
-        quota,
-        now,
-      );
-      return;
+    this.visibility.data.fill(0);
+    this.acceptedEntries.length = 0;
+
+    if (quota > 0) {
+      const orderedEntries =
+        quota >= this.entries.length ? this.entries : this.selectionOrder;
+      const limit = Math.min(quota, orderedEntries.length);
+
+      for (let i = 0; i < limit; i++) {
+        const entry = orderedEntries[i];
+        setLabelVisibility(this.visibility.data, entry.labelId, true);
+        this.acceptedEntries.push({ entry });
+      }
     }
 
-    if (this.userData.resolveState?.phase === 'building') {
-      this.buildResolveBatch(renderer, camera, size, renderTarget, now);
-    }
-
-    if (this.userData.resolveState?.phase === 'committing') {
-      this.applyCommitBatch();
-    }
+    this.visibility.texture.needsUpdate = true;
+    this.userData.visibilityDirty = false;
+    this.userData.lastAppliedQuota = quota;
   }
 
   dispose() {
@@ -1284,7 +860,14 @@ class Labels extends Mesh {
     this.geometry.dispose();
   }
 
-  replaceData({ geometry, texture, entries, fontFamily, fontSize }) {
+  replaceData({
+    geometry,
+    texture,
+    entries,
+    fontFamily,
+    fontSize,
+    selectionOrder,
+  }) {
     this.geometry.dispose();
     this.material.uniforms.textureAtlas.value?.dispose?.();
     this.material.uniforms.textureVisibility.value?.dispose?.();
@@ -1292,6 +875,8 @@ class Labels extends Mesh {
     this.geometry = geometry;
     this.entries = entries;
     this.sortedEntries = entries.slice().sort(compareLabelEntries);
+    this.selectionOrder =
+      selectionOrder || entries.slice().sort(compareLabelEntries);
     this.visibility = createVisibilityTexture(entries.length);
     this.material.uniforms.textureAtlas.value = texture;
     this.material.uniforms.textureVisibility.value = this.visibility.texture;
@@ -1304,10 +889,9 @@ class Labels extends Mesh {
     this.userData.near = sanitizeLabelNearDistance(
       this.material.uniforms.labelNear.value,
     );
-    this.userData.cachedCellSize = DEFAULT_LABEL_CELL_SIZE;
     this.visibility.data.fill(0);
     this.visibility.texture.needsUpdate = true;
-    this.invalidateVisibility({ deferUntilSettled: false });
+    this.invalidateVisibility();
   }
 
   get fontSize() {
@@ -1330,7 +914,6 @@ class Labels extends Mesh {
     }
 
     this.material.uniforms.labelFontSize.value = nextValue;
-    this.invalidateVisibility({ deferUntilSettled: false });
   }
 
   get fontFamily() {
@@ -1366,7 +949,6 @@ class Labels extends Mesh {
   set alignment(v) {
     this.material.uniforms.labelAlignment.value =
       LabelAlignmentMap[v] ?? LabelAlignmentMap.center;
-    this.invalidateVisibility({ deferUntilSettled: false });
   }
 
   get baseline() {
@@ -1376,7 +958,6 @@ class Labels extends Mesh {
   set baseline(v) {
     this.material.uniforms.labelBaseline.value =
       LabelBaselineMap[v] ?? LabelBaselineMap.top;
-    this.invalidateVisibility({ deferUntilSettled: false });
   }
 
   get offset() {
@@ -1388,7 +969,6 @@ class Labels extends Mesh {
       return;
     }
     this.material.uniforms.labelOffset.value.set(v.x, v.y);
-    this.invalidateVisibility({ deferUntilSettled: false });
   }
 
   get near() {
@@ -1411,7 +991,6 @@ class Labels extends Mesh {
     }
 
     this.material.uniforms.labelNear.value = nextValue;
-    this.invalidateVisibility({ deferUntilSettled: false });
   }
 
   static parse(size, data, options = {}) {
@@ -1492,6 +1071,12 @@ class Labels extends Mesh {
     geometry.instanceCount = entries.length;
 
     const texture = configureAtlasTexture(new CanvasTexture(canvas), options);
+    const selectionOrder = buildLabelSelectionOrder(
+      entries,
+      options.adjacency || [],
+      data.nodes,
+      options.degrees || [],
+    );
 
     return Promise.resolve({
       geometry,
@@ -1499,11 +1084,13 @@ class Labels extends Mesh {
       entries,
       fontFamily: options.fontFamily || DEFAULT_FONT_FAMILY,
       fontSize: sanitizeLabelFontSize(options.fontSize),
+      selectionOrder,
     });
   }
 }
 
 const __TEST__ = {
+  buildLabelSelectionOrder,
   buildSortTuple,
   clamp01,
   compareLabelEntries,
@@ -1515,8 +1102,6 @@ const __TEST__ = {
   getVisibleQuota,
   getPlacementTextureDimensions,
   getNodeColorComponents,
-  getVisibilitySettingsKey,
-  hasMeaningfulMatrixChange,
   sanitizeLabelFontSize,
   sanitizeLabelNearDistance,
   intersectsBounds,
