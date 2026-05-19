@@ -5,6 +5,8 @@ import {
   DataTexture,
   InstancedBufferAttribute,
   InstancedBufferGeometry,
+  LinearFilter,
+  LinearMipmapLinearFilter,
   Matrix4,
   Mesh,
   NearestFilter,
@@ -29,6 +31,7 @@ const MV_CENTER = new Vector4();
 const DRAWING_BUFFER_SIZE = new Vector2();
 const BASE_ATLAS_FONT_SIZE = 120;
 const BASE_ATLAS_PADDING = 4;
+const ATLAS_RASTER_SCALE = 2;
 const DEFAULT_FONT_FAMILY = 'Arial, sans-serif';
 const LabelAlignmentMap = {
   center: 0,
@@ -66,6 +69,13 @@ function sanitizeLabelFontSize(fontSize) {
     return 1;
   }
   return Math.max(0.01, fontSize);
+}
+
+function sanitizeLabelNearDistance(nearDistance) {
+  if (!Number.isFinite(nearDistance)) {
+    return 0;
+  }
+  return Math.max(0, nearDistance);
 }
 
 function layoutAtlasRows(items, maxTextureSize) {
@@ -211,8 +221,15 @@ function fitAtlasLayout(tempCtx, rawItems, {
  */
 function buildTextAtlas(nodes, degrees = [], options = {}) {
   const fontScale = sanitizeLabelFontSize(options.fontSize);
-  const requestedPadding = Math.max(1, Math.round(BASE_ATLAS_PADDING * fontScale));
-  const requestedFontSize = Math.max(1, Math.round(BASE_ATLAS_FONT_SIZE * fontScale));
+  const atlasScale = ATLAS_RASTER_SCALE;
+  const requestedPadding = Math.max(
+    1,
+    Math.round(BASE_ATLAS_PADDING * fontScale * atlasScale),
+  );
+  const requestedFontSize = Math.max(
+    1,
+    Math.round(BASE_ATLAS_FONT_SIZE * fontScale * atlasScale),
+  );
   const fontFamily = options.fontFamily || DEFAULT_FONT_FAMILY;
   const maxTextureSize = Math.max(1, options.maxTextureSize || 16384);
   const textColor = '#000';
@@ -261,6 +278,7 @@ function buildTextAtlas(nodes, degrees = [], options = {}) {
   canvas.height = fittedAtlas.layout.height;
 
   const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
   ctx.font = `${fittedAtlas.fontSize}px ${fontFamily}`;
   ctx.fillStyle = textColor;
   ctx.textBaseline = 'middle';
@@ -421,6 +439,7 @@ function projectLabelBounds({
   labelAlignment = 0,
   labelBaseline = 1,
   labelFontSize = 1,
+  labelNear = 0,
   labelOffset = { x: 0, y: 0 },
   pointSize = 1,
 }) {
@@ -435,11 +454,26 @@ function projectLabelBounds({
     return null;
   }
 
+  const viewDistance = -MV_CENTER.z;
+  const nearDistance = sanitizeLabelNearDistance(labelNear);
+
+  if (viewDistance <= nearDistance) {
+    return null;
+  }
+
   const sizeScale = sizeAttenuation
-    ? frustumSize / Math.max(-MV_CENTER.z, 0.001)
+    ? frustumSize / Math.max(viewDistance, 0.001)
     : 1.0;
-  const labelHeight =
+  const labelPixelHeight =
     0.1 * nodeRadius * pointSize * nodeScale * sizeScale * sanitizeLabelFontSize(labelFontSize);
+  const projectionScaleY = Math.max(
+    Math.abs(camera.projectionMatrix.elements[5]),
+    0.0001,
+  );
+  const depthScale = camera.isPerspectiveCamera ? viewDistance : 1.0;
+  const worldUnitsPerPixel =
+    (2.0 * depthScale) / Math.max(projectionScaleY * Math.max(viewportHeight, 1), 0.001);
+  const labelHeight = labelPixelHeight * worldUnitsPerPixel;
   const labelWidth = labelHeight * aspectRatio;
   const offsetX = (labelOffset?.x || 0) * labelHeight;
   const offsetY = (labelOffset?.y || 0) * labelHeight;
@@ -498,8 +532,8 @@ function projectLabelBounds({
     height: maxY - minY,
     centerX: (minX + maxX) * 0.5,
     centerY: (minY + maxY) * 0.5,
-    viewDistance: -MV_CENTER.z,
-    depthPriority: 1.0 / Math.max(-MV_CENTER.z, 0.001),
+    viewDistance,
+    depthPriority: 1.0 / Math.max(viewDistance, 0.001),
     clipped:
       minX < 0 ||
       minY < 0 ||
@@ -524,6 +558,17 @@ function createVisibilityTexture(labelCount) {
   return { data, texture, width, height };
 }
 
+function configureAtlasTexture(texture, options = {}) {
+  const useMipmaps = Boolean(options.useMipmaps);
+  texture.minFilter = useMipmaps ? LinearMipmapLinearFilter : LinearFilter;
+  texture.magFilter = LinearFilter;
+  texture.wrapS = ClampToEdgeWrapping;
+  texture.wrapT = ClampToEdgeWrapping;
+  texture.generateMipmaps = useMipmaps;
+  texture.needsUpdate = true;
+  return texture;
+}
+
 class Labels extends Mesh {
   constructor({ geometry, texture, entries, fontFamily }, uniforms) {
     const visibility = createVisibilityTexture(entries.length);
@@ -536,11 +581,13 @@ class Labels extends Mesh {
         frustumSize: uniforms.frustumSize,
         is2D: uniforms.is2D,
         sizeAttenuation: uniforms.sizeAttenuation,
+        resolution: uniforms.resolution,
         nodeRadius: uniforms.nodeRadius,
         nodeScale: uniforms.nodeScale,
         labelAlignment: uniforms.labelAlignment,
         labelBaseline: uniforms.labelBaseline,
         labelFontSize: uniforms.labelFontSize,
+        labelNear: uniforms.labelNear,
         labelOffset: uniforms.labelOffset,
         uBeginning: uniforms.uBeginning,
         uEnding: uniforms.uEnding,
@@ -567,6 +614,7 @@ class Labels extends Mesh {
     this.obscurity = uniforms.obscurity;
     this.userData.fontFamily = fontFamily || DEFAULT_FONT_FAMILY;
     this.userData.fontSize = uniforms.labelFontSize.value;
+    this.userData.near = sanitizeLabelNearDistance(uniforms.labelNear.value);
     this.onBeforeRender = (renderer, scene, camera) => {
       this.updateVisibility(renderer, camera);
     };
@@ -678,6 +726,7 @@ class Labels extends Mesh {
         labelAlignment: this.material.uniforms.labelAlignment.value,
         labelBaseline: this.material.uniforms.labelBaseline.value,
         labelFontSize: this.material.uniforms.labelFontSize.value,
+        labelNear: this.material.uniforms.labelNear.value,
         labelOffset: this.material.uniforms.labelOffset.value,
         pointSize: entry.pointSize,
       });
@@ -807,6 +856,9 @@ class Labels extends Mesh {
     this.acceptedEntries.length = 0;
     this.userData.fontFamily = fontFamily || DEFAULT_FONT_FAMILY;
     this.userData.fontSize = sanitizeLabelFontSize(fontSize);
+    this.userData.near = sanitizeLabelNearDistance(
+      this.material.uniforms.labelNear.value,
+    );
   }
 
   get fontSize() {
@@ -886,6 +938,28 @@ class Labels extends Mesh {
     this.material.uniforms.labelOffset.value.set(v.x, v.y);
   }
 
+  get near() {
+    if (this.parent?.userData?.uniforms?.labelNear) {
+      return this.parent.userData.uniforms.labelNear.value;
+    }
+    return this.userData.near;
+  }
+
+  set near(v) {
+    const nextValue = sanitizeLabelNearDistance(v);
+    this.userData.near = nextValue;
+
+    if (!this.material?.uniforms?.labelNear) {
+      return;
+    }
+
+    if (this.material.uniforms.labelNear.value === nextValue) {
+      return;
+    }
+
+    this.material.uniforms.labelNear.value = nextValue;
+  }
+
   static parse(size, data, options = {}) {
     const atlas = buildTextAtlas(data.nodes, options.degrees || [], options);
 
@@ -957,10 +1031,7 @@ class Labels extends Mesh {
     );
     geometry.instanceCount = entries.length;
 
-    const texture = new CanvasTexture(canvas);
-    texture.minFilter = NearestFilter;
-    texture.magFilter = NearestFilter;
-    texture.generateMipmaps = false;
+    const texture = configureAtlasTexture(new CanvasTexture(canvas), options);
 
     return Promise.resolve({
       geometry,
@@ -984,9 +1055,11 @@ const __TEST__ = {
   getVisibleQuota,
   getPlacementTextureDimensions,
   sanitizeLabelFontSize,
+  sanitizeLabelNearDistance,
   intersectsBounds,
   packCollisionCellKey,
   projectLabelBounds,
+  configureAtlasTexture,
 };
 
 export { Labels, __TEST__ };

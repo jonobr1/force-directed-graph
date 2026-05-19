@@ -226,6 +226,8 @@
 
           fdg.pointColor.setRGB(0.3, 0.3, 0.3);
           fdg.linkColor.setRGB(0.9, 0.9, 0.9);
+          fdg.labels.fontSize = 5;
+          fdg.labels.near = 50;
 
           gui.close();
 
@@ -285,6 +287,7 @@
           folders.labels.add(fdg.labels, 'fontSize', 1, 100, 1).name('fontSize');
           folders.labels.add(fdg.labels, 'alignment', ['left', 'center', 'right']).name('alignment');
           folders.labels.add(fdg.labels, 'baseline', ['top', 'middle', 'bottom']).name('baseline');
+          folders.labels.add(fdg.labels, 'near', 0, 100, 0.1).name('near');
           folders.labels.add(fdg.labels.offset, 'x', -5, 5, 0.1).name('offsetX');
           folders.labels.add(fdg.labels.offset, 'y', -5, 5, 0.1).name('offsetY');
 

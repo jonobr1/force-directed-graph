@@ -139,6 +139,7 @@ class ForceDirectedGraph extends Group {
       labelAlignment: { value: 0 },
       labelBaseline: { value: 1 },
       labelFontSize: { value: 1 },
+      labelNear: { value: 0 },
       labelOffset: { value: new Vector2(0, 0) },
     };
     this.userData.labelFontFamily = DEFAULT_LABEL_FONT_FAMILY;
@@ -504,6 +505,7 @@ class ForceDirectedGraph extends Group {
       degrees: nodeDegrees || [],
       fontFamily: labelFontFamily,
       maxTextureSize: renderer?.capabilities?.maxTextureSize || 16384,
+      useMipmaps: renderer?.capabilities?.isWebGL2 === true,
     };
   }
 

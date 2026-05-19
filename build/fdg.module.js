@@ -1021,6 +1021,8 @@ import {
   DataTexture,
   InstancedBufferAttribute as InstancedBufferAttribute2,
   InstancedBufferGeometry as InstancedBufferGeometry2,
+  LinearFilter,
+  LinearMipmapLinearFilter,
   Matrix4,
   Mesh as Mesh2,
   NearestFilter,
@@ -1042,6 +1044,7 @@ var labels = {
     uniform float frustumSize;
     uniform float is2D;
     uniform float sizeAttenuation;
+    uniform vec2 resolution;
     uniform float uBeginning;
     uniform float uEnding;
     uniform float uNodeAmount;
@@ -1050,6 +1053,7 @@ var labels = {
     uniform float labelAlignment;
     uniform float labelBaseline;
     uniform float labelFontSize;
+    uniform float labelNear;
     uniform vec2 labelOffset;
 
     attribute vec3 source;       // .xy = UV into texturePositions, .z = nodeIndex + 1
@@ -1073,14 +1077,23 @@ var labels = {
       nodePos.z *= 1.0 - is2D;
 
       vec4 mvCenter = modelViewMatrix * vec4( nodePos, 1.0 );
+      float viewDistance = -mvCenter.z;
+      float beyondNear = 1.0 - step( viewDistance, max( labelNear, 0.0 ) );
+      inRange *= beyondNear;
 
       // Billboard: extract camera right and up from the view matrix columns
       vec3 right = normalize( vec3( viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0] ) );
       vec3 up    = normalize( vec3( viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1] ) );
 
-      // Scale label to match node visual size, with optional depth attenuation
-      float sizeScale  = mix( 1.0, frustumSize / max( -mvCenter.z, 0.001 ), sizeAttenuation );
-      float labelH     = 0.1 * nodeRadius * pointSize * nodeScale * sizeScale * max( labelFontSize, 0.001 );
+      // Match point-sprite sizing by converting the intended screen-space
+      // label height into world units for the active projection.
+      float sizeScale  = mix( 1.0, frustumSize / max( viewDistance, 0.001 ), sizeAttenuation );
+      float labelPixelH = 0.1 * nodeRadius * pointSize * nodeScale * sizeScale * max( labelFontSize, 0.001 );
+      float projectionScaleY = max( abs( projectionMatrix[1][1] ), 0.0001 );
+      float isPerspectiveCamera = step( 0.5, abs( projectionMatrix[2][3] ) );
+      float depthScale = mix( 1.0, viewDistance, isPerspectiveCamera );
+      float worldUnitsPerPixel = ( 2.0 * depthScale ) / max( projectionScaleY * max( resolution.y, 1.0 ), 0.001 );
+      float labelH     = labelPixelH * worldUnitsPerPixel;
       float labelW     = labelH * aspectRatio;
       vec2 offset      = labelOffset * labelH;
 
@@ -1149,6 +1162,7 @@ var MV_CENTER = new Vector4();
 var DRAWING_BUFFER_SIZE = new Vector2();
 var BASE_ATLAS_FONT_SIZE = 120;
 var BASE_ATLAS_PADDING = 4;
+var ATLAS_RASTER_SCALE = 2;
 var DEFAULT_FONT_FAMILY = "Arial, sans-serif";
 var LabelAlignmentMap = {
   center: 0,
@@ -1183,6 +1197,12 @@ function sanitizeLabelFontSize(fontSize) {
     return 1;
   }
   return Math.max(0.01, fontSize);
+}
+function sanitizeLabelNearDistance(nearDistance) {
+  if (!Number.isFinite(nearDistance)) {
+    return 0;
+  }
+  return Math.max(0, nearDistance);
 }
 function layoutAtlasRows(items, maxTextureSize) {
   if (!Number.isFinite(maxTextureSize) || maxTextureSize <= 0) {
@@ -1299,8 +1319,15 @@ function fitAtlasLayout(tempCtx, rawItems, {
 }
 function buildTextAtlas(nodes, degrees = [], options = {}) {
   const fontScale = sanitizeLabelFontSize(options.fontSize);
-  const requestedPadding = Math.max(1, Math.round(BASE_ATLAS_PADDING * fontScale));
-  const requestedFontSize = Math.max(1, Math.round(BASE_ATLAS_FONT_SIZE * fontScale));
+  const atlasScale = ATLAS_RASTER_SCALE;
+  const requestedPadding = Math.max(
+    1,
+    Math.round(BASE_ATLAS_PADDING * fontScale * atlasScale)
+  );
+  const requestedFontSize = Math.max(
+    1,
+    Math.round(BASE_ATLAS_FONT_SIZE * fontScale * atlasScale)
+  );
   const fontFamily = options.fontFamily || DEFAULT_FONT_FAMILY;
   const maxTextureSize = Math.max(1, options.maxTextureSize || 16384);
   const textColor = "#000";
@@ -1337,6 +1364,7 @@ function buildTextAtlas(nodes, degrees = [], options = {}) {
   canvas.width = fittedAtlas.layout.width;
   canvas.height = fittedAtlas.layout.height;
   const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = true;
   ctx.font = `${fittedAtlas.fontSize}px ${fontFamily}`;
   ctx.fillStyle = textColor;
   ctx.textBaseline = "middle";
@@ -1461,6 +1489,7 @@ function projectLabelBounds({
   labelAlignment = 0,
   labelBaseline = 1,
   labelFontSize = 1,
+  labelNear = 0,
   labelOffset = { x: 0, y: 0 },
   pointSize = 1
 }) {
@@ -1472,8 +1501,20 @@ function projectLabelBounds({
   if (!Number.isFinite(MV_CENTER.z) || MV_CENTER.z >= 0) {
     return null;
   }
-  const sizeScale = sizeAttenuation ? frustumSize / Math.max(-MV_CENTER.z, 1e-3) : 1;
-  const labelHeight = 0.1 * nodeRadius * pointSize * nodeScale * sizeScale * sanitizeLabelFontSize(labelFontSize);
+  const viewDistance = -MV_CENTER.z;
+  const nearDistance = sanitizeLabelNearDistance(labelNear);
+  if (viewDistance <= nearDistance) {
+    return null;
+  }
+  const sizeScale = sizeAttenuation ? frustumSize / Math.max(viewDistance, 1e-3) : 1;
+  const labelPixelHeight = 0.1 * nodeRadius * pointSize * nodeScale * sizeScale * sanitizeLabelFontSize(labelFontSize);
+  const projectionScaleY = Math.max(
+    Math.abs(camera.projectionMatrix.elements[5]),
+    1e-4
+  );
+  const depthScale = camera.isPerspectiveCamera ? viewDistance : 1;
+  const worldUnitsPerPixel = 2 * depthScale / Math.max(projectionScaleY * Math.max(viewportHeight, 1), 1e-3);
+  const labelHeight = labelPixelHeight * worldUnitsPerPixel;
   const labelWidth = labelHeight * aspectRatio;
   const offsetX = (labelOffset?.x || 0) * labelHeight;
   const offsetY = (labelOffset?.y || 0) * labelHeight;
@@ -1517,8 +1558,8 @@ function projectLabelBounds({
     height: maxY - minY,
     centerX: (minX + maxX) * 0.5,
     centerY: (minY + maxY) * 0.5,
-    viewDistance: -MV_CENTER.z,
-    depthPriority: 1 / Math.max(-MV_CENTER.z, 1e-3),
+    viewDistance,
+    depthPriority: 1 / Math.max(viewDistance, 1e-3),
     clipped: minX < 0 || minY < 0 || maxX > viewportWidth || maxY > viewportHeight
   };
 }
@@ -1535,6 +1576,16 @@ function createVisibilityTexture(labelCount) {
   texture.needsUpdate = true;
   return { data, texture, width, height };
 }
+function configureAtlasTexture(texture, options = {}) {
+  const useMipmaps = Boolean(options.useMipmaps);
+  texture.minFilter = useMipmaps ? LinearMipmapLinearFilter : LinearFilter;
+  texture.magFilter = LinearFilter;
+  texture.wrapS = ClampToEdgeWrapping;
+  texture.wrapT = ClampToEdgeWrapping;
+  texture.generateMipmaps = useMipmaps;
+  texture.needsUpdate = true;
+  return texture;
+}
 var Labels = class extends Mesh2 {
   constructor({ geometry, texture, entries, fontFamily }, uniforms) {
     const visibility = createVisibilityTexture(entries.length);
@@ -1547,11 +1598,13 @@ var Labels = class extends Mesh2 {
         frustumSize: uniforms.frustumSize,
         is2D: uniforms.is2D,
         sizeAttenuation: uniforms.sizeAttenuation,
+        resolution: uniforms.resolution,
         nodeRadius: uniforms.nodeRadius,
         nodeScale: uniforms.nodeScale,
         labelAlignment: uniforms.labelAlignment,
         labelBaseline: uniforms.labelBaseline,
         labelFontSize: uniforms.labelFontSize,
+        labelNear: uniforms.labelNear,
         labelOffset: uniforms.labelOffset,
         uBeginning: uniforms.uBeginning,
         uEnding: uniforms.uEnding,
@@ -1576,6 +1629,7 @@ var Labels = class extends Mesh2 {
     this.obscurity = uniforms.obscurity;
     this.userData.fontFamily = fontFamily || DEFAULT_FONT_FAMILY;
     this.userData.fontSize = uniforms.labelFontSize.value;
+    this.userData.near = sanitizeLabelNearDistance(uniforms.labelNear.value);
     this.onBeforeRender = (renderer, scene, camera) => {
       this.updateVisibility(renderer, camera);
     };
@@ -1671,6 +1725,7 @@ var Labels = class extends Mesh2 {
         labelAlignment: this.material.uniforms.labelAlignment.value,
         labelBaseline: this.material.uniforms.labelBaseline.value,
         labelFontSize: this.material.uniforms.labelFontSize.value,
+        labelNear: this.material.uniforms.labelNear.value,
         labelOffset: this.material.uniforms.labelOffset.value,
         pointSize: entry.pointSize
       });
@@ -1779,6 +1834,9 @@ var Labels = class extends Mesh2 {
     this.acceptedEntries.length = 0;
     this.userData.fontFamily = fontFamily || DEFAULT_FONT_FAMILY;
     this.userData.fontSize = sanitizeLabelFontSize(fontSize);
+    this.userData.near = sanitizeLabelNearDistance(
+      this.material.uniforms.labelNear.value
+    );
   }
   get fontSize() {
     if (this.parent?.userData?.uniforms?.labelFontSize) {
@@ -1835,6 +1893,23 @@ var Labels = class extends Mesh2 {
       return;
     }
     this.material.uniforms.labelOffset.value.set(v.x, v.y);
+  }
+  get near() {
+    if (this.parent?.userData?.uniforms?.labelNear) {
+      return this.parent.userData.uniforms.labelNear.value;
+    }
+    return this.userData.near;
+  }
+  set near(v) {
+    const nextValue = sanitizeLabelNearDistance(v);
+    this.userData.near = nextValue;
+    if (!this.material?.uniforms?.labelNear) {
+      return;
+    }
+    if (this.material.uniforms.labelNear.value === nextValue) {
+      return;
+    }
+    this.material.uniforms.labelNear.value = nextValue;
   }
   static parse(size2, data, options = {}) {
     const atlas = buildTextAtlas(data.nodes, options.degrees || [], options);
@@ -1908,10 +1983,7 @@ var Labels = class extends Mesh2 {
       new InstancedBufferAttribute2(new Float32Array(visibilityUVs), 2)
     );
     geometry.instanceCount = entries.length;
-    const texture = new CanvasTexture(canvas);
-    texture.minFilter = NearestFilter;
-    texture.magFilter = NearestFilter;
-    texture.generateMipmaps = false;
+    const texture = configureAtlasTexture(new CanvasTexture(canvas), options);
     return Promise.resolve({
       geometry,
       texture,
@@ -2863,6 +2935,7 @@ var ForceDirectedGraph = class extends Group {
       labelAlignment: { value: 0 },
       labelBaseline: { value: 1 },
       labelFontSize: { value: 1 },
+      labelNear: { value: 0 },
       labelOffset: { value: new Vector22(0, 0) }
     };
     this.userData.labelFontFamily = DEFAULT_LABEL_FONT_FAMILY;
@@ -3148,7 +3221,8 @@ var ForceDirectedGraph = class extends Group {
     return {
       degrees: nodeDegrees || [],
       fontFamily: labelFontFamily,
-      maxTextureSize: renderer?.capabilities?.maxTextureSize || 16384
+      maxTextureSize: renderer?.capabilities?.maxTextureSize || 16384,
+      useMipmaps: renderer?.capabilities?.isWebGL2 === true
     };
   }
   refreshLabels() {

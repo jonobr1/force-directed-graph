@@ -239,7 +239,12 @@ declare module '@jonobr1/force-directed-graph/labels' {
     static parse(
       size: number,
       data: any,
-      options?: { degrees?: number[]; fontSize?: number; fontFamily?: string },
+      options?: {
+        degrees?: number[];
+        fontSize?: number;
+        fontFamily?: string;
+        useMipmaps?: boolean;
+      },
     ): Promise<{ geometry: any; texture: any; entries: any[] } | null>;
     constructor(
       labelData: {
@@ -258,6 +263,8 @@ declare module '@jonobr1/force-directed-graph/labels' {
     get baseline(): 'top' | 'middle' | 'bottom';
     set offset(arg: Vector2);
     get offset(): Vector2;
+    set near(arg: number);
+    get near(): number;
     set fontSize(arg: number);
     get fontSize(): number;
     set fontFamily(arg: string);

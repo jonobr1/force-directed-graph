@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { Matrix4, PerspectiveCamera } from 'three';
+import {
+  ClampToEdgeWrapping,
+  LinearFilter,
+  LinearMipmapLinearFilter,
+  Matrix4,
+  PerspectiveCamera,
+} from 'three';
 import { __TEST__ } from './labels.js';
 
 describe('label placement helpers', () => {
@@ -11,6 +17,8 @@ describe('label placement helpers', () => {
     expect(__TEST__.getVisibleQuota(2, 8)).toBe(0);
     expect(__TEST__.sanitizeLabelFontSize(0)).toBe(0.01);
     expect(__TEST__.sanitizeLabelFontSize(Number.NaN)).toBe(1);
+    expect(__TEST__.sanitizeLabelNearDistance(-1)).toBe(0);
+    expect(__TEST__.sanitizeLabelNearDistance(Number.NaN)).toBe(0);
     expect(__TEST__.getLabelAlignmentOffset(0)).toBe(0);
     expect(__TEST__.getLabelAlignmentOffset(1)).toBe(1);
     expect(__TEST__.getLabelAlignmentOffset(-1)).toBe(-1);
@@ -149,6 +157,83 @@ describe('label placement helpers', () => {
     });
 
     expect(largePointBounds.height).toBeGreaterThan(bounds.height);
+
+    const culledBounds = __TEST__.projectLabelBounds({
+      nodePosition: { x: 0, y: 0, z: 0 },
+      objectMatrixWorld: new Matrix4(),
+      camera,
+      viewportWidth: 400,
+      viewportHeight: 200,
+      frustumSize: 100,
+      is2D: false,
+      sizeAttenuation: false,
+      nodeRadius: 1,
+      nodeScale: 10,
+      aspectRatio: 4,
+      labelNear: 10,
+    });
+
+    expect(culledBounds).toBeNull();
+
+    const nearFixedBounds = __TEST__.projectLabelBounds({
+      nodePosition: { x: 0, y: 0, z: 0 },
+      objectMatrixWorld: new Matrix4(),
+      camera,
+      viewportWidth: 400,
+      viewportHeight: 200,
+      frustumSize: 100,
+      is2D: false,
+      sizeAttenuation: false,
+      nodeRadius: 1,
+      nodeScale: 10,
+      aspectRatio: 4,
+    });
+
+    const farFixedBounds = __TEST__.projectLabelBounds({
+      nodePosition: { x: 0, y: 0, z: -10 },
+      objectMatrixWorld: new Matrix4(),
+      camera,
+      viewportWidth: 400,
+      viewportHeight: 200,
+      frustumSize: 100,
+      is2D: false,
+      sizeAttenuation: false,
+      nodeRadius: 1,
+      nodeScale: 10,
+      aspectRatio: 4,
+    });
+
+    expect(nearFixedBounds.height).toBeCloseTo(farFixedBounds.height, 6);
+
+    const nearAttenuatedBounds = __TEST__.projectLabelBounds({
+      nodePosition: { x: 0, y: 0, z: 0 },
+      objectMatrixWorld: new Matrix4(),
+      camera,
+      viewportWidth: 400,
+      viewportHeight: 200,
+      frustumSize: 100,
+      is2D: false,
+      sizeAttenuation: true,
+      nodeRadius: 1,
+      nodeScale: 10,
+      aspectRatio: 4,
+    });
+
+    const farAttenuatedBounds = __TEST__.projectLabelBounds({
+      nodePosition: { x: 0, y: 0, z: -10 },
+      objectMatrixWorld: new Matrix4(),
+      camera,
+      viewportWidth: 400,
+      viewportHeight: 200,
+      frustumSize: 100,
+      is2D: false,
+      sizeAttenuation: true,
+      nodeRadius: 1,
+      nodeScale: 10,
+      aspectRatio: 4,
+    });
+
+    expect(nearAttenuatedBounds.height).toBeGreaterThan(farAttenuatedBounds.height);
   });
 
   it('packs collision cells and sort tuples consistently', () => {
@@ -174,5 +259,25 @@ describe('label placement helpers', () => {
       stableId: 4,
       labelId: 1,
     });
+  });
+
+  it('configures atlas textures for smoother sampling', () => {
+    const texture = __TEST__.configureAtlasTexture({});
+
+    expect(texture.minFilter).toBe(LinearFilter);
+    expect(texture.magFilter).toBe(LinearFilter);
+    expect(texture.wrapS).toBe(ClampToEdgeWrapping);
+    expect(texture.wrapT).toBe(ClampToEdgeWrapping);
+    expect(texture.generateMipmaps).toBe(false);
+    expect(texture.needsUpdate).toBe(true);
+  });
+
+  it('configures atlas textures with mipmaps when requested', () => {
+    const texture = __TEST__.configureAtlasTexture({}, { useMipmaps: true });
+
+    expect(texture.minFilter).toBe(LinearMipmapLinearFilter);
+    expect(texture.magFilter).toBe(LinearFilter);
+    expect(texture.generateMipmaps).toBe(true);
+    expect(texture.needsUpdate).toBe(true);
   });
 });
