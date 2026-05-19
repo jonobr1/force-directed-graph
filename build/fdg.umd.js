@@ -1037,8 +1037,10 @@ var labels = {
     uniform float uBeginning;
     uniform float uEnding;
     uniform float uNodeAmount;
+    uniform float obscurity;
     uniform float nodeRadius;
     uniform float nodeScale;
+    uniform float uLabelCount;
     uniform float labelAlignment;
     uniform float labelBaseline;
     uniform float labelFontSize;
@@ -1049,10 +1051,9 @@ var labels = {
     attribute vec4 labelUV;      // .xy = atlas UV offset, .zw = atlas UV extent
     attribute float aspectRatio; // label quad width / height
     attribute float pointSize;   // per-node point size scalar
-    attribute vec2 visibilityUV; // UV into placement visibility texture
+    attribute float selectionRank;
 
     varying vec2 vLabelUV;
-    varying vec2 vVisibilityUV;
     varying vec3 vColor;
     varying float vInRange;
 
@@ -1062,6 +1063,9 @@ var labels = {
       float rangeStart = uBeginning * uNodeAmount;
       float rangeEnd   = uEnding    * uNodeAmount;
       float inRange    = step( rangeStart, nodeIndex ) * ( 1.0 - step( rangeEnd, nodeIndex ) );
+      float visibleCount = floor( ( 1.0 - clamp( obscurity, 0.0, 1.0 ) ) * uLabelCount + 0.5 );
+      float rankVisible = step( selectionRank + 0.5, visibleCount );
+      inRange *= rankVisible;
 
       vec3 nodePos = texture2D( texturePositions, source.xy ).xyz;
       nodePos.z *= 1.0 - is2D;
@@ -1096,7 +1100,6 @@ var labels = {
 
       // Map quad UV [0,1] to the atlas region for this label
       vLabelUV = labelUV.xy + uv * labelUV.zw;
-      vVisibilityUV = visibilityUV;
       vColor = color;
       vInRange = inRange;
 
@@ -1109,13 +1112,11 @@ var labels = {
     #include <fog_pars_fragment>
 
     uniform sampler2D textureAtlas;
-    uniform sampler2D textureVisibility;
     uniform float inheritColors;
     uniform float opacity;
     uniform vec3 uColor;
 
     varying vec2 vLabelUV;
-    varying vec2 vVisibilityUV;
     varying vec3 vColor;
     varying float vInRange;
 
@@ -1125,13 +1126,8 @@ var labels = {
         discard;
       }
 
-      float visibility = texture2D( textureVisibility, vVisibilityUV ).r;
-      if ( visibility <= 0.0 ) {
-        discard;
-      }
-
       vec4 texel = texture2D( textureAtlas, vLabelUV );
-      float alpha = opacity * visibility * texel.a;
+      float alpha = opacity * texel.a;
 
       if ( alpha <= 0.0 ) {
         discard;
@@ -1209,14 +1205,6 @@ function getNodeColorComponents(node) {
     return [LABEL_NODE_COLOR.r, LABEL_NODE_COLOR.g, LABEL_NODE_COLOR.b];
   }
   return [1, 1, 1];
-}
-function setLabelVisibility(data, labelId, visible) {
-  const offset = labelId * 4;
-  const value = visible ? 255 : 0;
-  data[offset + 0] = value;
-  data[offset + 1] = value;
-  data[offset + 2] = value;
-  data[offset + 3] = value;
 }
 function compareSelectionCandidates(a, b) {
   if (b.hasManualPriority !== a.hasManualPriority) {
@@ -1494,13 +1482,6 @@ function buildTextAtlas(nodes, degrees = [], options = {}) {
   }
   return { canvas, entries };
 }
-function clamp01(value) {
-  return Math.max(0, Math.min(1, value));
-}
-function getVisibleQuota(obscurity, labelCount) {
-  const quota = Math.round((1 - clamp01(obscurity)) * labelCount);
-  return Math.max(0, Math.min(labelCount, quota));
-}
 function getLabelBasePriority(node, degree = 0) {
   if (typeof node.labelPriority === "number" && Number.isFinite(node.labelPriority)) {
     return node.labelPriority;
@@ -1519,29 +1500,13 @@ function compareLabelEntries(a, b) {
   }
   return a.stableId - b.stableId;
 }
-function getPlacementTextureDimensions(itemCount) {
-  const width = Math.max(1, Math.ceil(Math.sqrt(itemCount)));
-  const height = Math.max(1, Math.ceil(itemCount / width));
-  return { width, height };
-}
-function createVisibilityTexture(labelCount) {
-  const { width, height } = getPlacementTextureDimensions(labelCount);
-  const data = new Uint8Array(width * height * 4);
-  const texture = new import_three4.DataTexture(
-    data,
-    width,
-    height,
-    import_three4.RGBAFormat,
-    import_three4.UnsignedByteType
-  );
-  texture.minFilter = import_three4.NearestFilter;
-  texture.magFilter = import_three4.NearestFilter;
-  texture.wrapS = import_three4.ClampToEdgeWrapping;
-  texture.wrapT = import_three4.ClampToEdgeWrapping;
-  texture.generateMipmaps = false;
-  texture.flipY = false;
-  texture.needsUpdate = true;
-  return { data, texture, width, height };
+function buildSelectionRanks(entries, selectionOrder) {
+  const ranksByLabelId = new Float32Array(entries.length);
+  const orderedEntries = selectionOrder && selectionOrder.length > 0 ? selectionOrder : entries.slice().sort(compareLabelEntries);
+  for (let i = 0; i < orderedEntries.length; i++) {
+    ranksByLabelId[orderedEntries[i].labelId] = i;
+  }
+  return ranksByLabelId;
 }
 function configureAtlasTexture(texture, options = {}) {
   const useMipmaps = Boolean(options.useMipmaps);
@@ -1554,16 +1519,15 @@ function configureAtlasTexture(texture, options = {}) {
   return texture;
 }
 var Labels = class extends import_three4.Mesh {
-  constructor({ geometry, texture, entries, fontFamily, selectionOrder }, uniforms) {
-    const visibility = createVisibilityTexture(entries.length);
+  constructor({ geometry, texture, entries, fontFamily }, uniforms) {
     const material = new import_three4.ShaderMaterial({
       uniforms: {
         ...import_three4.UniformsLib.fog,
         ...{
           texturePositions: { value: null },
           textureAtlas: { value: texture },
-          textureVisibility: { value: visibility.texture },
           opacity: uniforms.opacity,
+          obscurity: uniforms.obscurity,
           frustumSize: uniforms.frustumSize,
           inheritColors: uniforms.labelsInheritColor,
           is2D: uniforms.is2D,
@@ -1571,6 +1535,7 @@ var Labels = class extends import_three4.Mesh {
           resolution: uniforms.resolution,
           nodeRadius: uniforms.nodeRadius,
           nodeScale: uniforms.nodeScale,
+          uLabelCount: { value: entries.length },
           uColor: uniforms.labelColor,
           labelAlignment: uniforms.labelAlignment,
           labelBaseline: uniforms.labelBaseline,
@@ -1593,61 +1558,12 @@ var Labels = class extends import_three4.Mesh {
     super(geometry, material);
     this.frustumCulled = false;
     this.entries = entries;
-    this.sortedEntries = entries.slice().sort(compareLabelEntries);
-    this.visibility = visibility;
-    this.positionsBuffer = new Float32Array(0);
-    this.projectedEntries = [];
-    this.selectionGrid = /* @__PURE__ */ new Map();
-    this.acceptedEntries = [];
-    this.obscurity = uniforms.obscurity;
-    this.selectionOrder = selectionOrder || entries.slice().sort(compareLabelEntries);
     this.userData.fontFamily = fontFamily || DEFAULT_FONT_FAMILY;
     this.userData.fontSize = uniforms.labelFontSize.value;
     this.userData.near = sanitizeLabelNearDistance(uniforms.labelNear.value);
-    this.userData.visibilityDirty = true;
-    this.userData.lastAppliedQuota = -1;
-    this.onBeforeRender = () => {
-      if (this.visible) {
-        this.updateVisibility();
-      }
-    };
-  }
-  invalidateVisibility() {
-    this.userData.visibilityDirty = true;
-    this.userData.lastAppliedQuota = -1;
-  }
-  applyPriorityQuotaOnly() {
-    this.visibility.data.fill(0);
-    const quota = getVisibleQuota(this.obscurity.value, this.entries.length);
-    for (let i = 0; i < quota; i++) {
-      const entry = this.sortedEntries[i];
-      setLabelVisibility(this.visibility.data, entry.labelId, true);
-    }
-    this.visibility.texture.needsUpdate = true;
-  }
-  updateVisibility() {
-    const quota = getVisibleQuota(this.obscurity.value, this.entries.length);
-    if (!this.userData.visibilityDirty && this.userData.lastAppliedQuota === quota) {
-      return;
-    }
-    this.visibility.data.fill(0);
-    this.acceptedEntries.length = 0;
-    if (quota > 0) {
-      const orderedEntries = quota >= this.entries.length ? this.entries : this.selectionOrder;
-      const limit = Math.min(quota, orderedEntries.length);
-      for (let i = 0; i < limit; i++) {
-        const entry = orderedEntries[i];
-        setLabelVisibility(this.visibility.data, entry.labelId, true);
-        this.acceptedEntries.push({ entry });
-      }
-    }
-    this.visibility.texture.needsUpdate = true;
-    this.userData.visibilityDirty = false;
-    this.userData.lastAppliedQuota = quota;
   }
   dispose() {
     this.material.uniforms.textureAtlas.value?.dispose?.();
-    this.material.uniforms.textureVisibility.value?.dispose?.();
     this.material.dispose();
     this.geometry.dispose();
   }
@@ -1656,30 +1572,19 @@ var Labels = class extends import_three4.Mesh {
     texture,
     entries,
     fontFamily,
-    fontSize,
-    selectionOrder
+    fontSize
   }) {
     this.geometry.dispose();
     this.material.uniforms.textureAtlas.value?.dispose?.();
-    this.material.uniforms.textureVisibility.value?.dispose?.();
     this.geometry = geometry;
     this.entries = entries;
-    this.sortedEntries = entries.slice().sort(compareLabelEntries);
-    this.selectionOrder = selectionOrder || entries.slice().sort(compareLabelEntries);
-    this.visibility = createVisibilityTexture(entries.length);
     this.material.uniforms.textureAtlas.value = texture;
-    this.material.uniforms.textureVisibility.value = this.visibility.texture;
-    this.projectedEntries.length = 0;
-    this.selectionGrid.clear();
-    this.acceptedEntries.length = 0;
+    this.material.uniforms.uLabelCount.value = entries.length;
     this.userData.fontFamily = fontFamily || DEFAULT_FONT_FAMILY;
     this.userData.fontSize = sanitizeLabelFontSize(fontSize);
     this.userData.near = sanitizeLabelNearDistance(
       this.material.uniforms.labelNear.value
     );
-    this.visibility.data.fill(0);
-    this.visibility.texture.needsUpdate = true;
-    this.invalidateVisibility();
   }
   get fontSize() {
     if (this.parent?.userData?.uniforms?.labelFontSize) {
@@ -1785,8 +1690,14 @@ var Labels = class extends import_three4.Mesh {
     const labelUVs = [];
     const aspectRatios = [];
     const pointSizes = [];
-    const visibilityUVs = [];
-    const { width: visibilityWidth, height: visibilityHeight } = getPlacementTextureDimensions(entries.length);
+    const selectionOrder = buildLabelSelectionOrder(
+      entries,
+      options.adjacency || [],
+      data.nodes,
+      options.degrees || []
+    );
+    const selectionRanksByLabelId = buildSelectionRanks(entries, selectionOrder);
+    const selectionRanks = [];
     for (let i = 0; i < entries.length; i++) {
       const entry = entries[i];
       const x = entry.nodeIndex % size2 / size2;
@@ -1802,10 +1713,7 @@ var Labels = class extends import_three4.Mesh {
       );
       aspectRatios.push(entry.aspectRatio);
       pointSizes.push(entry.pointSize);
-      visibilityUVs.push(
-        (entry.labelId % visibilityWidth + 0.5) / visibilityWidth,
-        (Math.floor(entry.labelId / visibilityWidth) + 0.5) / visibilityHeight
-      );
+      selectionRanks.push(selectionRanksByLabelId[entry.labelId]);
     }
     geometry.setAttribute(
       "source",
@@ -1828,24 +1736,17 @@ var Labels = class extends import_three4.Mesh {
       new import_three4.InstancedBufferAttribute(new Float32Array(pointSizes), 1)
     );
     geometry.setAttribute(
-      "visibilityUV",
-      new import_three4.InstancedBufferAttribute(new Float32Array(visibilityUVs), 2)
+      "selectionRank",
+      new import_three4.InstancedBufferAttribute(new Float32Array(selectionRanks), 1)
     );
     geometry.instanceCount = entries.length;
     const texture = configureAtlasTexture(new import_three4.CanvasTexture(canvas), options);
-    const selectionOrder = buildLabelSelectionOrder(
-      entries,
-      options.adjacency || [],
-      data.nodes,
-      options.degrees || []
-    );
     return Promise.resolve({
       geometry,
       texture,
       entries,
       fontFamily: options.fontFamily || DEFAULT_FONT_FAMILY,
-      fontSize: sanitizeLabelFontSize(options.fontSize),
-      selectionOrder
+      fontSize: sanitizeLabelFontSize(options.fontSize)
     });
   }
 };
@@ -3062,10 +2963,7 @@ var ForceDirectedGraph = class extends import_three6.Group {
         points2.renderOrder = links2.renderOrder + 1;
         scope.userData.hit.inherit(points2);
       }).then(
-        () => Labels.parse(size2, data, {
-          degrees: scope.userData.nodeDegrees,
-          fontFamily: scope.userData.labelFontFamily
-        })
+        () => Labels.parse(size2, data, scope.getLabelParseOptions())
       ).then((result) => {
         if (result) {
           const labels2 = new Labels(result, uniforms);
@@ -3497,7 +3395,6 @@ var ForceDirectedGraph = class extends import_three6.Group {
   }
   set obscurity(v) {
     this.userData.uniforms.obscurity.value = Math.max(0, Math.min(1, v));
-    this.labels?.invalidateVisibility?.();
   }
   get blending() {
     return this.children[0].material.blending;

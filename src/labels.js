@@ -3,17 +3,13 @@ import {
   CanvasTexture,
   ClampToEdgeWrapping,
   Color,
-  DataTexture,
   InstancedBufferAttribute,
   InstancedBufferGeometry,
   LinearFilter,
   LinearMipmapLinearFilter,
   Matrix4,
   Mesh,
-  NearestFilter,
-  RGBAFormat,
   ShaderMaterial,
-  UnsignedByteType,
   UniformsLib,
   Vector2,
   Vector3,
@@ -87,15 +83,6 @@ function getNodeColorComponents(node) {
     return [LABEL_NODE_COLOR.r, LABEL_NODE_COLOR.g, LABEL_NODE_COLOR.b];
   }
   return [1, 1, 1];
-}
-
-function setLabelVisibility(data, labelId, visible) {
-  const offset = labelId * 4;
-  const value = visible ? 255 : 0;
-  data[offset + 0] = value;
-  data[offset + 1] = value;
-  data[offset + 2] = value;
-  data[offset + 3] = value;
 }
 
 function compareSelectionCandidates(a, b) {
@@ -509,6 +496,20 @@ function compareProjectedEntries(a, b) {
   return a.entry.stableId - b.entry.stableId;
 }
 
+function buildSelectionRanks(entries, selectionOrder) {
+  const ranksByLabelId = new Float32Array(entries.length);
+  const orderedEntries =
+    selectionOrder && selectionOrder.length > 0
+      ? selectionOrder
+      : entries.slice().sort(compareLabelEntries);
+
+  for (let i = 0; i < orderedEntries.length; i++) {
+    ranksByLabelId[orderedEntries[i].labelId] = i;
+  }
+
+  return ranksByLabelId;
+}
+
 function packCollisionCellKey(cellX, cellY, gridWidth) {
   return cellY * gridWidth + cellX;
 }
@@ -710,28 +711,6 @@ function projectLabelBounds({
   };
 }
 
-function createVisibilityTexture(labelCount) {
-  const { width, height } = getPlacementTextureDimensions(labelCount);
-  const data = new Uint8Array(width * height * 4);
-  const texture = new DataTexture(
-    data,
-    width,
-    height,
-    RGBAFormat,
-    UnsignedByteType,
-  );
-
-  texture.minFilter = NearestFilter;
-  texture.magFilter = NearestFilter;
-  texture.wrapS = ClampToEdgeWrapping;
-  texture.wrapT = ClampToEdgeWrapping;
-  texture.generateMipmaps = false;
-  texture.flipY = false;
-  texture.needsUpdate = true;
-
-  return { data, texture, width, height };
-}
-
 function configureAtlasTexture(texture, options = {}) {
   const useMipmaps = Boolean(options.useMipmaps);
   texture.minFilter = useMipmaps ? LinearMipmapLinearFilter : LinearFilter;
@@ -744,16 +723,15 @@ function configureAtlasTexture(texture, options = {}) {
 }
 
 class Labels extends Mesh {
-  constructor({ geometry, texture, entries, fontFamily, selectionOrder }, uniforms) {
-    const visibility = createVisibilityTexture(entries.length);
+  constructor({ geometry, texture, entries, fontFamily }, uniforms) {
     const material = new ShaderMaterial({
       uniforms: {
         ...UniformsLib.fog,
         ...{
           texturePositions: { value: null },
           textureAtlas: { value: texture },
-          textureVisibility: { value: visibility.texture },
           opacity: uniforms.opacity,
+          obscurity: uniforms.obscurity,
           frustumSize: uniforms.frustumSize,
           inheritColors: uniforms.labelsInheritColor,
           is2D: uniforms.is2D,
@@ -761,6 +739,7 @@ class Labels extends Mesh {
           resolution: uniforms.resolution,
           nodeRadius: uniforms.nodeRadius,
           nodeScale: uniforms.nodeScale,
+          uLabelCount: { value: entries.length },
           uColor: uniforms.labelColor,
           labelAlignment: uniforms.labelAlignment,
           labelBaseline: uniforms.labelBaseline,
@@ -785,77 +764,13 @@ class Labels extends Mesh {
 
     this.frustumCulled = false;
     this.entries = entries;
-    this.sortedEntries = entries.slice().sort(compareLabelEntries);
-    this.visibility = visibility;
-    this.positionsBuffer = new Float32Array(0);
-    this.projectedEntries = [];
-    this.selectionGrid = new Map();
-    this.acceptedEntries = [];
-    this.obscurity = uniforms.obscurity;
-    this.selectionOrder =
-      selectionOrder || entries.slice().sort(compareLabelEntries);
     this.userData.fontFamily = fontFamily || DEFAULT_FONT_FAMILY;
     this.userData.fontSize = uniforms.labelFontSize.value;
     this.userData.near = sanitizeLabelNearDistance(uniforms.labelNear.value);
-    this.userData.visibilityDirty = true;
-    this.userData.lastAppliedQuota = -1;
-    this.onBeforeRender = () => {
-      if (this.visible) {
-        this.updateVisibility();
-      }
-    };
-  }
-
-  invalidateVisibility() {
-    this.userData.visibilityDirty = true;
-    this.userData.lastAppliedQuota = -1;
-  }
-
-  applyPriorityQuotaOnly() {
-    this.visibility.data.fill(0);
-
-    const quota = getVisibleQuota(this.obscurity.value, this.entries.length);
-    for (let i = 0; i < quota; i++) {
-      const entry = this.sortedEntries[i];
-      setLabelVisibility(this.visibility.data, entry.labelId, true);
-    }
-
-    this.visibility.texture.needsUpdate = true;
-  }
-
-  updateVisibility() {
-    const quota = getVisibleQuota(this.obscurity.value, this.entries.length);
-
-    if (
-      !this.userData.visibilityDirty &&
-      this.userData.lastAppliedQuota === quota
-    ) {
-      return;
-    }
-
-    this.visibility.data.fill(0);
-    this.acceptedEntries.length = 0;
-
-    if (quota > 0) {
-      const orderedEntries =
-        quota >= this.entries.length ? this.entries : this.selectionOrder;
-      const limit = Math.min(quota, orderedEntries.length);
-
-      for (let i = 0; i < limit; i++) {
-        const entry = orderedEntries[i];
-        setLabelVisibility(this.visibility.data, entry.labelId, true);
-        this.acceptedEntries.push({ entry });
-      }
-    }
-
-    this.visibility.texture.needsUpdate = true;
-    this.userData.visibilityDirty = false;
-    this.userData.lastAppliedQuota = quota;
   }
 
   dispose() {
     this.material.uniforms.textureAtlas.value?.dispose?.();
-    this.material.uniforms.textureVisibility.value?.dispose?.();
     this.material.dispose();
     this.geometry.dispose();
   }
@@ -866,32 +781,19 @@ class Labels extends Mesh {
     entries,
     fontFamily,
     fontSize,
-    selectionOrder,
   }) {
     this.geometry.dispose();
     this.material.uniforms.textureAtlas.value?.dispose?.();
-    this.material.uniforms.textureVisibility.value?.dispose?.();
 
     this.geometry = geometry;
     this.entries = entries;
-    this.sortedEntries = entries.slice().sort(compareLabelEntries);
-    this.selectionOrder =
-      selectionOrder || entries.slice().sort(compareLabelEntries);
-    this.visibility = createVisibilityTexture(entries.length);
     this.material.uniforms.textureAtlas.value = texture;
-    this.material.uniforms.textureVisibility.value = this.visibility.texture;
-
-    this.projectedEntries.length = 0;
-    this.selectionGrid.clear();
-    this.acceptedEntries.length = 0;
+    this.material.uniforms.uLabelCount.value = entries.length;
     this.userData.fontFamily = fontFamily || DEFAULT_FONT_FAMILY;
     this.userData.fontSize = sanitizeLabelFontSize(fontSize);
     this.userData.near = sanitizeLabelNearDistance(
       this.material.uniforms.labelNear.value,
     );
-    this.visibility.data.fill(0);
-    this.visibility.texture.needsUpdate = true;
-    this.invalidateVisibility();
   }
 
   get fontSize() {
@@ -1018,9 +920,14 @@ class Labels extends Mesh {
     const labelUVs = [];
     const aspectRatios = [];
     const pointSizes = [];
-    const visibilityUVs = [];
-    const { width: visibilityWidth, height: visibilityHeight } =
-      getPlacementTextureDimensions(entries.length);
+    const selectionOrder = buildLabelSelectionOrder(
+      entries,
+      options.adjacency || [],
+      data.nodes,
+      options.degrees || [],
+    );
+    const selectionRanksByLabelId = buildSelectionRanks(entries, selectionOrder);
+    const selectionRanks = [];
 
     for (let i = 0; i < entries.length; i++) {
       const entry = entries[i];
@@ -1038,10 +945,7 @@ class Labels extends Mesh {
       );
       aspectRatios.push(entry.aspectRatio);
       pointSizes.push(entry.pointSize);
-      visibilityUVs.push(
-        ((entry.labelId % visibilityWidth) + 0.5) / visibilityWidth,
-        (Math.floor(entry.labelId / visibilityWidth) + 0.5) / visibilityHeight,
-      );
+      selectionRanks.push(selectionRanksByLabelId[entry.labelId]);
     }
 
     geometry.setAttribute(
@@ -1065,18 +969,12 @@ class Labels extends Mesh {
       new InstancedBufferAttribute(new Float32Array(pointSizes), 1),
     );
     geometry.setAttribute(
-      'visibilityUV',
-      new InstancedBufferAttribute(new Float32Array(visibilityUVs), 2),
+      'selectionRank',
+      new InstancedBufferAttribute(new Float32Array(selectionRanks), 1),
     );
     geometry.instanceCount = entries.length;
 
     const texture = configureAtlasTexture(new CanvasTexture(canvas), options);
-    const selectionOrder = buildLabelSelectionOrder(
-      entries,
-      options.adjacency || [],
-      data.nodes,
-      options.degrees || [],
-    );
 
     return Promise.resolve({
       geometry,
@@ -1084,13 +982,13 @@ class Labels extends Mesh {
       entries,
       fontFamily: options.fontFamily || DEFAULT_FONT_FAMILY,
       fontSize: sanitizeLabelFontSize(options.fontSize),
-      selectionOrder,
     });
   }
 }
 
 const __TEST__ = {
   buildLabelSelectionOrder,
+  buildSelectionRanks,
   buildSortTuple,
   clamp01,
   compareLabelEntries,

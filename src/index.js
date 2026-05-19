@@ -498,10 +498,7 @@ class ForceDirectedGraph extends Group {
           scope.userData.hit.inherit(points);
         })
         .then(() =>
-          Labels.parse(size, data, {
-            degrees: scope.userData.nodeDegrees,
-            fontFamily: scope.userData.labelFontFamily,
-          }),
+          Labels.parse(size, data, scope.getLabelParseOptions()),
         )
         .then((result) => {
           if (result) {
@@ -994,7 +991,6 @@ class ForceDirectedGraph extends Group {
   }
   set obscurity(v) {
     this.userData.uniforms.obscurity.value = Math.max(0, Math.min(1, v));
-    this.labels?.invalidateVisibility?.();
   }
   get blending() {
     return this.children[0].material.blending;

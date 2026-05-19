@@ -244,6 +244,7 @@ declare module '@jonobr1/force-directed-graph/labels' {
         degrees?: number[];
         fontSize?: number;
         fontFamily?: string;
+        maxTextureSize?: number;
         useMipmaps?: boolean;
       },
     ): Promise<{ geometry: any; texture: any; entries: any[] } | null>;
@@ -403,7 +404,7 @@ declare module '@jonobr1/force-directed-graph' {
     get opacity(): number;
     /**
      * Label-density control in [0, 1].
-     * 0 keeps as many labels visible as placement allows.
+     * 0 shows all labels.
      * 1 hides all labels.
      */
     set obscurity(arg: number);

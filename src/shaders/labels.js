@@ -1,7 +1,7 @@
 /**
  * Renders text labels for nodes as camera-facing billboard quads.
- * Label visibility is driven by a placement-generated visibility texture.
- * The public `obscurity` property controls the placement quota, not alpha.
+ * Label visibility is driven by a fixed per-label selection rank.
+ * The public `obscurity` property controls the active quota, not alpha.
  */
 const labels = {
   vertexShader: `
@@ -15,8 +15,10 @@ const labels = {
     uniform float uBeginning;
     uniform float uEnding;
     uniform float uNodeAmount;
+    uniform float obscurity;
     uniform float nodeRadius;
     uniform float nodeScale;
+    uniform float uLabelCount;
     uniform float labelAlignment;
     uniform float labelBaseline;
     uniform float labelFontSize;
@@ -27,10 +29,9 @@ const labels = {
     attribute vec4 labelUV;      // .xy = atlas UV offset, .zw = atlas UV extent
     attribute float aspectRatio; // label quad width / height
     attribute float pointSize;   // per-node point size scalar
-    attribute vec2 visibilityUV; // UV into placement visibility texture
+    attribute float selectionRank;
 
     varying vec2 vLabelUV;
-    varying vec2 vVisibilityUV;
     varying vec3 vColor;
     varying float vInRange;
 
@@ -40,6 +41,9 @@ const labels = {
       float rangeStart = uBeginning * uNodeAmount;
       float rangeEnd   = uEnding    * uNodeAmount;
       float inRange    = step( rangeStart, nodeIndex ) * ( 1.0 - step( rangeEnd, nodeIndex ) );
+      float visibleCount = floor( ( 1.0 - clamp( obscurity, 0.0, 1.0 ) ) * uLabelCount + 0.5 );
+      float rankVisible = step( selectionRank + 0.5, visibleCount );
+      inRange *= rankVisible;
 
       vec3 nodePos = texture2D( texturePositions, source.xy ).xyz;
       nodePos.z *= 1.0 - is2D;
@@ -74,7 +78,6 @@ const labels = {
 
       // Map quad UV [0,1] to the atlas region for this label
       vLabelUV = labelUV.xy + uv * labelUV.zw;
-      vVisibilityUV = visibilityUV;
       vColor = color;
       vInRange = inRange;
 
@@ -87,13 +90,11 @@ const labels = {
     #include <fog_pars_fragment>
 
     uniform sampler2D textureAtlas;
-    uniform sampler2D textureVisibility;
     uniform float inheritColors;
     uniform float opacity;
     uniform vec3 uColor;
 
     varying vec2 vLabelUV;
-    varying vec2 vVisibilityUV;
     varying vec3 vColor;
     varying float vInRange;
 
@@ -103,13 +104,8 @@ const labels = {
         discard;
       }
 
-      float visibility = texture2D( textureVisibility, vVisibilityUV ).r;
-      if ( visibility <= 0.0 ) {
-        discard;
-      }
-
       vec4 texel = texture2D( textureAtlas, vLabelUV );
-      float alpha = opacity * visibility * texel.a;
+      float alpha = opacity * texel.a;
 
       if ( alpha <= 0.0 ) {
         discard;

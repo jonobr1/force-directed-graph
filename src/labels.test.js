@@ -292,6 +292,9 @@ describe('label placement helpers', () => {
     );
 
     expect(order.map((entry) => entry.nodeIndex)).toEqual([4, 0, 2, 1, 3]);
+    expect(Array.from(__TEST__.buildSelectionRanks(entries, order))).toEqual([
+      1, 3, 2, 4, 0,
+    ]);
   });
 
   it('configures atlas textures for smoother sampling', () => {
