@@ -1,5 +1,5 @@
 // src/index.js
-import { Color as Color4, Group, RepeatWrapping, Vector2 as Vector22, Vector3 as Vector32 } from "three";
+import { Color as Color4, Group, RepeatWrapping, Vector2, Vector3 as Vector32 } from "three";
 import { GPUComputationRenderer } from "three/examples/jsm/misc/GPUComputationRenderer.js";
 
 // src/math.js
@@ -1027,7 +1027,6 @@ import {
   Mesh as Mesh2,
   ShaderMaterial as ShaderMaterial3,
   UniformsLib as UniformsLib3,
-  Vector2,
   Vector3,
   Vector4
 } from "three";
@@ -1160,7 +1159,6 @@ var WORLD_CENTER = new Vector3();
 var WORLD_CORNER = new Vector3();
 var PROJECTED_CORNER = new Vector3();
 var MV_CENTER = new Vector4();
-var DRAWING_BUFFER_SIZE = new Vector2();
 var BASE_ATLAS_FONT_SIZE = 120;
 var BASE_ATLAS_PADDING = 4;
 var ATLAS_RASTER_SCALE = 2;
@@ -2594,8 +2592,8 @@ var TextureWorkerManager = class {
 // src/index.js
 var color3 = new Color4();
 var position = new Vector32();
-var size = new Vector22();
-var drawingBufferSize = new Vector22();
+var size = new Vector2();
+var drawingBufferSize = new Vector2();
 var LineCaps = ["round", "butt", "square"];
 var LineCapsMap = {
   round: 0,
@@ -2694,16 +2692,16 @@ var ForceDirectedGraph = class extends Group {
       linewidth: { value: 1 },
       opacity: { value: 1 },
       pixelRatio: { value: 1 },
-      resolution: { value: new Vector22(1, 1) },
+      resolution: { value: new Vector2(1, 1) },
       uBeginning: { value: 0 },
       uEnding: { value: 1 },
       uNodeAmount: { value: 0 },
-      obscurity: { value: 0.9 },
+      obscurity: { value: 0 },
       labelAlignment: { value: 0 },
       labelBaseline: { value: 1 },
       labelFontSize: { value: 24 },
-      labelNear: { value: 50 },
-      labelOffset: { value: new Vector22(0, 0) }
+      labelNear: { value: 0 },
+      labelOffset: { value: new Vector2(0, 0) }
     };
     this.userData.labelFontFamily = DEFAULT_LABEL_FONT_FAMILY;
     this.userData.hit = new Hit(this);

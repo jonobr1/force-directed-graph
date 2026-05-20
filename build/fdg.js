@@ -1137,7 +1137,6 @@ float circle( vec2 uv, vec2 pos, float rad, float isSmooth ) {
   var WORLD_CORNER = new import_three4.Vector3();
   var PROJECTED_CORNER = new import_three4.Vector3();
   var MV_CENTER = new import_three4.Vector4();
-  var DRAWING_BUFFER_SIZE = new import_three4.Vector2();
   var BASE_ATLAS_FONT_SIZE = 120;
   var BASE_ATLAS_PADDING = 4;
   var ATLAS_RASTER_SCALE = 2;
@@ -2670,11 +2669,11 @@ initWasm();
         uBeginning: { value: 0 },
         uEnding: { value: 1 },
         uNodeAmount: { value: 0 },
-        obscurity: { value: 0.9 },
+        obscurity: { value: 0 },
         labelAlignment: { value: 0 },
         labelBaseline: { value: 1 },
         labelFontSize: { value: 24 },
-        labelNear: { value: 50 },
+        labelNear: { value: 0 },
         labelOffset: { value: new import_three6.Vector2(0, 0) }
       };
       this.userData.labelFontFamily = DEFAULT_LABEL_FONT_FAMILY;

@@ -137,11 +137,11 @@ class ForceDirectedGraph extends Group {
       uBeginning: { value: 0 },
       uEnding: { value: 1 },
       uNodeAmount: { value: 0 },
-      obscurity: { value: 0.9 },
+      obscurity: { value: 0 },
       labelAlignment: { value: 0 },
       labelBaseline: { value: 1 },
       labelFontSize: { value: 24 },
-      labelNear: { value: 50 },
+      labelNear: { value: 0 },
       labelOffset: { value: new Vector2(0, 0) },
     };
     this.userData.labelFontFamily = DEFAULT_LABEL_FONT_FAMILY;

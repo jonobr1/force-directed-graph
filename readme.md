@@ -52,7 +52,7 @@ type NodeData = {
   isStatic?: boolean;  // Optional, pins node when true
   color?: string;      // Optional CSS color (ex: '#ff6600', 'rgb(255,0,0)')
   image?: string;      // Optional image URL for sprite atlas
-  label?: string;      // Optional SDF-style text label
+  label?: string;      // Optional canvas-atlas text label
   labelPriority?: number; // Optional label ranking override
   size?: number        // Optional size for per-node sizing
 };

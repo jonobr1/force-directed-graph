@@ -11,7 +11,6 @@ import {
   Mesh,
   ShaderMaterial,
   UniformsLib,
-  Vector2,
   Vector3,
   Vector4,
 } from 'three';
@@ -25,7 +24,6 @@ const WORLD_CENTER = new Vector3();
 const WORLD_CORNER = new Vector3();
 const PROJECTED_CORNER = new Vector3();
 const MV_CENTER = new Vector4();
-const DRAWING_BUFFER_SIZE = new Vector2();
 const BASE_ATLAS_FONT_SIZE = 120;
 const BASE_ATLAS_PADDING = 4;
 const ATLAS_RASTER_SCALE = 2;
