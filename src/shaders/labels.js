@@ -53,7 +53,7 @@ const labels = {
       float beyondNear = 1.0 - step( viewDistance, max( labelNear, 0.0 ) );
       inRange *= beyondNear;
 
-      // Billboard: extract camera right and up from the view matrix columns
+      // Billboard: extract camera right and up from the corresponding view matrix rows
       vec3 right = normalize( vec3( viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0] ) );
       vec3 up    = normalize( vec3( viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1] ) );
 
@@ -116,6 +116,12 @@ const labels = {
         alpha
       );
       #include <fog_fragment>
+
+      #ifdef USE_FOG
+      if ( fogFactor > 0.5 ) {
+        discard;
+      }
+      #endif
     }
   `,
 };
