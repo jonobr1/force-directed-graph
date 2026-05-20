@@ -117,9 +117,11 @@ const labels = {
       );
       #include <fog_fragment>
 
+      #ifdef USE_FOG
       if ( fogFactor > 0.5 ) {
         discard;
       }
+      #endif
     }
   `,
 };
