@@ -52,6 +52,8 @@ type NodeData = {
   isStatic?: boolean;  // Optional, pins node when true
   color?: string;      // Optional CSS color (ex: '#ff6600', 'rgb(255,0,0)')
   image?: string;      // Optional image URL for sprite atlas
+  label?: string;      // Optional canvas-atlas text label
+  labelPriority?: number; // Optional label ranking override
   size?: number        // Optional size for per-node sizing
 };
 
@@ -68,6 +70,12 @@ type LinkData = {
 > - `isStatic` defaults to `false`.
 > - If `color` is omitted, the node defaults to white.
 > - `set(data[, callback])` returns a `Promise` that resolves when geometry/textures are ready.
+> - `obscurity` is label-density control: `0` shows all labels, `0.75` targets roughly 25% visible labels, and `1` hides all labels. The active subset is now chosen from graph topology and priority, not camera clipspace placement.
+> - `fdg.labels.alignment` (`'center' | 'left' | 'right'`) and `fdg.labels.baseline` (`'top' | 'middle' | 'bottom'`) change label anchoring live.
+> - `fdg.labels.offset` (`THREE.Vector2`) adds extra label padding in label-space x/y.
+> - `fdg.labels.near` (camera-space distance, default `0`) discards labels at or closer than that depth, which is useful when `sizeAttenuation` makes nearby labels too large.
+> - `fdg.labelsInheritColor` toggles whether labels use each node's `color`, and `fdg.labelColor` tints all labels uniformly on top of the white label atlas.
+> - `fdg.labels.fontSize` scales the rendered label planes without rebuilding the atlas; `fdg.labels.fontFamily` rebuilds the atlas with a new CSS font stack.
 
 ### Load Script in HTML file:
 

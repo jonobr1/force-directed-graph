@@ -5,6 +5,7 @@ import simulation from './shaders/simulation.js';
 
 import { Points } from './points.js';
 import { Links } from './links.js';
+import { Labels } from './labels.js';
 import { Registry } from './registry.js';
 import { Hit } from './hit.js';
 import { TextureWorkerManager } from './texture-worker-manager.js';
@@ -19,6 +20,7 @@ const LineCapsMap = {
   butt: 1,
   square: 2,
 };
+const DEFAULT_LABEL_FONT_FAMILY = 'Arial, sans-serif';
 const buffers = {
   int: new Uint8ClampedArray(4),
   float: new Float32Array(4),
@@ -122,9 +124,11 @@ class ForceDirectedGraph extends Group {
       sizeAttenuation: { value: true },
       frustumSize: { value: 100 },
       linksInheritColor: { value: false },
+      labelsInheritColor: { value: false },
       pointsInheritColor: { value: true },
       pointColor: { value: new Color(1, 1, 1) },
       linkColor: { value: new Color(1, 1, 1) },
+      labelColor: { value: new Color(0, 0, 0) },
       linecap: { value: LineCapsMap.round },
       linewidth: { value: 1 },
       opacity: { value: 1 },
@@ -133,7 +137,14 @@ class ForceDirectedGraph extends Group {
       uBeginning: { value: 0 },
       uEnding: { value: 1 },
       uNodeAmount: { value: 0 },
+      obscurity: { value: 0 },
+      labelAlignment: { value: 0 },
+      labelBaseline: { value: 1 },
+      labelFontSize: { value: 24 },
+      labelNear: { value: 0 },
+      labelOffset: { value: new Vector2(0, 0) },
     };
+    this.userData.labelFontFamily = DEFAULT_LABEL_FONT_FAMILY;
     this.userData.hit = new Hit(this);
     this.userData.workerManager = new TextureWorkerManager();
 
@@ -162,13 +173,16 @@ class ForceDirectedGraph extends Group {
     'sizeAttenuation',
     'frustumSize',
     'linksInheritColor',
+    'labelsInheritColor',
     'pointsInheritColor',
     'pointColor',
     'linkColor',
+    'labelColor',
     'linecap',
     'linewidth',
     'opacity',
     'blending',
+    'obscurity',
   ];
 
   /**
@@ -211,6 +225,7 @@ class ForceDirectedGraph extends Group {
         child.dispose();
       }
     }
+    this.userData.labels = null;
 
     // Initialize new properties
     const size = getPotSize(Math.max(data.nodes.length, data.links.length * 2));
@@ -275,6 +290,31 @@ class ForceDirectedGraph extends Group {
           targetIndex,
         };
       });
+      const nodeDegrees = new Array(data.nodes.length).fill(0);
+      const nodeAdjacency = Array.from({ length: data.nodes.length }, () => []);
+
+      for (let i = 0; i < preparedLinks.length; i++) {
+        const link = preparedLinks[i];
+        if (
+          !Number.isInteger(link.sourceIndex) ||
+          !Number.isInteger(link.targetIndex) ||
+          link.sourceIndex < 0 ||
+          link.targetIndex < 0 ||
+          link.sourceIndex >= data.nodes.length ||
+          link.targetIndex >= data.nodes.length
+        ) {
+          continue;
+        }
+        nodeDegrees[link.sourceIndex] += 1;
+        nodeDegrees[link.targetIndex] += 1;
+        nodeAdjacency[link.sourceIndex].push(link.targetIndex);
+        if (link.targetIndex !== link.sourceIndex) {
+          nodeAdjacency[link.targetIndex].push(link.sourceIndex);
+        }
+      }
+
+      scope.userData.nodeDegrees = nodeDegrees;
+      scope.userData.nodeAdjacency = nodeAdjacency;
 
       // Initialize worker if not already done
       if (!workerManager.isReady()) {
@@ -456,6 +496,17 @@ class ForceDirectedGraph extends Group {
           scope.add(points, links);
           points.renderOrder = links.renderOrder + 1;
           scope.userData.hit.inherit(points);
+        })
+        .then(() =>
+          Labels.parse(size, data, scope.getLabelParseOptions()),
+        )
+        .then((result) => {
+          if (result) {
+            const labels = new Labels(result, uniforms);
+            scope.userData.labels = labels;
+            labels.renderOrder = points.renderOrder + 1;
+            scope.add(labels);
+          }
         });
     }
 
@@ -465,6 +516,80 @@ class ForceDirectedGraph extends Group {
         callback();
       }
     }
+  }
+
+  getLabelParseOptions() {
+    const { nodeAdjacency, nodeDegrees, labelFontFamily, uniforms, renderer } =
+      this.userData;
+    return {
+      adjacency: nodeAdjacency || [],
+      degrees: nodeDegrees || [],
+      fontFamily: labelFontFamily,
+      maxTextureSize: renderer?.capabilities?.maxTextureSize || 16384,
+      useMipmaps: renderer?.capabilities?.isWebGL2 === true,
+    };
+  }
+
+  refreshLabels() {
+    const { data, uniforms } = this.userData;
+
+    if (!data || !this.ready || !this.points) {
+      return Promise.resolve(null);
+    }
+
+    this.userData.labelRefreshToken =
+      (this.userData.labelRefreshToken || 0) + 1;
+    const refreshToken = this.userData.labelRefreshToken;
+
+    return Labels.parse(
+      uniforms.size.value,
+      data,
+      this.getLabelParseOptions(),
+    ).then((result) => {
+      if (refreshToken !== this.userData.labelRefreshToken) {
+        if (result) {
+          result.texture?.dispose?.();
+          result.geometry?.dispose?.();
+        }
+        return this.userData.labels || null;
+      }
+
+      const previousLabels = this.userData.labels;
+      if (previousLabels) {
+        if (!result) {
+          this.remove(previousLabels);
+          previousLabels.dispose();
+          this.userData.labels = null;
+          return null;
+        }
+
+        previousLabels.replaceData(result);
+
+        if (this.userData.variables?.positions) {
+          previousLabels.material.uniforms.texturePositions.value =
+            this.getTexture('positions');
+        }
+
+        return previousLabels;
+      }
+
+      if (!result) {
+        this.userData.labels = null;
+        return null;
+      }
+
+      const nextLabels = new Labels(result, uniforms);
+      nextLabels.renderOrder = this.points.renderOrder + 1;
+      this.userData.labels = nextLabels;
+      this.add(nextLabels);
+
+      if (this.userData.variables?.positions) {
+        nextLabels.material.uniforms.texturePositions.value =
+          this.getTexture('positions');
+      }
+
+      return nextLabels;
+    });
   }
 
   /**
@@ -794,6 +919,12 @@ class ForceDirectedGraph extends Group {
   set pointsInheritColor(v) {
     this.userData.uniforms.pointsInheritColor.value = v;
   }
+  get labelsInheritColor() {
+    return this.userData.uniforms.labelsInheritColor.value;
+  }
+  set labelsInheritColor(v) {
+    this.userData.uniforms.labelsInheritColor.value = v;
+  }
   get pointColor() {
     return this.userData.uniforms.pointColor.value;
   }
@@ -811,6 +942,18 @@ class ForceDirectedGraph extends Group {
   }
   set linkColor(v) {
     this.userData.uniforms.linkColor.value = v;
+  }
+  get labelsColor() {
+    return this.labelColor;
+  }
+  set labelsColor(v) {
+    this.labelColor = v;
+  }
+  get labelColor() {
+    return this.userData.uniforms.labelColor.value;
+  }
+  set labelColor(v) {
+    this.userData.uniforms.labelColor.value = v;
   }
   get linecap() {
     const index = Math.round(this.userData.uniforms.linecap.value);
@@ -843,6 +986,12 @@ class ForceDirectedGraph extends Group {
   set ending(v) {
     this.userData.uniforms.uEnding.value = v;
   }
+  get obscurity() {
+    return this.userData.uniforms.obscurity.value;
+  }
+  set obscurity(v) {
+    this.userData.uniforms.obscurity.value = Math.max(0, Math.min(1, v));
+  }
   get blending() {
     return this.children[0].material.blending;
   }
@@ -858,6 +1007,9 @@ class ForceDirectedGraph extends Group {
   }
   get links() {
     return this.children[1];
+  }
+  get labels() {
+    return this.userData.labels || null;
   }
   get uniforms() {
     return this.userData.uniforms;

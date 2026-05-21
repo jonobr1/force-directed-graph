@@ -1,5 +1,5 @@
 // src/index.js
-import { Color as Color3, Group, RepeatWrapping, Vector2, Vector3 } from "three";
+import { Color as Color4, Group, RepeatWrapping, Vector2, Vector3 as Vector32 } from "three";
 import { GPUComputationRenderer } from "three/examples/jsm/misc/GPUComputationRenderer.js";
 
 // src/math.js
@@ -1013,6 +1013,750 @@ var Links = class extends Mesh {
   }
 };
 
+// src/labels.js
+import {
+  BufferAttribute as BufferAttribute2,
+  CanvasTexture,
+  ClampToEdgeWrapping,
+  Color as Color2,
+  InstancedBufferAttribute as InstancedBufferAttribute2,
+  InstancedBufferGeometry as InstancedBufferGeometry2,
+  LinearFilter,
+  LinearMipmapLinearFilter,
+  Matrix4,
+  Mesh as Mesh2,
+  ShaderMaterial as ShaderMaterial3,
+  UniformsLib as UniformsLib3,
+  Vector3,
+  Vector4
+} from "three";
+
+// src/shaders/labels.js
+var labels = {
+  vertexShader: `
+    #include <fog_pars_vertex>
+
+    uniform sampler2D texturePositions;
+    uniform float frustumSize;
+    uniform float is2D;
+    uniform float sizeAttenuation;
+    uniform vec2 resolution;
+    uniform float uBeginning;
+    uniform float uEnding;
+    uniform float uNodeAmount;
+    uniform float obscurity;
+    uniform float nodeRadius;
+    uniform float nodeScale;
+    uniform float uLabelCount;
+    uniform float labelAlignment;
+    uniform float labelBaseline;
+    uniform float labelFontSize;
+    uniform float labelNear;
+    uniform vec2 labelOffset;
+
+    attribute vec3 source;       // .xy = UV into texturePositions, .z = nodeIndex + 1
+    attribute vec4 labelUV;      // .xy = atlas UV offset, .zw = atlas UV extent
+    attribute float aspectRatio; // label quad width / height
+    attribute float pointSize;   // per-node point size scalar
+    attribute float selectionRank;
+
+    varying vec2 vLabelUV;
+    varying vec3 vColor;
+    varying float vInRange;
+
+    void main() {
+
+      float nodeIndex  = source.z - 1.0;
+      float rangeStart = uBeginning * uNodeAmount;
+      float rangeEnd   = uEnding    * uNodeAmount;
+      float inRange    = step( rangeStart, nodeIndex ) * ( 1.0 - step( rangeEnd, nodeIndex ) );
+      float visibleCount = floor( ( 1.0 - clamp( obscurity, 0.0, 1.0 ) ) * uLabelCount + 0.5 );
+      float rankVisible = step( selectionRank + 0.5, visibleCount );
+      inRange *= rankVisible;
+
+      vec3 nodePos = texture2D( texturePositions, source.xy ).xyz;
+      nodePos.z *= 1.0 - is2D;
+
+      vec4 mvCenter = modelViewMatrix * vec4( nodePos, 1.0 );
+      float viewDistance = -mvCenter.z;
+      float beyondNear = 1.0 - step( viewDistance, max( labelNear, 0.0 ) );
+      inRange *= beyondNear;
+
+      // Billboard: extract camera right and up from the view matrix columns
+      vec3 right = normalize( vec3( viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0] ) );
+      vec3 up    = normalize( vec3( viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1] ) );
+
+      // Match point-sprite sizing by converting the intended screen-space
+      // label height into world units for the active projection.
+      float sizeScale  = mix( 1.0, frustumSize / max( viewDistance, 0.001 ), sizeAttenuation );
+      float labelPixelH = 0.1 * nodeRadius * pointSize * nodeScale * sizeScale * max( labelFontSize, 0.001 );
+      float projectionScaleY = max( abs( projectionMatrix[1][1] ), 0.0001 );
+      float isPerspectiveCamera = step( 0.5, abs( projectionMatrix[2][3] ) );
+      float depthScale = mix( 1.0, viewDistance, isPerspectiveCamera );
+      float worldUnitsPerPixel = ( 2.0 * depthScale ) / max( projectionScaleY * max( resolution.y, 1.0 ), 0.001 );
+      float labelH     = labelPixelH * worldUnitsPerPixel;
+      float labelW     = labelH * aspectRatio;
+      vec2 offset      = labelOffset * labelH;
+
+      // Shift the label relative to the node according to baseline/alignment.
+      vec3 worldPos = nodePos
+        + right * ( labelW * 0.5 * labelAlignment + offset.x )
+        + up    * ( labelH * labelBaseline + offset.y )
+        + right * position.x * labelW * 0.5
+        + up    * position.y * labelH * 0.5;
+
+      // Map quad UV [0,1] to the atlas region for this label
+      vLabelUV = labelUV.xy + uv * labelUV.zw;
+      vColor = color;
+      vInRange = inRange;
+
+      vec4 mvPosition = modelViewMatrix * vec4( worldPos, 1.0 );
+      gl_Position = projectionMatrix * mvPosition;
+      #include <fog_vertex>
+    }
+  `,
+  fragmentShader: `
+    #include <fog_pars_fragment>
+
+    uniform sampler2D textureAtlas;
+    uniform float inheritColors;
+    uniform float opacity;
+    uniform vec3 uColor;
+
+    varying vec2 vLabelUV;
+    varying vec3 vColor;
+    varying float vInRange;
+
+    void main() {
+
+      if ( vInRange <= 0.0 ) {
+        discard;
+      }
+
+      vec4 texel = texture2D( textureAtlas, vLabelUV );
+      float alpha = opacity * texel.a;
+
+      if ( alpha <= 0.0 ) {
+        discard;
+      }
+
+      gl_FragColor = vec4(
+        texel.rgb * mix( vec3( 1.0 ), vColor, inheritColors ) * uColor,
+        alpha
+      );
+      #include <fog_fragment>
+    }
+  `
+};
+var labels_default = labels;
+
+// src/labels.js
+var MODEL_VIEW_MATRIX = new Matrix4();
+var CAMERA_RIGHT = new Vector3();
+var CAMERA_UP = new Vector3();
+var LOCAL_NODE = new Vector3();
+var WORLD_CENTER = new Vector3();
+var WORLD_CORNER = new Vector3();
+var PROJECTED_CORNER = new Vector3();
+var MV_CENTER = new Vector4();
+var BASE_ATLAS_FONT_SIZE = 120;
+var BASE_ATLAS_PADDING = 4;
+var ATLAS_RASTER_SCALE = 2;
+var DEFAULT_FONT_FAMILY = "Arial, sans-serif";
+var LABEL_GRAPH_DISTANCE_HOPS = 6;
+var LABEL_NODE_COLOR = new Color2();
+var LabelAlignmentMap = {
+  center: 0,
+  left: 1,
+  right: -1
+};
+var LabelBaselineMap = {
+  top: 1,
+  middle: 0,
+  bottom: -1
+};
+function getLabelAlignmentName(value) {
+  if (value > 0.5) {
+    return "left";
+  }
+  if (value < -0.5) {
+    return "right";
+  }
+  return "center";
+}
+function getLabelBaselineName(value) {
+  if (value > 0.5) {
+    return "top";
+  }
+  if (value < -0.5) {
+    return "bottom";
+  }
+  return "middle";
+}
+function sanitizeLabelFontSize(fontSize) {
+  if (!Number.isFinite(fontSize)) {
+    return 1;
+  }
+  return Math.max(0.01, fontSize);
+}
+function sanitizeLabelNearDistance(nearDistance) {
+  if (!Number.isFinite(nearDistance)) {
+    return 0;
+  }
+  return Math.max(0, nearDistance);
+}
+function getNodeColorComponents(node) {
+  if (node?.color) {
+    LABEL_NODE_COLOR.set(node.color);
+    return [LABEL_NODE_COLOR.r, LABEL_NODE_COLOR.g, LABEL_NODE_COLOR.b];
+  }
+  return [1, 1, 1];
+}
+function compareSelectionCandidates(a, b) {
+  if (b.hasManualPriority !== a.hasManualPriority) {
+    return Number(b.hasManualPriority) - Number(a.hasManualPriority);
+  }
+  if (b.manualPriority !== a.manualPriority) {
+    return b.manualPriority - a.manualPriority;
+  }
+  if (b.degree !== a.degree) {
+    return b.degree - a.degree;
+  }
+  return a.entry.stableId - b.entry.stableId;
+}
+function relaxGraphDistances(sourceIndex, adjacency, distances, maxHops) {
+  if (!Number.isInteger(sourceIndex) || sourceIndex < 0) {
+    return;
+  }
+  const visited = new Int16Array(adjacency.length || distances.length);
+  visited.fill(-1);
+  const queue = [sourceIndex];
+  const depths = [0];
+  visited[sourceIndex] = 0;
+  distances[sourceIndex] = 0;
+  for (let i = 0; i < queue.length; i++) {
+    const nodeIndex = queue[i];
+    const depth = depths[i];
+    if (depth >= maxHops) {
+      continue;
+    }
+    const neighbors = adjacency[nodeIndex] || [];
+    for (let j = 0; j < neighbors.length; j++) {
+      const neighbor = neighbors[j];
+      if (!Number.isInteger(neighbor) || neighbor < 0 || neighbor >= visited.length) {
+        continue;
+      }
+      if (visited[neighbor] >= 0) {
+        continue;
+      }
+      const nextDepth = depth + 1;
+      visited[neighbor] = nextDepth;
+      if (nextDepth < distances[neighbor]) {
+        distances[neighbor] = nextDepth;
+      }
+      queue.push(neighbor);
+      depths.push(nextDepth);
+    }
+  }
+}
+function buildLabelSelectionOrder(entries, adjacency = [], nodes = [], degrees = [], maxHops = LABEL_GRAPH_DISTANCE_HOPS) {
+  if (!entries || entries.length === 0) {
+    return [];
+  }
+  const candidates = entries.map((entry) => {
+    const node = nodes[entry.nodeIndex] || {};
+    const manualPriority = typeof node.labelPriority === "number" && Number.isFinite(node.labelPriority) ? node.labelPriority : -Infinity;
+    return {
+      entry,
+      degree: typeof degrees[entry.nodeIndex] === "number" && Number.isFinite(degrees[entry.nodeIndex]) ? degrees[entry.nodeIndex] : 0,
+      hasManualPriority: Number.isFinite(manualPriority),
+      manualPriority,
+      selected: false
+    };
+  }).sort(compareSelectionCandidates);
+  const distances = new Int16Array(
+    Math.max(
+      1,
+      nodes.length,
+      adjacency.length,
+      ...entries.map((entry) => entry.nodeIndex + 1)
+    )
+  );
+  distances.fill(maxHops + 1);
+  const order = [];
+  let hasSelection = false;
+  for (let threshold = maxHops + 1; threshold >= 0; threshold--) {
+    for (let i = 0; i < candidates.length; i++) {
+      const candidate = candidates[i];
+      if (candidate.selected) {
+        continue;
+      }
+      const distance = distances[candidate.entry.nodeIndex];
+      if (hasSelection && distance < threshold) {
+        continue;
+      }
+      candidate.selected = true;
+      order.push(candidate.entry);
+      relaxGraphDistances(
+        candidate.entry.nodeIndex,
+        adjacency,
+        distances,
+        maxHops
+      );
+      hasSelection = true;
+    }
+  }
+  return order;
+}
+function layoutAtlasRows(items, maxTextureSize) {
+  if (!Number.isFinite(maxTextureSize) || maxTextureSize <= 0) {
+    return { fits: false, width: 0, height: 0, placements: [] };
+  }
+  let x = 0;
+  let y = 0;
+  let rowHeight = 0;
+  let maxWidth = 0;
+  const placements = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const width = Math.max(1, Math.ceil(item.labelWidth));
+    const height = Math.max(1, Math.ceil(item.labelHeight));
+    if (width > maxTextureSize || height > maxTextureSize) {
+      return { fits: false, width: 0, height: 0, placements: [] };
+    }
+    if (x > 0 && x + width > maxTextureSize) {
+      x = 0;
+      y += rowHeight;
+      rowHeight = 0;
+    }
+    placements.push({
+      x,
+      y,
+      width,
+      height
+    });
+    x += width;
+    rowHeight = Math.max(rowHeight, height);
+    maxWidth = Math.max(maxWidth, x);
+    if (y + rowHeight > maxTextureSize) {
+      return { fits: false, width: 0, height: 0, placements: [] };
+    }
+  }
+  return {
+    fits: true,
+    width: Math.max(1, maxWidth),
+    height: Math.max(1, y + rowHeight),
+    placements
+  };
+}
+function measureAtlasCandidate(tempCtx, rawItems, { requestedFontSize, requestedPadding, fontFamily, scale, maxTextureSize }) {
+  const padding = Math.max(1, Math.round(requestedPadding * scale));
+  const fontSize = Math.max(1, Math.round(requestedFontSize * scale));
+  const tileH = fontSize + padding * 2;
+  if (tileH > maxTextureSize) {
+    return { fits: false };
+  }
+  tempCtx.font = `${fontSize}px ${fontFamily}`;
+  const items = rawItems.map((item) => {
+    const labelWidth = Math.ceil(tempCtx.measureText(item.text).width) + padding * 2;
+    return {
+      ...item,
+      labelWidth,
+      labelHeight: tileH,
+      aspectRatio: labelWidth / tileH
+    };
+  });
+  const layout = layoutAtlasRows(items, maxTextureSize);
+  return {
+    fits: layout.fits,
+    padding,
+    fontSize,
+    tileH,
+    items,
+    layout
+  };
+}
+function fitAtlasLayout(tempCtx, rawItems, { requestedFontSize, requestedPadding, fontFamily, maxTextureSize }) {
+  let lo = 0;
+  let hi = 1;
+  let best = null;
+  for (let i = 0; i < 12; i++) {
+    const scale = (lo + hi) * 0.5;
+    const candidate = measureAtlasCandidate(tempCtx, rawItems, {
+      requestedFontSize,
+      requestedPadding,
+      fontFamily,
+      scale,
+      maxTextureSize
+    });
+    if (candidate.fits) {
+      best = {
+        ...candidate,
+        scale
+      };
+      lo = scale;
+    } else {
+      hi = scale;
+    }
+  }
+  if (best) {
+    return best;
+  }
+  return measureAtlasCandidate(tempCtx, rawItems, {
+    requestedFontSize,
+    requestedPadding,
+    fontFamily,
+    scale: 0.01,
+    maxTextureSize
+  });
+}
+function buildTextAtlas(nodes, degrees = [], options = {}) {
+  const fontScale = sanitizeLabelFontSize(options.fontSize);
+  const atlasScale = ATLAS_RASTER_SCALE;
+  const requestedPadding = Math.max(
+    1,
+    Math.round(BASE_ATLAS_PADDING * fontScale * atlasScale)
+  );
+  const requestedFontSize = Math.max(
+    1,
+    Math.round(BASE_ATLAS_FONT_SIZE * fontScale * atlasScale)
+  );
+  const fontFamily = options.fontFamily || DEFAULT_FONT_FAMILY;
+  const maxTextureSize = Math.max(1, options.maxTextureSize || 16384);
+  const textColor = "#fff";
+  const temp = document.createElement("canvas");
+  const tempCtx = temp.getContext("2d");
+  tempCtx.font = `${requestedFontSize}px ${fontFamily}`;
+  const rawItems = [];
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    if (node.label === null || node.label === void 0) {
+      continue;
+    }
+    const text = String(node.label);
+    rawItems.push({
+      text,
+      nodeIndex: i,
+      pointSize: typeof node.size === "number" && Number.isFinite(node.size) ? node.size : 1,
+      basePriority: getLabelBasePriority(node, degrees[i] || 0)
+    });
+  }
+  if (rawItems.length === 0) {
+    return null;
+  }
+  const fittedAtlas = fitAtlasLayout(tempCtx, rawItems, {
+    requestedFontSize,
+    requestedPadding,
+    fontFamily,
+    maxTextureSize
+  });
+  if (!fittedAtlas.fits) {
+    return null;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = fittedAtlas.layout.width;
+  canvas.height = fittedAtlas.layout.height;
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = true;
+  ctx.font = `${fittedAtlas.fontSize}px ${fontFamily}`;
+  ctx.fillStyle = textColor;
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "center";
+  const entries = [];
+  for (let i = 0; i < fittedAtlas.items.length; i++) {
+    const item = fittedAtlas.items[i];
+    const placement = fittedAtlas.layout.placements[i];
+    const px = placement.x;
+    const py = placement.y;
+    ctx.fillText(
+      item.text,
+      px + placement.width / 2,
+      py + placement.height / 2
+    );
+    entries.push({
+      ...item,
+      labelId: i,
+      stableId: item.nodeIndex,
+      persistence: 0,
+      atlasUV: {
+        u: px / canvas.width,
+        v: 1 - (py + placement.height) / canvas.height,
+        uw: placement.width / canvas.width,
+        uh: placement.height / canvas.height
+      }
+    });
+  }
+  return { canvas, entries };
+}
+function getLabelBasePriority(node, degree = 0) {
+  if (typeof node.labelPriority === "number" && Number.isFinite(node.labelPriority)) {
+    return node.labelPriority;
+  }
+  if (typeof node.size === "number" && Number.isFinite(node.size)) {
+    return node.size;
+  }
+  if (Number.isFinite(degree)) {
+    return degree;
+  }
+  return 0;
+}
+function compareLabelEntries(a, b) {
+  if (b.basePriority !== a.basePriority) {
+    return b.basePriority - a.basePriority;
+  }
+  return a.stableId - b.stableId;
+}
+function buildSelectionRanks(entries, selectionOrder) {
+  const ranksByLabelId = new Float32Array(entries.length);
+  const orderedEntries = selectionOrder && selectionOrder.length > 0 ? selectionOrder : entries.slice().sort(compareLabelEntries);
+  for (let i = 0; i < orderedEntries.length; i++) {
+    ranksByLabelId[orderedEntries[i].labelId] = i;
+  }
+  return ranksByLabelId;
+}
+function configureAtlasTexture(texture, options = {}) {
+  const useMipmaps = Boolean(options.useMipmaps);
+  texture.minFilter = useMipmaps ? LinearMipmapLinearFilter : LinearFilter;
+  texture.magFilter = LinearFilter;
+  texture.wrapS = ClampToEdgeWrapping;
+  texture.wrapT = ClampToEdgeWrapping;
+  texture.generateMipmaps = useMipmaps;
+  texture.needsUpdate = true;
+  return texture;
+}
+var Labels = class extends Mesh2 {
+  constructor({ geometry, texture, entries, fontFamily }, uniforms) {
+    const material = new ShaderMaterial3({
+      uniforms: {
+        ...UniformsLib3.fog,
+        ...{
+          texturePositions: { value: null },
+          textureAtlas: { value: texture },
+          opacity: uniforms.opacity,
+          obscurity: uniforms.obscurity,
+          frustumSize: uniforms.frustumSize,
+          inheritColors: uniforms.labelsInheritColor,
+          is2D: uniforms.is2D,
+          sizeAttenuation: uniforms.sizeAttenuation,
+          resolution: uniforms.resolution,
+          nodeRadius: uniforms.nodeRadius,
+          nodeScale: uniforms.nodeScale,
+          uLabelCount: { value: entries.length },
+          uColor: uniforms.labelColor,
+          labelAlignment: uniforms.labelAlignment,
+          labelBaseline: uniforms.labelBaseline,
+          labelFontSize: uniforms.labelFontSize,
+          labelNear: uniforms.labelNear,
+          labelOffset: uniforms.labelOffset,
+          uBeginning: uniforms.uBeginning,
+          uEnding: uniforms.uEnding,
+          uNodeAmount: uniforms.uNodeAmount
+        }
+      },
+      vertexShader: labels_default.vertexShader,
+      fragmentShader: labels_default.fragmentShader,
+      transparent: true,
+      vertexColors: true,
+      depthWrite: false,
+      depthTest: false,
+      fog: true
+    });
+    super(geometry, material);
+    this.frustumCulled = false;
+    this.entries = entries;
+    this.userData.fontFamily = fontFamily || DEFAULT_FONT_FAMILY;
+    this.userData.fontSize = uniforms.labelFontSize.value;
+    this.userData.near = sanitizeLabelNearDistance(uniforms.labelNear.value);
+  }
+  dispose() {
+    this.material.uniforms.textureAtlas.value?.dispose?.();
+    this.material.dispose();
+    this.geometry.dispose();
+  }
+  replaceData({
+    geometry,
+    texture,
+    entries,
+    fontFamily,
+    fontSize
+  }) {
+    this.geometry.dispose();
+    this.material.uniforms.textureAtlas.value?.dispose?.();
+    this.geometry = geometry;
+    this.entries = entries;
+    this.material.uniforms.textureAtlas.value = texture;
+    this.material.uniforms.uLabelCount.value = entries.length;
+    this.userData.fontFamily = fontFamily || DEFAULT_FONT_FAMILY;
+    this.userData.fontSize = sanitizeLabelFontSize(fontSize);
+    this.userData.near = sanitizeLabelNearDistance(
+      this.material.uniforms.labelNear.value
+    );
+  }
+  get fontSize() {
+    if (this.parent?.userData?.uniforms?.labelFontSize) {
+      return this.parent.userData.uniforms.labelFontSize.value;
+    }
+    return this.userData.fontSize;
+  }
+  set fontSize(v) {
+    const nextValue = sanitizeLabelFontSize(v);
+    this.userData.fontSize = nextValue;
+    if (!this.material?.uniforms?.labelFontSize) {
+      return;
+    }
+    if (this.material.uniforms.labelFontSize.value === nextValue) {
+      return;
+    }
+    this.material.uniforms.labelFontSize.value = nextValue;
+  }
+  get fontFamily() {
+    if (this.parent?.userData?.labelFontFamily) {
+      return this.parent.userData.labelFontFamily;
+    }
+    return this.userData.fontFamily;
+  }
+  set fontFamily(v) {
+    const nextValue = typeof v === "string" && v.trim().length > 0 ? v.trim() : DEFAULT_FONT_FAMILY;
+    this.userData.fontFamily = nextValue;
+    if (!this.parent?.userData) {
+      return;
+    }
+    if (this.parent.userData.labelFontFamily === nextValue) {
+      return;
+    }
+    this.parent.userData.labelFontFamily = nextValue;
+    this.parent.refreshLabels();
+  }
+  get alignment() {
+    return getLabelAlignmentName(this.material.uniforms.labelAlignment.value);
+  }
+  set alignment(v) {
+    this.material.uniforms.labelAlignment.value = LabelAlignmentMap[v] ?? LabelAlignmentMap.center;
+  }
+  get baseline() {
+    return getLabelBaselineName(this.material.uniforms.labelBaseline.value);
+  }
+  set baseline(v) {
+    this.material.uniforms.labelBaseline.value = LabelBaselineMap[v] ?? LabelBaselineMap.top;
+  }
+  get offset() {
+    return this.material.uniforms.labelOffset.value;
+  }
+  set offset(v) {
+    if (!v || !Number.isFinite(v.x) || !Number.isFinite(v.y)) {
+      return;
+    }
+    this.material.uniforms.labelOffset.value.set(v.x, v.y);
+  }
+  get near() {
+    if (this.parent?.userData?.uniforms?.labelNear) {
+      return this.parent.userData.uniforms.labelNear.value;
+    }
+    return this.userData.near;
+  }
+  set near(v) {
+    const nextValue = sanitizeLabelNearDistance(v);
+    this.userData.near = nextValue;
+    if (!this.material?.uniforms?.labelNear) {
+      return;
+    }
+    if (this.material.uniforms.labelNear.value === nextValue) {
+      return;
+    }
+    this.material.uniforms.labelNear.value = nextValue;
+  }
+  static parse(size2, data, options = {}) {
+    const atlas = buildTextAtlas(data.nodes, options.degrees || [], options);
+    if (!atlas) {
+      return Promise.resolve(null);
+    }
+    const { canvas, entries } = atlas;
+    const quadVerts = new Float32Array([
+      -1,
+      -1,
+      0,
+      1,
+      -1,
+      0,
+      -1,
+      1,
+      0,
+      1,
+      1,
+      0
+    ]);
+    const quadUVs = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
+    const quadIdx = [0, 1, 2, 2, 1, 3];
+    const geometry = new InstancedBufferGeometry2();
+    geometry.setAttribute("position", new BufferAttribute2(quadVerts, 3));
+    geometry.setAttribute("uv", new BufferAttribute2(quadUVs, 2));
+    geometry.setIndex(quadIdx);
+    const sources = [];
+    const colors = [];
+    const labelUVs = [];
+    const aspectRatios = [];
+    const pointSizes = [];
+    const selectionOrder = buildLabelSelectionOrder(
+      entries,
+      options.adjacency || [],
+      data.nodes,
+      options.degrees || []
+    );
+    const selectionRanksByLabelId = buildSelectionRanks(entries, selectionOrder);
+    const selectionRanks = [];
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      const x = entry.nodeIndex % size2 / size2;
+      const y = Math.floor(entry.nodeIndex / size2) / size2;
+      const z = entry.nodeIndex + 1;
+      sources.push(x, y, z);
+      colors.push(...getNodeColorComponents(data.nodes[entry.nodeIndex]));
+      labelUVs.push(
+        entry.atlasUV.u,
+        entry.atlasUV.v,
+        entry.atlasUV.uw,
+        entry.atlasUV.uh
+      );
+      aspectRatios.push(entry.aspectRatio);
+      pointSizes.push(entry.pointSize);
+      selectionRanks.push(selectionRanksByLabelId[entry.labelId]);
+    }
+    geometry.setAttribute(
+      "source",
+      new InstancedBufferAttribute2(new Float32Array(sources), 3)
+    );
+    geometry.setAttribute(
+      "color",
+      new InstancedBufferAttribute2(new Float32Array(colors), 3)
+    );
+    geometry.setAttribute(
+      "labelUV",
+      new InstancedBufferAttribute2(new Float32Array(labelUVs), 4)
+    );
+    geometry.setAttribute(
+      "aspectRatio",
+      new InstancedBufferAttribute2(new Float32Array(aspectRatios), 1)
+    );
+    geometry.setAttribute(
+      "pointSize",
+      new InstancedBufferAttribute2(new Float32Array(pointSizes), 1)
+    );
+    geometry.setAttribute(
+      "selectionRank",
+      new InstancedBufferAttribute2(new Float32Array(selectionRanks), 1)
+    );
+    geometry.instanceCount = entries.length;
+    const texture = configureAtlasTexture(new CanvasTexture(canvas), options);
+    return Promise.resolve({
+      geometry,
+      texture,
+      entries,
+      fontFamily: options.fontFamily || DEFAULT_FONT_FAMILY,
+      fontSize: sanitizeLabelFontSize(options.fontSize)
+    });
+  }
+};
+
 // src/registry.js
 var Registry = class {
   map = {};
@@ -1038,8 +1782,8 @@ var Registry = class {
 
 // src/hit.js
 import {
-  Color as Color2,
-  ShaderMaterial as ShaderMaterial3,
+  Color as Color3,
+  ShaderMaterial as ShaderMaterial4,
   WebGLRenderTarget,
   Sprite,
   SpriteMaterial
@@ -1117,7 +1861,7 @@ var hit = {
 var hit_default = hit;
 
 // src/hit.js
-var color2 = new Color2();
+var color2 = new Color3();
 var Hit = class {
   parent = null;
   renderTarget = new WebGLRenderTarget(1, 1);
@@ -1131,7 +1875,7 @@ var Hit = class {
     this.helper = new Sprite(new SpriteMaterial({
       map: this.renderTarget.texture
     }));
-    this.material = new ShaderMaterial3({
+    this.material = new ShaderMaterial4({
       uniforms: {
         hitScale: { value: 2 }
       },
@@ -1846,8 +2590,8 @@ var TextureWorkerManager = class {
 };
 
 // src/index.js
-var color3 = new Color3();
-var position = new Vector3();
+var color3 = new Color4();
+var position = new Vector32();
 var size = new Vector2();
 var drawingBufferSize = new Vector2();
 var LineCaps = ["round", "butt", "square"];
@@ -1856,6 +2600,7 @@ var LineCapsMap = {
   butt: 1,
   square: 2
 };
+var DEFAULT_LABEL_FONT_FAMILY = "Arial, sans-serif";
 var buffers = {
   int: new Uint8ClampedArray(4),
   float: new Float32Array(4)
@@ -1938,9 +2683,11 @@ var ForceDirectedGraph = class extends Group {
       sizeAttenuation: { value: true },
       frustumSize: { value: 100 },
       linksInheritColor: { value: false },
+      labelsInheritColor: { value: false },
       pointsInheritColor: { value: true },
-      pointColor: { value: new Color3(1, 1, 1) },
-      linkColor: { value: new Color3(1, 1, 1) },
+      pointColor: { value: new Color4(1, 1, 1) },
+      linkColor: { value: new Color4(1, 1, 1) },
+      labelColor: { value: new Color4(0, 0, 0) },
       linecap: { value: LineCapsMap.round },
       linewidth: { value: 1 },
       opacity: { value: 1 },
@@ -1948,8 +2695,15 @@ var ForceDirectedGraph = class extends Group {
       resolution: { value: new Vector2(1, 1) },
       uBeginning: { value: 0 },
       uEnding: { value: 1 },
-      uNodeAmount: { value: 0 }
+      uNodeAmount: { value: 0 },
+      obscurity: { value: 0 },
+      labelAlignment: { value: 0 },
+      labelBaseline: { value: 1 },
+      labelFontSize: { value: 24 },
+      labelNear: { value: 0 },
+      labelOffset: { value: new Vector2(0, 0) }
     };
+    this.userData.labelFontFamily = DEFAULT_LABEL_FONT_FAMILY;
     this.userData.hit = new Hit(this);
     this.userData.workerManager = new TextureWorkerManager();
     if (data) {
@@ -1976,13 +2730,16 @@ var ForceDirectedGraph = class extends Group {
     "sizeAttenuation",
     "frustumSize",
     "linksInheritColor",
+    "labelsInheritColor",
     "pointsInheritColor",
     "pointColor",
     "linkColor",
+    "labelColor",
     "linecap",
     "linewidth",
     "opacity",
-    "blending"
+    "blending",
+    "obscurity"
   ];
   /**
    * @param {Object} data - Object with nodes and links properties based on https://observablehq.com/@d3/force-directed-graph-component
@@ -2015,6 +2772,7 @@ var ForceDirectedGraph = class extends Group {
         child.dispose();
       }
     }
+    this.userData.labels = null;
     const size2 = getPotSize(Math.max(data.nodes.length, data.links.length * 2));
     uniforms.size.value = size2;
     gpgpu = new GPUComputationRenderer(size2, size2, renderer);
@@ -2061,6 +2819,22 @@ var ForceDirectedGraph = class extends Group {
           targetIndex
         };
       });
+      const nodeDegrees = new Array(data.nodes.length).fill(0);
+      const nodeAdjacency = Array.from({ length: data.nodes.length }, () => []);
+      for (let i = 0; i < preparedLinks.length; i++) {
+        const link2 = preparedLinks[i];
+        if (!Number.isInteger(link2.sourceIndex) || !Number.isInteger(link2.targetIndex) || link2.sourceIndex < 0 || link2.targetIndex < 0 || link2.sourceIndex >= data.nodes.length || link2.targetIndex >= data.nodes.length) {
+          continue;
+        }
+        nodeDegrees[link2.sourceIndex] += 1;
+        nodeDegrees[link2.targetIndex] += 1;
+        nodeAdjacency[link2.sourceIndex].push(link2.targetIndex);
+        if (link2.targetIndex !== link2.sourceIndex) {
+          nodeAdjacency[link2.targetIndex].push(link2.sourceIndex);
+        }
+      }
+      scope.userData.nodeDegrees = nodeDegrees;
+      scope.userData.nodeAdjacency = nodeAdjacency;
       if (!workerManager.isReady()) {
         await workerManager.init();
       }
@@ -2199,6 +2973,15 @@ var ForceDirectedGraph = class extends Group {
         scope.add(points2, links2);
         points2.renderOrder = links2.renderOrder + 1;
         scope.userData.hit.inherit(points2);
+      }).then(
+        () => Labels.parse(size2, data, scope.getLabelParseOptions())
+      ).then((result) => {
+        if (result) {
+          const labels2 = new Labels(result, uniforms);
+          scope.userData.labels = labels2;
+          labels2.renderOrder = points2.renderOrder + 1;
+          scope.add(labels2);
+        }
       });
     }
     function complete() {
@@ -2207,6 +2990,63 @@ var ForceDirectedGraph = class extends Group {
         callback();
       }
     }
+  }
+  getLabelParseOptions() {
+    const { nodeAdjacency, nodeDegrees, labelFontFamily, uniforms, renderer } = this.userData;
+    return {
+      adjacency: nodeAdjacency || [],
+      degrees: nodeDegrees || [],
+      fontFamily: labelFontFamily,
+      maxTextureSize: renderer?.capabilities?.maxTextureSize || 16384,
+      useMipmaps: renderer?.capabilities?.isWebGL2 === true
+    };
+  }
+  refreshLabels() {
+    const { data, uniforms } = this.userData;
+    if (!data || !this.ready || !this.points) {
+      return Promise.resolve(null);
+    }
+    this.userData.labelRefreshToken = (this.userData.labelRefreshToken || 0) + 1;
+    const refreshToken = this.userData.labelRefreshToken;
+    return Labels.parse(
+      uniforms.size.value,
+      data,
+      this.getLabelParseOptions()
+    ).then((result) => {
+      if (refreshToken !== this.userData.labelRefreshToken) {
+        if (result) {
+          result.texture?.dispose?.();
+          result.geometry?.dispose?.();
+        }
+        return this.userData.labels || null;
+      }
+      const previousLabels = this.userData.labels;
+      if (previousLabels) {
+        if (!result) {
+          this.remove(previousLabels);
+          previousLabels.dispose();
+          this.userData.labels = null;
+          return null;
+        }
+        previousLabels.replaceData(result);
+        if (this.userData.variables?.positions) {
+          previousLabels.material.uniforms.texturePositions.value = this.getTexture("positions");
+        }
+        return previousLabels;
+      }
+      if (!result) {
+        this.userData.labels = null;
+        return null;
+      }
+      const nextLabels = new Labels(result, uniforms);
+      nextLabels.renderOrder = this.points.renderOrder + 1;
+      this.userData.labels = nextLabels;
+      this.add(nextLabels);
+      if (this.userData.variables?.positions) {
+        nextLabels.material.uniforms.texturePositions.value = this.getTexture("positions");
+      }
+      return nextLabels;
+    });
   }
   /**
    * @param {Number} time
@@ -2494,6 +3334,12 @@ var ForceDirectedGraph = class extends Group {
   set pointsInheritColor(v) {
     this.userData.uniforms.pointsInheritColor.value = v;
   }
+  get labelsInheritColor() {
+    return this.userData.uniforms.labelsInheritColor.value;
+  }
+  set labelsInheritColor(v) {
+    this.userData.uniforms.labelsInheritColor.value = v;
+  }
   get pointColor() {
     return this.userData.uniforms.pointColor.value;
   }
@@ -2511,6 +3357,18 @@ var ForceDirectedGraph = class extends Group {
   }
   set linkColor(v) {
     this.userData.uniforms.linkColor.value = v;
+  }
+  get labelsColor() {
+    return this.labelColor;
+  }
+  set labelsColor(v) {
+    this.labelColor = v;
+  }
+  get labelColor() {
+    return this.userData.uniforms.labelColor.value;
+  }
+  set labelColor(v) {
+    this.userData.uniforms.labelColor.value = v;
   }
   get linecap() {
     const index = Math.round(this.userData.uniforms.linecap.value);
@@ -2543,6 +3401,12 @@ var ForceDirectedGraph = class extends Group {
   set ending(v) {
     this.userData.uniforms.uEnding.value = v;
   }
+  get obscurity() {
+    return this.userData.uniforms.obscurity.value;
+  }
+  set obscurity(v) {
+    this.userData.uniforms.obscurity.value = Math.max(0, Math.min(1, v));
+  }
   get blending() {
     return this.children[0].material.blending;
   }
@@ -2557,6 +3421,9 @@ var ForceDirectedGraph = class extends Group {
   }
   get links() {
     return this.children[1];
+  }
+  get labels() {
+    return this.userData.labels || null;
   }
   get uniforms() {
     return this.userData.uniforms;

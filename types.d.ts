@@ -227,6 +227,53 @@ declare module '@jonobr1/force-directed-graph/links' {
   }
   import { Mesh } from 'three';
 }
+declare module '@jonobr1/force-directed-graph/shaders/labels' {
+  export default labels;
+  namespace labels {
+    const vertexShader: string;
+    const fragmentShader: string;
+  }
+}
+declare module '@jonobr1/force-directed-graph/labels' {
+  export class Labels extends Mesh {
+    static parse(
+      size: number,
+      data: any,
+      options?: {
+        adjacency?: number[][];
+        degrees?: number[];
+        fontSize?: number;
+        fontFamily?: string;
+        maxTextureSize?: number;
+        useMipmaps?: boolean;
+      },
+    ): Promise<{ geometry: any; texture: any; entries: any[] } | null>;
+    constructor(
+      labelData: {
+        geometry: any;
+        texture: any;
+        entries: any[];
+        fontFamily?: string;
+        fontSize?: number;
+      },
+      uniforms: any,
+    );
+    frustumCulled: boolean;
+    set alignment(arg: 'center' | 'left' | 'right');
+    get alignment(): 'center' | 'left' | 'right';
+    set baseline(arg: 'top' | 'middle' | 'bottom');
+    get baseline(): 'top' | 'middle' | 'bottom';
+    set offset(arg: Vector2);
+    get offset(): Vector2;
+    set near(arg: number);
+    get near(): number;
+    set fontSize(arg: number);
+    get fontSize(): number;
+    set fontFamily(arg: string);
+    get fontFamily(): string;
+  }
+  import { Mesh, Vector2 } from 'three';
+}
 declare module '@jonobr1/force-directed-graph/registry' {
   export class Registry {
     constructor(list: any);
@@ -245,6 +292,8 @@ declare module '@jonobr1/force-directed-graph' {
     isStatic?: boolean;
     color?: CSSStyleValue;
     image?: string;
+    label?: string;
+    labelPriority?: number;
     size?: number;
   };
   export type LinkData = { source: number; target: number };
@@ -333,6 +382,8 @@ declare module '@jonobr1/force-directed-graph' {
     get frustumSize(): number;
     set linksInheritColor(arg: boolean);
     get linksInheritColor(): boolean;
+    set labelsInheritColor(arg: boolean);
+    get labelsInheritColor(): boolean;
     set pointsInheritColor(arg: boolean);
     get pointsInheritColor(): boolean;
     set pointColor(arg: Color);
@@ -341,12 +392,23 @@ declare module '@jonobr1/force-directed-graph' {
     get linksColor(): Color;
     set linkColor(arg: Color);
     get linkColor(): Color;
+    set labelsColor(arg: Color);
+    get labelsColor(): Color;
+    set labelColor(arg: Color);
+    get labelColor(): Color;
     set linecap(arg: 'round' | 'butt' | 'square');
     get linecap(): 'round' | 'butt' | 'square';
     set linewidth(arg: number);
     get linewidth(): number;
     set opacity(arg: number);
     get opacity(): number;
+    /**
+     * Label-density control in [0, 1].
+     * 0 shows all labels.
+     * 1 hides all labels.
+     */
+    set obscurity(arg: number);
+    get obscurity(): number;
     set blending(
       arg:
         | typeof NoBlending
@@ -365,6 +427,7 @@ declare module '@jonobr1/force-directed-graph' {
       | typeof CustomBlending;
     get points(): Points;
     get links(): Links;
+    get labels(): import('@jonobr1/force-directed-graph/labels').Labels | null;
     get uniforms(): any;
     get nodeCount(): number;
     get edgeCount(): number;
