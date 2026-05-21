@@ -1,416 +1,679 @@
-declare module '@jonobr1/force-directed-graph/shaders/partials' {
-  /**
-   * Draws a circle with uv position pos and radius rad.
-   * Relies on uniforms:
-   * - float sizeAttenuation: 0, 1
-   */
-  export const circle: string;
-  /**
-   * Get the position in local space of a node
-   */
-  export const getPosition: string;
-  /**
-   * Get the velocity in local space of a node
-   */
-  export const getVelocity: string;
-  /**
-   * Get a node's id from a specific UV coordinate
-   * Relies on uniforms:
-   * - float size: number
-   */
-  export const getIndex: string;
-  /**
-   * GLSL version of a random float generator
-   */
-  export const random: string;
-  /**
-   * Add slight variation of a given node's index
-   * Used for unsticking two nodes that happen to be
-   * at the exact same coordinates on any given frame,
-   * though usually most common on initialization.
-   *
-   * Relies on uniforms:
-   * - float time: number
-   */
-  export const jiggle: string;
-  /**
-   * Link two nodes together based on the relied on "links"
-   * array from the ingested data. Schema mimics d3's
-   * force directed graph: https://observablehq.com/@d3/force-directed-graph-component
-   *
-   * Relies on uniforms and partials:
-   * - sampler2D textureLinks
-   * - int getIndex
-   * - vec3 getVelocity
-   * - vec3 getPosition
-   * - float is2D: [0, 1]
-   * - float springLength: number
-   */
-  export const link: string;
-  /**
-   * Repulses (or not) two nodes together based
-   * on a repulsion amount.
-   *
-   * Relies on uniforms and partials:
-   * - float is2D: [0, 1]
-   * - float repulsion: number
-   */
-  export const charge: string;
-  /**
-   * Attracts (or not) a node to the
-   * center of the force directed graph
-   * by how much gravity there is.
-   *
-   * Relies on uniforms:
-   * - float gravity: number
-   */
-  export const center: string;
-  /**
-   * Attracts a node toward its supplied target position,
-   * using the same gravity scaling as center().
-   *
-   * Relies on uniforms:
-   * - float gravity: number
-   */
-  export const anchor: string;
-}
-declare module '@jonobr1/force-directed-graph/shaders/hit' {
-  export default hit;
-  namespace hit {
-    const vertexShader: string;
-    const fragmentShader: string;
-  }
-}
-declare module '@jonobr1/force-directed-graph/hit' {
-  export class Hit {
-    constructor(fdg: any);
-    parent: any;
-    renderTarget: any;
-    width: number;
-    height: number;
-    ratio: number;
-    material: any;
-    helper: any;
-    inherit(mesh: any): void;
-    setSize(width: any, height: any): void;
-    compute(renderer: any, camera: any): void;
-    dispose(): void;
-  }
-}
-declare module '@jonobr1/force-directed-graph/math' {
-  /**
-   *
-   * @param {Number} number - The number to snap to a power of two size
-   * @returns
-   */
-  export function getPotSize(number: number): number;
-  /**
-   *
-   * @param {Number} x - the value to clamp
-   * @param {Number} min - the minimum possible value
-   * @param {Number} max - the maximum possible value
-   * @returns {Number}
-   */
-  export function clamp(x: number, min: number, max: number): number;
-  /**
-   * An asynchronous each loop. Max
-   * @param {Array} list - an array like object that can be iterated over
-   * @param {Function} func - the function to iterate passing in the index and value each time it's invoked
-   * @param {Number} [step] - the amount the iterator should increment by. Default is 1
-   * @param {Number} [max] - the max number of iterations before request animation is invoked. Default is 1000
-   * @returns {Promise}
-   */
-  export function each(
-    list: any[],
-    func: Function,
-    step?: number,
-    max?: number,
-  ): Promise<any>;
-  /**
-   *
-   * @param {Number} i - index to turn into color
-   * @returns {Object} - with `r`, `g`, `b` properties between 0 and 255
-   */
-  export function indexToRGB(i: number): any;
-  /**
-   *
-   * @param {Object} params - object with properties `r`, `g`, `b` between 0 and 255
-   * @returns {Number} - the corresponding index
-   */
-  export function rgbToIndex({ r, g, b }: any): number;
-}
-declare module '@jonobr1/force-directed-graph/shaders/positions' {
-  /**
-   * Calculate the next frame's position for all nodes.
-   */
-  export const positions: '\n  uniform float is2D;\n  uniform float timeStep;\n\n  void main() {\n\n    vec2 uv = gl_FragCoord.xy / resolution.xy;\n    vec4 texel = texture2D( texturePositions, uv );\n    vec3 position = texel.xyz;\n    vec3 velocity = texture2D( textureVelocities, uv ).xyz;\n    float isStatic = texel.w;\n\n    vec3 result = position + velocity * timeStep * ( 1.0 - isStatic );\n\n    gl_FragColor = vec4( result.xyz, isStatic );\n\n  }\n';
-}
-declare module '@jonobr1/force-directed-graph/shaders/velocities' {
-  export const types: string[];
-  /**
-   * Calculate the next frame's velocity for all nodes.
-   */
-  export const simplex: string;
-  export const nested: string;
-}
-declare module '@jonobr1/force-directed-graph/shaders/simulation' {
-  namespace _default {
-    export { positions };
-    export { simplex as velocities };
-    export { simplex };
-    export { nested };
-    export { types };
-  }
-  export default _default;
-  import { positions } from '@jonobr1/force-directed-graph/shaders/positions';
-  import { simplex } from '@jonobr1/force-directed-graph/shaders/velocities';
-  import { nested } from '@jonobr1/force-directed-graph/shaders/velocities';
-  import { types } from '@jonobr1/force-directed-graph/shaders/velocities';
-}
-declare module '@jonobr1/force-directed-graph/shaders/points' {
-  export default points;
-  namespace points {
-    const vertexShader: string;
-    const fragmentShader: string;
-  }
-}
-declare module '@jonobr1/force-directed-graph/texture-atlas' {
-  export class TextureAtlas extends Texture {
-    static Resolution: number;
-    static getAbsoluteURL(path: any): string;
-    map: any[];
-    dimensions: number;
-    isTextureAtlas: boolean;
-    flipY: boolean;
-    add(src: any): number;
-    update(): void;
-    indexOf(src: any): number;
-  }
-  import { Texture } from 'three';
-}
-declare module '@jonobr1/force-directed-graph/points' {
-  export class Points extends BasePoints {
-    static parse(
-      size: any,
-      data: any,
-    ): Promise<{
-      atlas: TextureAtlas;
-      geometry: any;
-    }>;
-    constructor(
-      {
-        atlas,
-        geometry,
-      }: {
-        atlas: any;
-        geometry: any;
-      },
-      uniforms: any,
-    );
-    frustumCulled: boolean;
-  }
-  import { TextureAtlas } from '@jonobr1/force-directed-graph/texture-atlas';
-  import { Points as BasePoints } from 'three';
-}
-declare module '@jonobr1/force-directed-graph/shaders/links' {
-  export default links;
-  namespace links {
-    const vertexShader: string;
-    const fragmentShader: string;
-  }
-}
-declare module '@jonobr1/force-directed-graph/links' {
-  export class Links extends Mesh {
-    static parse(points: any, data: any): Promise<any>;
-    constructor(geometry: any, uniforms: any);
-    frustumCulled: boolean;
-  }
-  import { Mesh } from 'three';
-}
-declare module '@jonobr1/force-directed-graph/shaders/labels' {
-  export default labels;
-  namespace labels {
-    const vertexShader: string;
-    const fragmentShader: string;
-  }
-}
-declare module '@jonobr1/force-directed-graph/labels' {
-  export class Labels extends Mesh {
-    static parse(
-      size: number,
-      data: any,
-      options?: {
-        adjacency?: number[][];
-        degrees?: number[];
-        fontSize?: number;
-        fontFamily?: string;
-        maxTextureSize?: number;
-        useMipmaps?: boolean;
-      },
-    ): Promise<{ geometry: any; texture: any; entries: any[] } | null>;
-    constructor(
-      labelData: {
-        geometry: any;
-        texture: any;
-        entries: any[];
-        fontFamily?: string;
-        fontSize?: number;
-      },
-      uniforms: any,
-    );
-    frustumCulled: boolean;
-    set alignment(arg: 'center' | 'left' | 'right');
-    get alignment(): 'center' | 'left' | 'right';
-    set baseline(arg: 'top' | 'middle' | 'bottom');
-    get baseline(): 'top' | 'middle' | 'bottom';
-    set offset(arg: Vector2);
-    get offset(): Vector2;
-    set near(arg: number);
-    get near(): number;
-    set fontSize(arg: number);
-    get fontSize(): number;
-    set fontFamily(arg: string);
-    get fontFamily(): string;
-  }
-  import { Mesh, Vector2 } from 'three';
-}
-declare module '@jonobr1/force-directed-graph/registry' {
-  export class Registry {
-    constructor(list: any);
-    map: {};
-    get(id: any): any;
-    set(index: any, item: any): void;
-    clear(): void;
-  }
-}
-declare module '@jonobr1/force-directed-graph' {
-  export type NodeData = {
-    id: string | number;
+declare namespace ForceDirectedGraphTypes {
+  type NodeId = string | number;
+  type NodeColor = import('three').ColorRepresentation;
+  type NodeImage = string | HTMLImageElement;
+  type LabelAlignment = 'center' | 'left' | 'right';
+  type LabelBaseline = 'top' | 'middle' | 'bottom';
+
+  interface NodeData {
+    id: NodeId;
     x?: number;
     y?: number;
     z?: number;
     isStatic?: boolean;
-    color?: CSSStyleValue;
-    image?: string;
-    label?: string;
+    color?: NodeColor;
+    image?: NodeImage;
+    label?: string | number;
     labelPriority?: number;
     size?: number;
+    [key: string]: unknown;
+  }
+
+  interface LinkData<Id extends NodeId = NodeId> {
+    source: Id;
+    target: Id;
+    sourceIndex?: number;
+    targetIndex?: number;
+    [key: string]: unknown;
+  }
+
+  interface ResolvedLinkData<Id extends NodeId = NodeId>
+    extends LinkData<Id> {
+    sourceIndex: number;
+    targetIndex: number;
+  }
+
+  interface GraphData<
+    N extends NodeData = NodeData,
+    L extends LinkData = LinkData,
+  > {
+    nodes: N[];
+    links: L[];
+  }
+
+  interface LabelAtlasUV {
+    u: number;
+    v: number;
+    uw: number;
+    uh: number;
+  }
+
+  interface LabelEntry {
+    text: string;
+    nodeIndex: number;
+    pointSize: number;
+    basePriority: number;
+    labelWidth: number;
+    labelHeight: number;
+    aspectRatio: number;
+    labelId: number;
+    stableId: number;
+    persistence: number;
+    atlasUV: LabelAtlasUV;
+  }
+
+  interface LabelParseOptions {
+    adjacency?: number[][];
+    degrees?: number[];
+    fontSize?: number;
+    fontFamily?: string;
+    maxTextureSize?: number;
+    useMipmaps?: boolean;
+  }
+
+  interface ResolvedLabelParseOptions extends LabelParseOptions {
+    adjacency: number[][];
+    degrees: number[];
+    fontFamily: string;
+    maxTextureSize: number;
+    useMipmaps: boolean;
+  }
+
+  interface LabelParseResult {
+    geometry: import('three').InstancedBufferGeometry;
+    texture: import('three').CanvasTexture;
+    entries: LabelEntry[];
+    fontFamily: string;
+    fontSize: number;
+  }
+
+  interface PointsParseResult {
+    atlas: import('@jonobr1/force-directed-graph/texture-atlas').TextureAtlas;
+    geometry: import('three').BufferGeometry;
+  }
+
+  interface PerformanceInfo {
+    workerSupported: boolean;
+    workerReady: boolean;
+    wasmReady: boolean;
+    pendingRequests: number;
+  }
+
+  interface TextureProcessRequest<
+    N extends NodeData = NodeData,
+    L extends ResolvedLinkData = ResolvedLinkData,
+  > {
+    nodes: N[];
+    links: L[];
+    textureSize: number;
+    frustumSize: number;
+    useWasm?: boolean;
+  }
+
+  interface TextureProcessResult {
+    positions: Float32Array;
+    links: Float32Array;
+    linkRanges: Float32Array;
+    packedLinkAmount: number;
+    processingTime: number;
+  }
+
+  type TextureWorkerMessage =
+    | {
+        type: 'wasm-ready';
+        success: boolean;
+        error?: string;
+      }
+    | {
+        type: 'texture-processed';
+        requestId: number;
+        success: boolean;
+        data?: TextureProcessResult;
+        error?: string;
+      }
+    | {
+        type: 'wasm-status';
+        ready: boolean;
+      }
+    | {
+        type: 'error';
+        error: string;
+      };
+
+  interface Uniform<T> {
+    value: T;
+  }
+
+  interface ForceDirectedGraphUniforms {
+    decay: Uniform<number>;
+    alpha: Uniform<number>;
+    is2D: Uniform<boolean>;
+    time: Uniform<number>;
+    size: Uniform<number>;
+    maxSpeed: Uniform<number>;
+    timeStep: Uniform<number>;
+    damping: Uniform<number>;
+    repulsion: Uniform<number>;
+    springLength: Uniform<number>;
+    stiffness: Uniform<number>;
+    gravity: Uniform<number>;
+    pinStrength: Uniform<number>;
+    nodeRadius: Uniform<number>;
+    nodeScale: Uniform<number>;
+    sizeAttenuation: Uniform<boolean>;
+    frustumSize: Uniform<number>;
+    linksInheritColor: Uniform<boolean>;
+    labelsInheritColor: Uniform<boolean>;
+    pointsInheritColor: Uniform<boolean>;
+    pointColor: Uniform<import('three').Color>;
+    linkColor: Uniform<import('three').Color>;
+    labelColor: Uniform<import('three').Color>;
+    linecap: Uniform<number>;
+    linewidth: Uniform<number>;
+    opacity: Uniform<number>;
+    pixelRatio: Uniform<number>;
+    resolution: Uniform<import('three').Vector2>;
+    uBeginning: Uniform<number>;
+    uEnding: Uniform<number>;
+    uNodeAmount: Uniform<number>;
+    obscurity: Uniform<number>;
+    labelAlignment: Uniform<number>;
+    labelBaseline: Uniform<number>;
+    labelFontSize: Uniform<number>;
+    labelNear: Uniform<number>;
+    labelOffset: Uniform<import('three').Vector2>;
+  }
+
+  interface ShaderModule {
+    vertexShader: string;
+    fragmentShader: string;
+  }
+}
+
+declare module '@jonobr1/force-directed-graph/shaders/partials' {
+  export const circle: string;
+  export const getPosition: string;
+  export const getVelocity: string;
+  export const getIndex: string;
+  export const getUVFromIndex: string;
+  export const random: string;
+  export const jiggle: string;
+  export const link: string;
+  export const charge: string;
+  export const center: string;
+  export const anchor: string;
+}
+
+declare module '@jonobr1/force-directed-graph/shaders/hit' {
+  const hit: ForceDirectedGraphTypes.ShaderModule;
+  export default hit;
+}
+
+declare module '@jonobr1/force-directed-graph/hit' {
+  import type {
+    Camera,
+    ShaderMaterial,
+    Sprite,
+    WebGLRenderTarget,
+    WebGLRenderer,
+  } from 'three';
+  import type { ForceDirectedGraph } from '@jonobr1/force-directed-graph';
+
+  export class Hit {
+    constructor(fdg: ForceDirectedGraph);
+    parent: ForceDirectedGraph | null;
+    renderTarget: WebGLRenderTarget;
+    width: number;
+    height: number;
+    ratio: number;
+    material: ShaderMaterial | null;
+    helper: Sprite | null;
+    inherit(mesh: { material: { uniforms: Record<string, unknown> } }): void;
+    setSize(width: number, height: number): void;
+    compute(renderer: WebGLRenderer, camera: Camera): void;
+    dispose(): void;
+  }
+}
+
+declare module '@jonobr1/force-directed-graph/math' {
+  export function getPotSize(number: number): number | undefined;
+  export function clamp(x: number, min: number, max: number): number;
+  export function each<T>(
+    list: ArrayLike<T>,
+    func: (value: T, index: number) => void,
+    step?: number,
+    max?: number,
+  ): Promise<void>;
+  export function indexToRGB(i: number): {
+    r: number;
+    g: number;
+    b: number;
   };
-  export type LinkData = { source: number; target: number };
-  export type DataType = {
-    nodes: NodeData[];
-    links: LinkData[];
+  export function rgbToIndex(params: {
+    r: number;
+    g: number;
+    b: number;
+  }): number;
+}
+
+declare module '@jonobr1/force-directed-graph/shaders/positions' {
+  export const positions: string;
+}
+
+declare module '@jonobr1/force-directed-graph/shaders/velocities' {
+  export const types: Array<'simplex' | 'nested'>;
+  export const simplex: string;
+  export const nested: string;
+}
+
+declare module '@jonobr1/force-directed-graph/shaders/simulation' {
+  const simulation: {
+    positions: string;
+    velocities: string;
+    simplex: string;
+    nested: string;
+    types: Array<'simplex' | 'nested'>;
   };
-  export class ForceDirectedGraph extends Group {
-    static getPotSize: typeof getPotSize;
-    static Properties: string[];
-    /**
-     * @param {THREE.WebGLRenderer} renderer - the three.js renderer referenced to create the render targets
-     * @param {Object} [data] - optional data to automatically set the data of the graph
-     */
-    constructor(renderer: WebGLRenderer, data?: DataType);
+  export default simulation;
+}
+
+declare module '@jonobr1/force-directed-graph/shaders/points' {
+  const points: ForceDirectedGraphTypes.ShaderModule;
+  export default points;
+}
+
+declare module '@jonobr1/force-directed-graph/texture-atlas' {
+  import type { Texture } from 'three';
+
+  export class TextureAtlas extends Texture {
+    static Resolution: number;
+    static getAbsoluteURL(path: string): string;
+    constructor();
+    map: HTMLImageElement[];
+    dimensions: number;
+    isTextureAtlas: boolean;
+    flipY: boolean;
+    add(src: ForceDirectedGraphTypes.NodeImage): number | undefined;
+    update(): void;
+    indexOf(src: string): number;
+  }
+}
+
+declare module '@jonobr1/force-directed-graph/points' {
+  import type { Points as BasePoints } from 'three';
+  import type { TextureAtlas } from '@jonobr1/force-directed-graph/texture-atlas';
+
+  export type PointsParseResult = ForceDirectedGraphTypes.PointsParseResult;
+
+  export class Points extends BasePoints {
+    static parse(
+      size: number,
+      data: { nodes: ForceDirectedGraphTypes.NodeData[] },
+    ): Promise<PointsParseResult>;
+    constructor(
+      data: {
+        atlas: TextureAtlas;
+        geometry: PointsParseResult['geometry'];
+      },
+      uniforms: ForceDirectedGraphTypes.ForceDirectedGraphUniforms,
+    );
+    frustumCulled: boolean;
+  }
+}
+
+declare module '@jonobr1/force-directed-graph/shaders/links' {
+  const links: ForceDirectedGraphTypes.ShaderModule;
+  export default links;
+}
+
+declare module '@jonobr1/force-directed-graph/links' {
+  import type { InstancedBufferGeometry, Mesh } from 'three';
+  import type { Points } from '@jonobr1/force-directed-graph/points';
+
+  export class Links extends Mesh {
+    static parse(
+      points: Points,
+      data: { links: ForceDirectedGraphTypes.ResolvedLinkData[] },
+    ): Promise<InstancedBufferGeometry>;
+    constructor(
+      geometry: InstancedBufferGeometry,
+      uniforms: ForceDirectedGraphTypes.ForceDirectedGraphUniforms,
+    );
+    frustumCulled: boolean;
+  }
+}
+
+declare module '@jonobr1/force-directed-graph/shaders/labels' {
+  const labels: ForceDirectedGraphTypes.ShaderModule;
+  export default labels;
+}
+
+declare module '@jonobr1/force-directed-graph/labels' {
+  import type { Mesh, Vector2 } from 'three';
+
+  export type LabelAlignment = ForceDirectedGraphTypes.LabelAlignment;
+  export type LabelBaseline = ForceDirectedGraphTypes.LabelBaseline;
+  export type LabelEntry = ForceDirectedGraphTypes.LabelEntry;
+  export type LabelParseOptions = ForceDirectedGraphTypes.LabelParseOptions;
+  export type LabelParseResult = ForceDirectedGraphTypes.LabelParseResult;
+
+  export class Labels extends Mesh {
+    static parse(
+      size: number,
+      data: { nodes: ForceDirectedGraphTypes.NodeData[] },
+      options?: LabelParseOptions,
+    ): Promise<LabelParseResult | null>;
+    constructor(
+      labelData: LabelParseResult,
+      uniforms: ForceDirectedGraphTypes.ForceDirectedGraphUniforms,
+    );
+    entries: LabelEntry[];
+    frustumCulled: boolean;
+    dispose(): void;
+    replaceData(labelData: LabelParseResult): void;
+    set alignment(value: LabelAlignment);
+    get alignment(): LabelAlignment;
+    set baseline(value: LabelBaseline);
+    get baseline(): LabelBaseline;
+    set offset(value: Vector2);
+    get offset(): Vector2;
+    set near(value: number);
+    get near(): number;
+    set fontSize(value: number);
+    get fontSize(): number;
+    set fontFamily(value: string);
+    get fontFamily(): string;
+  }
+
+  export const __TEST__: {
+    buildLabelSelectionOrder(
+      entries: LabelEntry[],
+      adjacency?: number[][],
+      nodes?: ForceDirectedGraphTypes.NodeData[],
+      degrees?: number[],
+      maxHops?: number,
+    ): LabelEntry[];
+    buildSelectionRanks(
+      entries: LabelEntry[],
+      selectionOrder: LabelEntry[],
+    ): Float32Array;
+    buildSortTuple(
+      cellId: number,
+      entry: Pick<LabelEntry, 'basePriority' | 'stableId' | 'labelId'>,
+    ): {
+      cellId: number;
+      priorityKey: number;
+      stableId: number;
+      labelId: number;
+    };
+    clamp01(value: number): number;
+    compareLabelEntries(a: LabelEntry, b: LabelEntry): number;
+    compareProjectedEntries(a: any, b: any): number;
+    getCollisionCellBounds(
+      bounds: { minX: number; minY: number; maxX: number; maxY: number },
+      cellSize: number,
+      gridWidth: number,
+      gridHeight: number,
+    ):
+      | {
+          minCellX: number;
+          maxCellX: number;
+          minCellY: number;
+          maxCellY: number;
+        }
+      | null;
+    getLabelBasePriority(
+      node: ForceDirectedGraphTypes.NodeData,
+      degree?: number,
+    ): number;
+    getLabelAlignmentOffset(alignment: number): -1 | 0 | 1;
+    getLabelBaselineOffset(baseline: number): -1 | 0 | 1;
+    getVisibleQuota(obscurity: number, labelCount: number): number;
+    getPlacementTextureDimensions(itemCount: number): {
+      width: number;
+      height: number;
+    };
+    getNodeColorComponents(
+      node: ForceDirectedGraphTypes.NodeData,
+    ): [number, number, number];
+    sanitizeLabelFontSize(fontSize: number): number;
+    sanitizeLabelNearDistance(nearDistance: number): number;
+    intersectsBounds(
+      a: { minX: number; minY: number; maxX: number; maxY: number },
+      b: { minX: number; minY: number; maxX: number; maxY: number },
+      margin?: number,
+    ): boolean;
+    packCollisionCellKey(
+      cellX: number,
+      cellY: number,
+      gridWidth: number,
+    ): number;
+    projectLabelBounds(params: {
+      nodePosition: import('three').Vector3;
+      objectMatrixWorld: import('three').Matrix4;
+      camera: import('three').Camera;
+      viewportWidth: number;
+      viewportHeight: number;
+      frustumSize: number;
+      is2D: boolean;
+      sizeAttenuation: boolean;
+      nodeRadius: number;
+      nodeScale: number;
+      aspectRatio: number;
+      labelAlignment?: number;
+      labelBaseline?: number;
+      labelFontSize?: number;
+      labelNear?: number;
+      labelOffset?: { x: number; y: number };
+      pointSize?: number;
+    }):
+      | {
+          minX: number;
+          minY: number;
+          maxX: number;
+          maxY: number;
+          width: number;
+          height: number;
+          centerX: number;
+          centerY: number;
+          viewDistance: number;
+          depthPriority: number;
+          clipped: boolean;
+        }
+      | null;
+    configureAtlasTexture<T extends Record<string, unknown>>(
+      texture: T,
+      options?: { useMipmaps?: boolean },
+    ): T;
+  };
+}
+
+declare module '@jonobr1/force-directed-graph/registry' {
+  export class Registry {
+    constructor(list?: Array<{ id: ForceDirectedGraphTypes.NodeId }>);
+    map: Record<string, number>;
+    get(id: ForceDirectedGraphTypes.NodeId): number | undefined;
+    set(index: number, item: { id: ForceDirectedGraphTypes.NodeId }): void;
+    clear(): void;
+  }
+}
+
+declare module '@jonobr1/force-directed-graph/texture-worker-manager' {
+  export type TextureProcessRequest =
+    ForceDirectedGraphTypes.TextureProcessRequest;
+  export type TextureProcessResult =
+    ForceDirectedGraphTypes.TextureProcessResult;
+  export type TextureWorkerMessage =
+    ForceDirectedGraphTypes.TextureWorkerMessage;
+  export type PerformanceInfo = ForceDirectedGraphTypes.PerformanceInfo;
+
+  export class TextureWorkerManager {
+    constructor();
+    worker: Worker | null;
+    isWorkerReady: boolean;
+    isWasmReady: boolean;
+    requestId: number;
+    pendingRequests: Map<
+      number,
+      {
+        resolve: (result: TextureProcessResult) => void;
+        reject: (reason?: unknown) => void;
+      }
+    >;
+    workerSupported: boolean;
+    resolveWasmUrl(): string;
+    init(): Promise<boolean>;
+    handleWorkerMessage(message: TextureWorkerMessage): void;
+    processTextures(data: TextureProcessRequest): Promise<TextureProcessResult>;
+    isReady(): boolean;
+    isWasmAvailable(): boolean;
+    getPerformanceInfo(): PerformanceInfo;
+    dispose(): void;
+  }
+}
+
+declare module '@jonobr1/force-directed-graph/inline-worker-factory' {
+  export function createInlineWorker(wasmUrl: string): Worker;
+}
+
+declare module '@jonobr1/force-directed-graph' {
+  import {
+    AdditiveBlending,
+    Camera,
+    Color,
+    CustomBlending,
+    Group,
+    MultiplyBlending,
+    NoBlending,
+    NormalBlending,
+    SubtractiveBlending,
+    Texture,
+    Vector2,
+    Vector3,
+    WebGLRenderer,
+  } from 'three';
+  import type { ColorRepresentation } from 'three';
+
+  export type NodeId = ForceDirectedGraphTypes.NodeId;
+  export type NodeColor = ForceDirectedGraphTypes.NodeColor;
+  export type NodeImage = ForceDirectedGraphTypes.NodeImage;
+  export type NodeData = ForceDirectedGraphTypes.NodeData;
+  export type LinkData<Id extends NodeId = NodeId> =
+    ForceDirectedGraphTypes.LinkData<Id>;
+  export type ResolvedLinkData<Id extends NodeId = NodeId> =
+    ForceDirectedGraphTypes.ResolvedLinkData<Id>;
+  export type GraphData<
+    N extends NodeData = NodeData,
+    L extends LinkData = LinkData,
+  > = ForceDirectedGraphTypes.GraphData<N, L>;
+  export type DataType<
+    N extends NodeData = NodeData,
+    L extends LinkData = LinkData,
+  > = GraphData<N, L>;
+  export type LabelAlignment = ForceDirectedGraphTypes.LabelAlignment;
+  export type LabelBaseline = ForceDirectedGraphTypes.LabelBaseline;
+  export type LabelEntry = ForceDirectedGraphTypes.LabelEntry;
+  export type LabelParseOptions = ForceDirectedGraphTypes.LabelParseOptions;
+  export type LabelParseResult = ForceDirectedGraphTypes.LabelParseResult;
+  export type PerformanceInfo = ForceDirectedGraphTypes.PerformanceInfo;
+  export type ForceDirectedGraphUniforms =
+    ForceDirectedGraphTypes.ForceDirectedGraphUniforms;
+
+  export class ForceDirectedGraph<
+    N extends NodeData = NodeData,
+    L extends LinkData = LinkData,
+  > extends Group {
+    static getPotSize: typeof import('@jonobr1/force-directed-graph/math').getPotSize;
+    static readonly Properties: readonly string[];
+
+    constructor(renderer: WebGLRenderer, data?: GraphData<N, L>);
+
     ready: boolean;
-    /**
-     * @param {Object} data - Object with nodes and links properties based on https://observablehq.com/@d3/force-directed-graph-component
-     * @param {Function} callback
-     * @description Set the data to an instance of force directed graph. Because of the potential large amount of data this function runs on a request animation frame and returns a promise (or a passed callback) to give indication when the graph is ready to be rendered.
-     * @returns {Promise}
-     */
-    set(data: DataType, callback?: () => void): Promise<void>;
-    /**
-     * @param {Number} time
-     * @description Function to update the instance meant to be run before three.js's renderer.render method.
-     * @returns {Void}
-     */
-    update(time: number): void;
-    /**
-     * @param {THREE.Vector2} pointer - x, y values normalized to the camera's clipspace
-     * @param {THREE.Camera} camera - the camera to reference ray casting matrices
-     * @description Check to see if a point in the browser's screenspace intersects with any points in the force directed graph. If none found, then null is returned.
-     * @returns {Object|Null}
-     */
+
+    set(data: GraphData<N, L>, callback?: () => void): Promise<void>;
+    getLabelParseOptions(): ForceDirectedGraphTypes.ResolvedLabelParseOptions;
+    refreshLabels(): Promise<import('@jonobr1/force-directed-graph/labels').Labels | null>;
+    update(time: number): this;
     intersect(
       pointer: Vector2,
       camera: Camera,
-    ): { point: Vector3; data: NodeData } | null;
-    getTexture(name: string): Texture;
-    getPositionFromIndex(i: number): Vector3;
-    setPointColorById(id: string | number, css: CSSStyleValue): void;
-    setPointColorFromIndex(index: number, css: CSSStyleValue): void;
+    ): { point: Vector3; data: N } | null;
+    getTexture(name: 'positions' | 'velocities'): Texture;
+    getPositionFromIndex(index: number): Vector3 | undefined;
+    setPointColorById(id: NodeId, css: ColorRepresentation): void;
+    setPointColorFromIndex(index: number, css: ColorRepresentation): void;
     updateLinksColors(): Promise<boolean>;
-    getIndexById(id: string | number): number;
-    getLinksById(id: string | number): Promise<LinkData[]>;
-    getPointById(id: string | number): NodeData;
-    dispose(): void;
-    set beginning(arg: number);
+    getIndexById(id: NodeId): number | undefined;
+    getLinksById(
+      id: NodeId,
+    ): Promise<Array<L & ForceDirectedGraphTypes.ResolvedLinkData>>;
+    getPointById(id: NodeId): N | undefined;
+    dispose(): this;
+
+    set beginning(value: number);
     get beginning(): number;
-    set ending(arg: number);
+    set ending(value: number);
     get ending(): number;
-    set decay(arg: number);
+    set decay(value: number);
     get decay(): number;
-    set alpha(arg: number);
+    set alpha(value: number);
     get alpha(): number;
-    set is2D(arg: boolean);
+    set is2D(value: boolean);
     get is2D(): boolean;
-    set time(arg: number);
+    set time(value: number);
     get time(): number;
-    set size(arg: number);
+    set size(value: number);
     get size(): number;
-    set maxSpeed(arg: number);
+    set maxSpeed(value: number);
     get maxSpeed(): number;
-    set timeStep(arg: number);
+    set timeStep(value: number);
     get timeStep(): number;
-    set damping(arg: number);
+    set damping(value: number);
     get damping(): number;
-    set repulsion(arg: number);
+    set repulsion(value: number);
     get repulsion(): number;
-    set springLength(arg: number);
+    set springLength(value: number);
     get springLength(): number;
-    set stiffness(arg: number);
+    set stiffness(value: number);
     get stiffness(): number;
-    set gravity(arg: number);
+    set gravity(value: number);
     get gravity(): number;
-    set pinStrength(arg: number);
+    set pinStrength(value: number);
     get pinStrength(): number;
-    set nodeRadius(arg: number);
+    set nodeRadius(value: number);
     get nodeRadius(): number;
-    set nodeScale(arg: number);
+    set nodeScale(value: number);
     get nodeScale(): number;
-    set sizeAttenuation(arg: boolean);
+    set sizeAttenuation(value: boolean);
     get sizeAttenuation(): boolean;
-    set frustumSize(arg: number);
+    set frustumSize(value: number);
     get frustumSize(): number;
-    set linksInheritColor(arg: boolean);
+    set linksInheritColor(value: boolean);
     get linksInheritColor(): boolean;
-    set labelsInheritColor(arg: boolean);
+    set labelsInheritColor(value: boolean);
     get labelsInheritColor(): boolean;
-    set pointsInheritColor(arg: boolean);
+    set pointsInheritColor(value: boolean);
     get pointsInheritColor(): boolean;
-    set pointColor(arg: Color);
+    set pointColor(value: Color);
     get pointColor(): Color;
-    set linksColor(arg: Color);
+    set linksColor(value: Color);
     get linksColor(): Color;
-    set linkColor(arg: Color);
+    set linkColor(value: Color);
     get linkColor(): Color;
-    set labelsColor(arg: Color);
+    set labelsColor(value: Color);
     get labelsColor(): Color;
-    set labelColor(arg: Color);
+    set labelColor(value: Color);
     get labelColor(): Color;
-    set linecap(arg: 'round' | 'butt' | 'square');
+    set linecap(value: 'round' | 'butt' | 'square');
     get linecap(): 'round' | 'butt' | 'square';
-    set linewidth(arg: number);
+    set linewidth(value: number);
     get linewidth(): number;
-    set opacity(arg: number);
+    set opacity(value: number);
     get opacity(): number;
-    /**
-     * Label-density control in [0, 1].
-     * 0 shows all labels.
-     * 1 hides all labels.
-     */
-    set obscurity(arg: number);
+    set obscurity(value: number);
     get obscurity(): number;
     set blending(
-      arg:
+      value:
         | typeof NoBlending
         | typeof NormalBlending
         | typeof AdditiveBlending
@@ -425,37 +688,15 @@ declare module '@jonobr1/force-directed-graph' {
       | typeof SubtractiveBlending
       | typeof MultiplyBlending
       | typeof CustomBlending;
-    get points(): Points;
-    get links(): Links;
+
+    get points(): import('@jonobr1/force-directed-graph/points').Points | undefined;
+    get links(): import('@jonobr1/force-directed-graph/links').Links | undefined;
     get labels(): import('@jonobr1/force-directed-graph/labels').Labels | null;
-    get uniforms(): any;
+    get uniforms(): ForceDirectedGraphUniforms;
     get nodeCount(): number;
     get edgeCount(): number;
-    getPerformanceInfo(): {
-      workerSupported: boolean;
-      workerReady: boolean;
-      wasmReady: boolean;
-      pendingRequests: number;
-    };
+    getPerformanceInfo(): PerformanceInfo;
     isWorkerProcessingAvailable(): boolean;
     isWasmAccelerationAvailable(): boolean;
   }
-  import { getPotSize } from '@jonobr1/force-directed-graph/math';
-  import { Points } from '@jonobr1/force-directed-graph/points';
-  import { Links } from '@jonobr1/force-directed-graph/links';
-  import {
-    NoBlending,
-    NormalBlending,
-    AdditiveBlending,
-    SubtractiveBlending,
-    MultiplyBlending,
-    CustomBlending,
-    Camera,
-    Color,
-    Group,
-    Texture,
-    WebGLRenderer,
-    Vector2,
-    Vector3,
-  } from 'three';
 }
