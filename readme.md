@@ -46,13 +46,13 @@ type GraphData = {
 
 type NodeData = {
   id: string | number; // Required, unique per node
-  x?: number;          // Optional initial x position
-  y?: number;          // Optional initial y position
-  z?: number;          // Optional initial z position
+  x?: number;          // Optional initial / target x position
+  y?: number;          // Optional initial / target y position
+  z?: number;          // Optional initial / target z position
   isStatic?: boolean;  // Optional, pins node when true
-  color?: string;      // Optional CSS color (ex: '#ff6600', 'rgb(255,0,0)')
-  image?: string;      // Optional image URL for sprite atlas
-  label?: string;      // Optional canvas-atlas text label
+  color?: THREE.ColorRepresentation; // Optional Three.js color input
+  image?: string | HTMLImageElement; // Optional image URL or image element
+  label?: string | number; // Optional canvas-atlas text label
   labelPriority?: number; // Optional label ranking override
   size?: number        // Optional size for per-node sizing
 };
@@ -67,6 +67,7 @@ type LinkData = {
 > - `nodes` and `links` are both required.
 > - `source` / `target` are resolved by node `id`.
 > - If `x`, `y`, or `z` is omitted, a random initial position is assigned.
+> - If a node defines at least two of `x`, `y`, `z`, those values also become that node's target position when `pinStrength > 0`.
 > - `isStatic` defaults to `false`.
 > - If `color` is omitted, the node defaults to white.
 > - `set(data[, callback])` returns a `Promise` that resolves when geometry/textures are ready.
@@ -76,6 +77,15 @@ type LinkData = {
 > - `fdg.labels.near` (camera-space distance, default `0`) discards labels at or closer than that depth, which is useful when `sizeAttenuation` makes nearby labels too large.
 > - `fdg.labelsInheritColor` toggles whether labels use each node's `color`, and `fdg.labelColor` tints all labels uniformly on top of the white label atlas.
 > - `fdg.labels.fontSize` scales the rendered label planes without rebuilding the atlas; `fdg.labels.fontFamily` rebuilds the atlas with a new CSS font stack.
+> - `fdg.refreshLabels()` rebuilds label atlas data after mutating node labels, priorities, sizes, or colors in-place.
+> - `fdg.getPerformanceInfo()`, `fdg.isWorkerProcessingAvailable()`, and `fdg.isWasmAccelerationAvailable()` expose worker / WASM capability state.
+
+### Selected Instance API
+
+- `fdg.pinStrength`: controls how strongly nodes are attracted toward their target positions derived from `x`, `y`, `z`.
+- `fdg.refreshLabels()`: reparses labels from current node data and updates or removes the labels mesh as needed.
+- `fdg.labels`: returns the labels mesh when labels exist, otherwise `null`.
+- `fdg.getPerformanceInfo()`: returns `{ workerSupported, workerReady, wasmReady, pendingRequests }`.
 
 ### Load Script in HTML file:
 
@@ -98,7 +108,7 @@ This example creates 512 nodes and links them randomly like big snakes.
         }
       }
     </script>
-    <script>
+    <script type="module">
 
       import * as THREE from 'three';
       import { ForceDirectedGraph } from '@jonobr1/force-directed-graph';
@@ -115,7 +125,7 @@ This example creates 512 nodes and links them randomly like big snakes.
       nodes: [],  // Required, each element should be an object
       links: []   // Required, each element should be an object
                   // with source and target properties that are
-                  // indices of their connecting nodes
+                  // ids of their connecting nodes
       };
 
       for (let i = 0; i < amount; i++) {
