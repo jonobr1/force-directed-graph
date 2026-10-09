@@ -63,3 +63,61 @@ fs.writeFileSync(
   path.resolve(__dirname, '../build/fdg.js'),
   contents
 );
+
+// Keep React and Fiber optional and out of the core and each other's bundles.
+for (const component of ['react', 'r3f']) {
+  for (const [format, extension] of [['esm', 'mjs'], ['cjs', 'cjs']]) {
+    es.buildSync({
+      entryPoints: [path.resolve(__dirname, `../src/${component}/index.js`)],
+      bundle: true,
+      format,
+      platform: 'neutral',
+      external: ['three', 'react', '@react-three/fiber'],
+      outfile: path.resolve(__dirname, `../build/${component}.${extension}`),
+    });
+  }
+}
+
+// Portable CodePen snippets embed the current implementation, so no unpublished
+// package version or feature branch URL is required to run them.
+const imports = {
+  react: 'https://esm.sh/react@18.3.1',
+  'react/jsx-runtime': 'https://esm.sh/react@18.3.1/jsx-runtime?external=react',
+  'react-dom/client': 'https://esm.sh/react-dom@18.3.1/client?external=react',
+  '@react-three/fiber': 'https://esm.sh/@react-three/fiber@8.18.0?external=react,react-dom,three',
+  'react-dom': 'https://esm.sh/react-dom@18.3.1?external=react',
+  three: 'https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.module.js',
+  'three/': 'https://cdn.jsdelivr.net/npm/three@0.150.1/',
+};
+const exampleDir = path.resolve(__dirname, '../examples/codepen');
+fs.mkdirSync(exampleDir, { recursive: true });
+for (const component of ['react', 'r3f']) {
+  const result = es.buildSync({
+    entryPoints: [path.resolve(__dirname, `../examples/${component}.js`)],
+    bundle: true,
+    format: 'esm',
+    platform: 'browser',
+    external: ['three', 'react', 'react-dom', '@react-three/fiber'],
+    write: false,
+  });
+  const script = result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
+  fs.writeFileSync(path.join(exampleDir, `${component}.html`), `<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Force Directed Graph — ${component}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #111827; color: #f1f5f9; font: 15px system-ui; }
+  header { height: 170px; padding: 16px 24px; }
+  h1 { font-size: 22px; margin: 0 0 8px; }
+  p { color: #94a3b8; }
+  button { margin-right: 8px; padding: 7px 12px; cursor: pointer; }
+  output { display: block; margin-top: 8px; }
+</style>
+<div id="root"></div>
+<script type="importmap">${JSON.stringify({ imports }, null, 2)}</script>
+<script type="module">
+${script}
+</script>
+`);
+}

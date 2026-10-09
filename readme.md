@@ -26,6 +26,21 @@ npm install --save three @jonobr1/force-directed-graph
 import { ForceDirectedGraph } from '@jonobr1/force-directed-graph';
 ```
 
+### React and React Three Fiber
+
+```javascript
+// Standalone canvas with OrbitControls:
+import { ForceDirectedGraph as ReactGraph } from '@jonobr1/force-directed-graph/react';
+
+// Inside an existing React Three Fiber Canvas:
+import { ForceDirectedGraph as FiberGraph } from '@jonobr1/force-directed-graph/r3f';
+```
+
+See the [React component guide](docs/react.md) for installation, props, refs and
+data updates. Complete HTML snippets for CodePen are included for
+[standalone React](examples/codepen/react.html) and
+[React Three Fiber](examples/codepen/r3f.html).
+
 ### Data Schema (`constructor` and `set`)
 
 > Reference: The accepted `nodes` / `links` structure is inspired by the D3 force-directed graph data format: [@d3/force-directed-graph-component](https://observablehq.com/@d3/force-directed-graph-component).

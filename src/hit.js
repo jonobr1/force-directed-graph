@@ -90,16 +90,15 @@ export class Hit {
   }
 
   dispose() {
-
+    if (!this.material) return;
     this.parent = null;
-
-    this.renderTarget = new WebGLRenderTarget(1, 1);
+    this.renderTarget.dispose();
     this.width = 1;
     this.height = 1;
     this.ratio = 1;
   
     this.material.dispose();
-    this.helper.geometry.dispose();
+    // Sprite geometry is shared by Three.js; only the material belongs to us.
     this.helper.material.dispose();
 
     this.material = null;
