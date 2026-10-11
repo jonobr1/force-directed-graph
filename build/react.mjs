@@ -2765,7 +2765,9 @@ var ForceDirectedGraph = class extends Group {
     this.userData.hit = new Hit(this);
     this.userData.workerManager = new TextureWorkerManager();
     if (data) {
-      this.set(data);
+      this.set(data).catch((error) => {
+        console.warn("Force Directed Graph:", error);
+      });
     }
   }
   static getPotSize = getPotSize;
@@ -2803,7 +2805,7 @@ var ForceDirectedGraph = class extends Group {
    * @param {Object} data - Object with nodes and links properties based on https://observablehq.com/@d3/force-directed-graph-component
    * @param {Function} callback
    * @description Set the data to an instance of force directed graph. Because of the potential large amount of data this function runs on a request animation frame and returns a promise (or a passed callback) to give indication when the graph is ready to be rendered.
-   * @returns {Promise}
+   * @returns {Promise} Resolves when ready; rejects with the original loading error.
    */
   set(data, callback) {
     const scope = this;
@@ -2839,9 +2841,7 @@ var ForceDirectedGraph = class extends Group {
     this.userData.gpgpu = gpgpu;
     this.userData.variables = variables;
     this.userData.textures = textures;
-    return register().then(fill).then(setup).then(generate).then(complete).catch((error) => {
-      console.warn("Force Directed Graph:", error);
-    });
+    return register().then(fill).then(setup).then(generate).then(complete);
     function register() {
       return each(data.nodes, (node, i) => {
         registry.set(i, node);
@@ -3524,7 +3524,6 @@ function createGraphController(renderer, callbacks = {}) {
           links: data.links.map((link2) => ({ ...link2 }))
         });
         if (closed || pending) continue;
-        if (!graph.ready) throw new Error("Force Directed Graph failed to initialize.");
         applyOptions();
         callbacks.onReady?.(graph);
       } catch (error) {

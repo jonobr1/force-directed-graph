@@ -31,7 +31,6 @@ export function createGraphController(renderer, callbacks = {}) {
           links: data.links.map((link) => ({ ...link })),
         });
         if (closed || pending) continue;
-        if (!graph.ready) throw new Error('Force Directed Graph failed to initialize.');
         applyOptions();
         callbacks.onReady?.(graph);
       } catch (error) {

@@ -174,7 +174,9 @@ class ForceDirectedGraph extends Group {
     this.userData.workerManager = new TextureWorkerManager();
 
     if (data) {
-      this.set(data);
+      this.set(data).catch((error) => {
+        console.warn('Force Directed Graph:', error);
+      });
     }
   }
 
@@ -214,7 +216,7 @@ class ForceDirectedGraph extends Group {
    * @param {Object} data - Object with nodes and links properties based on https://observablehq.com/@d3/force-directed-graph-component
    * @param {Function} callback
    * @description Set the data to an instance of force directed graph. Because of the potential large amount of data this function runs on a request animation frame and returns a promise (or a passed callback) to give indication when the graph is ready to be rendered.
-   * @returns {Promise}
+   * @returns {Promise} Resolves when ready; rejects with the original loading error.
    */
   set(data, callback) {
     const scope = this;
@@ -267,9 +269,6 @@ class ForceDirectedGraph extends Group {
         .then(setup)
         .then(generate)
         .then(complete)
-        .catch((error) => {
-          console.warn('Force Directed Graph:', error);
-        })
     );
 
     function register() {

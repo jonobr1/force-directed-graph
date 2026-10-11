@@ -50,7 +50,7 @@ animation loop when unmounted. It renders a `div`; HTML attributes such as `id`,
 | `background` | `'#111827'` | Clear color; use `null` for a transparent canvas. |
 | `pixelRatio` | device ratio capped at 2 | Renderer pixel ratio. |
 | `onReady` | optional | Receives the graph after the latest data has loaded and options have been applied. |
-| `onError` | optional | Receives initialization or data-loading errors. |
+| `onError` | optional | Receives the original initialization or data-loading error. |
 | `ref` | optional | The core graph instance, or `null` while mounting/unmounted. |
 
 The container defaults to 100% width and height, with a 300px minimum height.
