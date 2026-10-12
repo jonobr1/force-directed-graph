@@ -26,24 +26,77 @@ var import_react = require("react");
 var import_fiber = require("@react-three/fiber");
 
 // src/index.js
-var import_three7 = require("three");
+var import_three8 = require("three");
 
 // node_modules/three/examples/jsm/misc/GPUComputationRenderer.js
+var import_three2 = require("three");
+
+// node_modules/three/examples/jsm/postprocessing/Pass.js
 var import_three = require("three");
+var _camera = new import_three.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+var FullscreenTriangleGeometry = class extends import_three.BufferGeometry {
+  constructor() {
+    super();
+    this.setAttribute("position", new import_three.Float32BufferAttribute([-1, 3, 0, -1, -1, 0, 3, -1, 0], 3));
+    this.setAttribute("uv", new import_three.Float32BufferAttribute([0, 2, 0, 0, 2, 0], 2));
+  }
+};
+var _geometry = new FullscreenTriangleGeometry();
+var FullScreenQuad = class {
+  /**
+   * Constructs a new full screen quad.
+   *
+   * @param {?Material} material - The material to render te full screen quad with.
+   */
+  constructor(material) {
+    this._mesh = new import_three.Mesh(_geometry, material);
+  }
+  /**
+   * Frees the GPU-related resources allocated by this instance. Call this
+   * method whenever the instance is no longer used in your app.
+   */
+  dispose() {
+    this._mesh.geometry.dispose();
+  }
+  /**
+   * Renders the full screen quad.
+   *
+   * @param {WebGLRenderer} renderer - The renderer.
+   */
+  render(renderer) {
+    renderer.render(this._mesh, _camera);
+  }
+  /**
+   * The quad's material.
+   *
+   * @type {?Material}
+   */
+  get material() {
+    return this._mesh.material;
+  }
+  set material(value) {
+    this._mesh.material = value;
+  }
+};
+
+// node_modules/three/examples/jsm/misc/GPUComputationRenderer.js
 var GPUComputationRenderer = class {
+  /**
+   * Constructs a new GPU computation renderer.
+   *
+   * @param {number} sizeX - Computation problem size is always 2d: sizeX * sizeY elements.
+  	 * @param {number} sizeY - Computation problem size is always 2d: sizeX * sizeY elements.
+  	 * @param {WebGLRenderer} renderer - The renderer.
+   */
   constructor(sizeX, sizeY, renderer) {
     this.variables = [];
     this.currentTextureIndex = 0;
-    let dataType = import_three.FloatType;
-    const scene = new import_three.Scene();
-    const camera = new import_three.Camera();
-    camera.position.z = 1;
+    let dataType = import_three2.FloatType;
     const passThruUniforms = {
       passThruTexture: { value: null }
     };
     const passThruShader = createShaderMaterial(getPassThroughFragmentShader(), passThruUniforms);
-    const mesh = new import_three.Mesh(new import_three.PlaneGeometry(2, 2), passThruShader);
-    scene.add(mesh);
+    const quad = new FullScreenQuad(passThruShader);
     this.setDataType = function(type) {
       dataType = type;
       return this;
@@ -58,8 +111,8 @@ var GPUComputationRenderer = class {
         renderTargets: [],
         wrapS: null,
         wrapT: null,
-        minFilter: import_three.NearestFilter,
-        magFilter: import_three.NearestFilter
+        minFilter: import_three2.NearestFilter,
+        magFilter: import_three2.NearestFilter
       };
       this.variables.push(variable);
       return variable;
@@ -68,9 +121,6 @@ var GPUComputationRenderer = class {
       variable.dependencies = dependencies;
     };
     this.init = function() {
-      if (renderer.capabilities.isWebGL2 === false && renderer.extensions.has("OES_texture_float") === false) {
-        return "No OES_texture_float support for float textures.";
-      }
       if (renderer.capabilities.maxVertexTextures === 0) {
         return "No support for vertex shader textures.";
       }
@@ -128,8 +178,7 @@ var GPUComputationRenderer = class {
       return variable.renderTargets[this.currentTextureIndex === 0 ? 1 : 0];
     };
     this.dispose = function() {
-      mesh.geometry.dispose();
-      mesh.material.dispose();
+      quad.dispose();
       const variables = this.variables;
       for (let i = 0; i < variables.length; i++) {
         const variable = variables[i];
@@ -139,6 +188,7 @@ var GPUComputationRenderer = class {
           const renderTarget = renderTargets[j];
           renderTarget.dispose();
         }
+        variable.material.dispose();
       }
     };
     function addResolutionDefine(materialShader) {
@@ -147,7 +197,8 @@ var GPUComputationRenderer = class {
     this.addResolutionDefine = addResolutionDefine;
     function createShaderMaterial(computeFragmentShader, uniforms) {
       uniforms = uniforms || {};
-      const material = new import_three.ShaderMaterial({
+      const material = new import_three2.ShaderMaterial({
+        name: "GPUComputationShader",
         uniforms,
         vertexShader: getPassThroughVertexShader(),
         fragmentShader: computeFragmentShader
@@ -159,16 +210,16 @@ var GPUComputationRenderer = class {
     this.createRenderTarget = function(sizeXTexture, sizeYTexture, wrapS, wrapT, minFilter, magFilter) {
       sizeXTexture = sizeXTexture || sizeX;
       sizeYTexture = sizeYTexture || sizeY;
-      wrapS = wrapS || import_three.ClampToEdgeWrapping;
-      wrapT = wrapT || import_three.ClampToEdgeWrapping;
-      minFilter = minFilter || import_three.NearestFilter;
-      magFilter = magFilter || import_three.NearestFilter;
-      const renderTarget = new import_three.WebGLRenderTarget(sizeXTexture, sizeYTexture, {
+      wrapS = wrapS || import_three2.ClampToEdgeWrapping;
+      wrapT = wrapT || import_three2.ClampToEdgeWrapping;
+      minFilter = minFilter || import_three2.NearestFilter;
+      magFilter = magFilter || import_three2.NearestFilter;
+      const renderTarget = new import_three2.WebGLRenderTarget(sizeXTexture, sizeYTexture, {
         wrapS,
         wrapT,
         minFilter,
         magFilter,
-        format: import_three.RGBAFormat,
+        format: import_three2.RGBAFormat,
         type: dataType,
         depthBuffer: false
       });
@@ -176,7 +227,7 @@ var GPUComputationRenderer = class {
     };
     this.createTexture = function() {
       const data = new Float32Array(sizeX * sizeY * 4);
-      const texture = new import_three.DataTexture(data, sizeX, sizeY, import_three.RGBAFormat, import_three.FloatType);
+      const texture = new import_three2.DataTexture(data, sizeX, sizeY, import_three2.RGBAFormat, import_three2.FloatType);
       texture.needsUpdate = true;
       return texture;
     };
@@ -189,20 +240,14 @@ var GPUComputationRenderer = class {
       const currentRenderTarget = renderer.getRenderTarget();
       const currentXrEnabled = renderer.xr.enabled;
       const currentShadowAutoUpdate = renderer.shadowMap.autoUpdate;
-      const currentOutputEncoding = renderer.outputEncoding;
-      const currentToneMapping = renderer.toneMapping;
       renderer.xr.enabled = false;
       renderer.shadowMap.autoUpdate = false;
-      renderer.outputEncoding = import_three.LinearEncoding;
-      renderer.toneMapping = import_three.NoToneMapping;
-      mesh.material = material;
+      quad.material = material;
       renderer.setRenderTarget(output);
-      renderer.render(scene, camera);
-      mesh.material = passThruShader;
+      quad.render(renderer);
+      quad.material = passThruShader;
       renderer.xr.enabled = currentXrEnabled;
       renderer.shadowMap.autoUpdate = currentShadowAutoUpdate;
-      renderer.outputEncoding = currentOutputEncoding;
-      renderer.toneMapping = currentToneMapping;
       renderer.setRenderTarget(currentRenderTarget);
     };
     function getPassThroughVertexShader() {
@@ -606,7 +651,7 @@ var simulation_default = {
 };
 
 // src/points.js
-var import_three3 = require("three");
+var import_three4 = require("three");
 
 // src/shaders/points.js
 var points = {
@@ -745,9 +790,9 @@ var points = {
 var points_default = points;
 
 // src/texture-atlas.js
-var import_three2 = require("three");
+var import_three3 = require("three");
 var anchor2;
-var TextureAtlas = class _TextureAtlas extends import_three2.Texture {
+var TextureAtlas = class _TextureAtlas extends import_three3.Texture {
   map = [];
   dimensions = 1;
   isTextureAtlas = true;
@@ -837,11 +882,11 @@ var TextureAtlas = class _TextureAtlas extends import_three2.Texture {
 };
 
 // src/points.js
-var color = new import_three3.Color();
-var Points = class extends import_three3.Points {
+var color = new import_three4.Color();
+var Points = class extends import_three4.Points {
   constructor({ atlas, geometry }, uniforms) {
-    const material = new import_three3.ShaderMaterial({
-      uniforms: { ...import_three3.UniformsLib["fog"], ...{
+    const material = new import_three4.ShaderMaterial({
+      uniforms: { ...import_three4.UniformsLib["fog"], ...{
         is2D: uniforms.is2D,
         sizeAttenuation: uniforms.sizeAttenuation,
         frustumSize: uniforms.frustumSize,
@@ -893,22 +938,22 @@ var Points = class extends import_three3.Points {
       }
       sizes.push(node.size != null ? node.size : 1);
     }).then(() => {
-      const geometry = new import_three3.BufferGeometry();
+      const geometry = new import_three4.BufferGeometry();
       geometry.setAttribute(
         "position",
-        new import_three3.Float32BufferAttribute(vertices2, 3)
+        new import_three4.Float32BufferAttribute(vertices2, 3)
       );
       geometry.setAttribute(
         "color",
-        new import_three3.Float32BufferAttribute(colors, 3)
+        new import_three4.Float32BufferAttribute(colors, 3)
       );
       geometry.setAttribute(
         "imageKey",
-        new import_three3.Float32BufferAttribute(imageKeys, 1)
+        new import_three4.Float32BufferAttribute(imageKeys, 1)
       );
       geometry.setAttribute(
         "pointSize",
-        new import_three3.Float32BufferAttribute(sizes, 1)
+        new import_three4.Float32BufferAttribute(sizes, 1)
       );
       return { atlas, geometry };
     });
@@ -916,7 +961,7 @@ var Points = class extends import_three3.Points {
 };
 
 // src/links.js
-var import_three4 = require("three");
+var import_three5 = require("three");
 
 // src/shaders/links.js
 var links = {
@@ -1130,11 +1175,11 @@ var links_default = links;
 // src/links.js
 var vertices = new Float32Array([-1, -1, 0, 1, -1, 0, -1, 1, 0, 1, 1, 0]);
 var indices = [0, 1, 2, 2, 1, 3];
-var Links = class extends import_three4.Mesh {
+var Links = class extends import_three5.Mesh {
   constructor(geometry, uniforms) {
-    const material = new import_three4.ShaderMaterial({
+    const material = new import_three5.ShaderMaterial({
       uniforms: {
-        ...import_three4.UniformsLib["fog"],
+        ...import_three5.UniformsLib["fog"],
         ...{
           frustumSize: uniforms.frustumSize,
           is2D: uniforms.is2D,
@@ -1156,20 +1201,20 @@ var Links = class extends import_three4.Mesh {
       fragmentShader: links_default.fragmentShader,
       transparent: true,
       fog: true,
-      side: import_three4.DoubleSide
+      side: import_three5.DoubleSide
     });
     super(geometry, material);
     this.frustumCulled = false;
   }
   static parse(points2, data) {
-    const geometry = new import_three4.InstancedBufferGeometry();
+    const geometry = new import_three5.InstancedBufferGeometry();
     const sources = [];
     const targets = [];
     const sourceColors = [];
     const targetColors = [];
     const v = points2.geometry.attributes.position.array;
     const c = points2.geometry.attributes.color.array;
-    geometry.setAttribute("position", new import_three4.BufferAttribute(vertices, 3));
+    geometry.setAttribute("position", new import_three5.BufferAttribute(vertices, 3));
     geometry.setIndex(indices);
     return each(data.links, (_, i) => {
       const link2 = data.links[i];
@@ -1190,19 +1235,19 @@ var Links = class extends import_three4.Mesh {
     }).then(() => {
       geometry.setAttribute(
         "source",
-        new import_three4.InstancedBufferAttribute(new Float32Array(sources), 3)
+        new import_three5.InstancedBufferAttribute(new Float32Array(sources), 3)
       );
       geometry.setAttribute(
         "target",
-        new import_three4.InstancedBufferAttribute(new Float32Array(targets), 3)
+        new import_three5.InstancedBufferAttribute(new Float32Array(targets), 3)
       );
       geometry.setAttribute(
         "sourceColor",
-        new import_three4.InstancedBufferAttribute(new Float32Array(sourceColors), 3)
+        new import_three5.InstancedBufferAttribute(new Float32Array(sourceColors), 3)
       );
       geometry.setAttribute(
         "targetColor",
-        new import_three4.InstancedBufferAttribute(new Float32Array(targetColors), 3)
+        new import_three5.InstancedBufferAttribute(new Float32Array(targetColors), 3)
       );
       geometry.instanceCount = data.links.length;
       return geometry;
@@ -1211,7 +1256,7 @@ var Links = class extends import_three4.Mesh {
 };
 
 // src/labels.js
-var import_three5 = require("three");
+var import_three6 = require("three");
 
 // src/shaders/labels.js
 var labels = {
@@ -1339,21 +1384,21 @@ var labels = {
 var labels_default = labels;
 
 // src/labels.js
-var MODEL_VIEW_MATRIX = new import_three5.Matrix4();
-var CAMERA_RIGHT = new import_three5.Vector3();
-var CAMERA_UP = new import_three5.Vector3();
-var LOCAL_NODE = new import_three5.Vector3();
-var WORLD_CENTER = new import_three5.Vector3();
-var WORLD_CORNER = new import_three5.Vector3();
-var PROJECTED_CORNER = new import_three5.Vector3();
-var MV_CENTER = new import_three5.Vector4();
+var MODEL_VIEW_MATRIX = new import_three6.Matrix4();
+var CAMERA_RIGHT = new import_three6.Vector3();
+var CAMERA_UP = new import_three6.Vector3();
+var LOCAL_NODE = new import_three6.Vector3();
+var WORLD_CENTER = new import_three6.Vector3();
+var WORLD_CORNER = new import_three6.Vector3();
+var PROJECTED_CORNER = new import_three6.Vector3();
+var MV_CENTER = new import_three6.Vector4();
 var BASE_ATLAS_FONT_SIZE = 120;
 var BASE_ATLAS_PADDING = 4;
 var ATLAS_RASTER_SCALE = 2;
 var DEFAULT_MAX_LABEL_CANVAS_SIZE = 4096;
 var DEFAULT_FONT_FAMILY = "Arial, sans-serif";
 var LABEL_GRAPH_DISTANCE_HOPS = 6;
-var LABEL_NODE_COLOR = new import_three5.Color();
+var LABEL_NODE_COLOR = new import_three6.Color();
 var LabelAlignmentMap = {
   center: 0,
   left: 1,
@@ -1722,19 +1767,19 @@ function buildSelectionRanks(entries, selectionOrder) {
 }
 function configureAtlasTexture(texture, options = {}) {
   const useMipmaps = Boolean(options.useMipmaps);
-  texture.minFilter = useMipmaps ? import_three5.LinearMipmapLinearFilter : import_three5.LinearFilter;
-  texture.magFilter = import_three5.LinearFilter;
-  texture.wrapS = import_three5.ClampToEdgeWrapping;
-  texture.wrapT = import_three5.ClampToEdgeWrapping;
+  texture.minFilter = useMipmaps ? import_three6.LinearMipmapLinearFilter : import_three6.LinearFilter;
+  texture.magFilter = import_three6.LinearFilter;
+  texture.wrapS = import_three6.ClampToEdgeWrapping;
+  texture.wrapT = import_three6.ClampToEdgeWrapping;
   texture.generateMipmaps = useMipmaps;
   texture.needsUpdate = true;
   return texture;
 }
-var Labels = class extends import_three5.Mesh {
+var Labels = class extends import_three6.Mesh {
   constructor({ geometry, texture, entries, fontFamily }, uniforms) {
-    const material = new import_three5.ShaderMaterial({
+    const material = new import_three6.ShaderMaterial({
       uniforms: {
-        ...import_three5.UniformsLib.fog,
+        ...import_three6.UniformsLib.fog,
         ...{
           texturePositions: { value: null },
           textureAtlas: { value: texture },
@@ -1893,9 +1938,9 @@ var Labels = class extends import_three5.Mesh {
     ]);
     const quadUVs = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
     const quadIdx = [0, 1, 2, 2, 1, 3];
-    const geometry = new import_three5.InstancedBufferGeometry();
-    geometry.setAttribute("position", new import_three5.BufferAttribute(quadVerts, 3));
-    geometry.setAttribute("uv", new import_three5.BufferAttribute(quadUVs, 2));
+    const geometry = new import_three6.InstancedBufferGeometry();
+    geometry.setAttribute("position", new import_three6.BufferAttribute(quadVerts, 3));
+    geometry.setAttribute("uv", new import_three6.BufferAttribute(quadUVs, 2));
     geometry.setIndex(quadIdx);
     const sources = [];
     const colors = [];
@@ -1929,30 +1974,30 @@ var Labels = class extends import_three5.Mesh {
     }
     geometry.setAttribute(
       "source",
-      new import_three5.InstancedBufferAttribute(new Float32Array(sources), 3)
+      new import_three6.InstancedBufferAttribute(new Float32Array(sources), 3)
     );
     geometry.setAttribute(
       "color",
-      new import_three5.InstancedBufferAttribute(new Float32Array(colors), 3)
+      new import_three6.InstancedBufferAttribute(new Float32Array(colors), 3)
     );
     geometry.setAttribute(
       "labelUV",
-      new import_three5.InstancedBufferAttribute(new Float32Array(labelUVs), 4)
+      new import_three6.InstancedBufferAttribute(new Float32Array(labelUVs), 4)
     );
     geometry.setAttribute(
       "aspectRatio",
-      new import_three5.InstancedBufferAttribute(new Float32Array(aspectRatios), 1)
+      new import_three6.InstancedBufferAttribute(new Float32Array(aspectRatios), 1)
     );
     geometry.setAttribute(
       "pointSize",
-      new import_three5.InstancedBufferAttribute(new Float32Array(pointSizes), 1)
+      new import_three6.InstancedBufferAttribute(new Float32Array(pointSizes), 1)
     );
     geometry.setAttribute(
       "selectionRank",
-      new import_three5.InstancedBufferAttribute(new Float32Array(selectionRanks), 1)
+      new import_three6.InstancedBufferAttribute(new Float32Array(selectionRanks), 1)
     );
     geometry.instanceCount = entries.length;
-    const texture = configureAtlasTexture(new import_three5.CanvasTexture(canvas), options);
+    const texture = configureAtlasTexture(new import_three6.CanvasTexture(canvas), options);
     return Promise.resolve({
       geometry,
       texture,
@@ -1987,7 +2032,7 @@ var Registry = class {
 };
 
 // src/hit.js
-var import_three6 = require("three");
+var import_three7 = require("three");
 
 // src/shaders/hit.js
 var hit = {
@@ -2061,10 +2106,10 @@ var hit = {
 var hit_default = hit;
 
 // src/hit.js
-var color2 = new import_three6.Color();
+var color2 = new import_three7.Color();
 var Hit = class {
   parent = null;
-  renderTarget = new import_three6.WebGLRenderTarget(1, 1);
+  renderTarget = new import_three7.WebGLRenderTarget(1, 1);
   width = 1;
   height = 1;
   ratio = 1;
@@ -2072,10 +2117,10 @@ var Hit = class {
   helper = null;
   constructor(fdg) {
     this.parent = fdg;
-    this.helper = new import_three6.Sprite(new import_three6.SpriteMaterial({
+    this.helper = new import_three7.Sprite(new import_three7.SpriteMaterial({
       map: this.renderTarget.texture
     }));
-    this.material = new import_three6.ShaderMaterial({
+    this.material = new import_three7.ShaderMaterial({
       uniforms: {
         hitScale: { value: 2 }
       },
@@ -2791,10 +2836,10 @@ var TextureWorkerManager = class {
 };
 
 // src/index.js
-var color3 = new import_three7.Color();
-var position = new import_three7.Vector3();
-var size = new import_three7.Vector2();
-var drawingBufferSize = new import_three7.Vector2();
+var color3 = new import_three8.Color();
+var position = new import_three8.Vector3();
+var size = new import_three8.Vector2();
+var drawingBufferSize = new import_three8.Vector2();
 var LineCaps = ["round", "butt", "square"];
 var LineCapsMap = {
   round: 0,
@@ -2877,7 +2922,7 @@ function disposeGraphData(graph) {
   textures?.linkRanges?.dispose();
   textures?.targetPositions?.dispose();
 }
-var ForceDirectedGraph = class extends import_three7.Group {
+var ForceDirectedGraph = class extends import_three8.Group {
   ready = false;
   /**
    * @param {THREE.WebGLRenderer} renderer - the three.js renderer referenced to create the render targets
@@ -2908,14 +2953,14 @@ var ForceDirectedGraph = class extends import_three7.Group {
       linksInheritColor: { value: false },
       labelsInheritColor: { value: false },
       pointsInheritColor: { value: true },
-      pointColor: { value: new import_three7.Color(1, 1, 1) },
-      linkColor: { value: new import_three7.Color(1, 1, 1) },
-      labelColor: { value: new import_three7.Color(0, 0, 0) },
+      pointColor: { value: new import_three8.Color(1, 1, 1) },
+      linkColor: { value: new import_three8.Color(1, 1, 1) },
+      labelColor: { value: new import_three8.Color(0, 0, 0) },
       linecap: { value: LineCapsMap.round },
       linewidth: { value: 1 },
       opacity: { value: 1 },
       pixelRatio: { value: 1 },
-      resolution: { value: new import_three7.Vector2(1, 1) },
+      resolution: { value: new import_three8.Vector2(1, 1) },
       uBeginning: { value: 0 },
       uEnding: { value: 1 },
       uNodeAmount: { value: 0 },
@@ -2924,7 +2969,7 @@ var ForceDirectedGraph = class extends import_three7.Group {
       labelBaseline: { value: 1 },
       labelFontSize: { value: 24 },
       labelNear: { value: 0 },
-      labelOffset: { value: new import_three7.Vector2(0, 0) }
+      labelOffset: { value: new import_three8.Vector2(0, 0) }
     };
     this.userData.labelFontFamily = DEFAULT_LABEL_FONT_FAMILY;
     this.userData.hit = new Hit(this);
@@ -3160,8 +3205,8 @@ var ForceDirectedGraph = class extends import_three7.Group {
         variables.velocities.material.uniforms.textureTargetPositions = {
           value: textures.targetPositions
         };
-        variables.positions.wrapS = variables.positions.wrapT = import_three7.RepeatWrapping;
-        variables.velocities.wrapS = variables.velocities.wrapT = import_three7.RepeatWrapping;
+        variables.positions.wrapS = variables.positions.wrapT = import_three8.RepeatWrapping;
+        variables.velocities.wrapS = variables.velocities.wrapT = import_three8.RepeatWrapping;
         const error = gpgpu.init();
         if (error) {
           reject(error);
@@ -3664,7 +3709,7 @@ var ForceDirectedGraph = class extends import_three7.Group {
 };
 
 // src/react/graph-controller.js
-var import_three8 = require("three");
+var import_three9 = require("three");
 function createGraphController(renderer, callbacks = {}) {
   const graph = new ForceDirectedGraph(renderer);
   let options = {};
@@ -3675,7 +3720,7 @@ function createGraphController(renderer, callbacks = {}) {
   function applyOptions() {
     for (const key of ForceDirectedGraph.Properties) {
       if (options[key] !== void 0) {
-        graph[key] = ["pointColor", "linkColor", "labelColor"].includes(key) ? new import_three8.Color(options[key]) : options[key];
+        graph[key] = ["pointColor", "linkColor", "labelColor"].includes(key) ? new import_three9.Color(options[key]) : options[key];
       }
     }
   }
