@@ -36,10 +36,7 @@ import { ForceDirectedGraph as ReactGraph } from '@jonobr1/force-directed-graph/
 import { ForceDirectedGraph as FiberGraph } from '@jonobr1/force-directed-graph/r3f';
 ```
 
-See the [React component guide](docs/react.md) for installation, props, refs and
-data updates. Complete HTML snippets for CodePen are included for
-[standalone React](examples/codepen/react.html) and
-[React Three Fiber](examples/codepen/r3f.html).
+Complete examples are available for [standalone React](https://codepen.io/editor/jonobr1/pen/01a12ec1-67b9-7879-a742-15edd45e640f) and [React Three Fiber](https://codepen.io/editor/jonobr1/pen/01a12ea8-2144-7352-bf83-e21e171b7a71).
 
 ### Data Schema (`constructor` and `set`)
 
