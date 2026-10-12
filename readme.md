@@ -26,6 +26,21 @@ npm install --save three @jonobr1/force-directed-graph
 import { ForceDirectedGraph } from '@jonobr1/force-directed-graph';
 ```
 
+### React and React Three Fiber
+
+```javascript
+// Standalone canvas with OrbitControls:
+import { ForceDirectedGraph as ReactGraph } from '@jonobr1/force-directed-graph/react';
+
+// Inside an existing React Three Fiber Canvas:
+import { ForceDirectedGraph as FiberGraph } from '@jonobr1/force-directed-graph/r3f';
+```
+
+See the [React component guide](docs/react.md) for installation, props, refs and
+data updates. Complete HTML snippets for CodePen are included for
+[standalone React](examples/codepen/react.html) and
+[React Three Fiber](examples/codepen/r3f.html).
+
 ### Data Schema (`constructor` and `set`)
 
 > Reference: The accepted `nodes` / `links` structure is inspired by the D3 force-directed graph data format: [@d3/force-directed-graph-component](https://observablehq.com/@d3/force-directed-graph-component).
@@ -70,7 +85,7 @@ type LinkData = {
 > - If a node defines at least two of `x`, `y`, `z`, those values also become that node's target position when `pinStrength > 0`.
 > - `isStatic` defaults to `false`.
 > - If `color` is omitted, the node defaults to white.
-> - `set(data[, callback])` returns a `Promise` that resolves when geometry/textures are ready.
+> - `set(data[, callback])` returns a `Promise` that resolves when geometry/textures are ready and rejects with the original error if loading fails. Handle failures with `.catch()` or `try`/`catch` when using `await`. Loading through the constructor logs failures to the console.
 > - `obscurity` is label-density control: `0` shows all labels, `0.75` targets roughly 25% visible labels, and `1` hides all labels. The active subset is now chosen from graph topology and priority, not camera clipspace placement.
 > - `fdg.labels.alignment` (`'center' | 'left' | 'right'`) and `fdg.labels.baseline` (`'top' | 'middle' | 'bottom'`) change label anchoring live.
 > - `fdg.labels.offset` (`THREE.Vector2`) adds extra label padding in label-space x/y.

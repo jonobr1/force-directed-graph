@@ -93,6 +93,31 @@ function buildLinkTextureData(preparedLinks, nodeAmount, size) {
   };
 }
 
+function disposeGraphData(graph) {
+  const { gpgpu, textures } = graph.userData;
+  // React unmounts must release all graph-owned resources, including atlases
+  // and picking resources that are not part of the compute variables.
+  for (const child of [...graph.children]) {
+    graph.remove(child);
+    if (typeof child.dispose === 'function') {
+      child.dispose();
+    } else {
+      child.geometry?.dispose();
+      child.material?.uniforms?.textureAtlas?.value?.dispose();
+      child.material?.dispose();
+    }
+  }
+  if (gpgpu) {
+    for (const variable of gpgpu.variables) {
+      variable.material.dispose();
+    }
+    gpgpu.dispose();
+  }
+  textures?.links?.dispose();
+  textures?.linkRanges?.dispose();
+  textures?.targetPositions?.dispose();
+}
+
 class ForceDirectedGraph extends Group {
   ready = false;
 
@@ -149,7 +174,9 @@ class ForceDirectedGraph extends Group {
     this.userData.workerManager = new TextureWorkerManager();
 
     if (data) {
-      this.set(data);
+      this.set(data).catch((error) => {
+        console.warn('Force Directed Graph:', error);
+      });
     }
   }
 
@@ -189,7 +216,7 @@ class ForceDirectedGraph extends Group {
    * @param {Object} data - Object with nodes and links properties based on https://observablehq.com/@d3/force-directed-graph-component
    * @param {Function} callback
    * @description Set the data to an instance of force directed graph. Because of the potential large amount of data this function runs on a request animation frame and returns a promise (or a passed callback) to give indication when the graph is ready to be rendered.
-   * @returns {Promise}
+   * @returns {Promise} Resolves when ready; rejects with the original loading error.
    */
   set(data, callback) {
     const scope = this;
@@ -202,29 +229,7 @@ class ForceDirectedGraph extends Group {
     // Reset all properties
     registry.clear();
 
-    // Dispose of all previous gpgpu data
-    if (gpgpu) {
-      for (let i = 0; i < gpgpu.variables.length; i++) {
-        const variable = gpgpu.variables[i];
-
-        for (let j = 0; j < variable.renderTargets.length; j++) {
-          const renderTarget = variable.renderTargets[j];
-          renderTarget.dispose();
-        }
-
-        variable.initialValueTexture.dispose();
-        variable.material.dispose();
-      }
-    }
-
-    // Reset points and links
-    for (let i = 0; i < this.children.length; i++) {
-      const child = this.children[i];
-      this.remove(child);
-      if ('dispose' in child) {
-        child.dispose();
-      }
-    }
+    disposeGraphData(this);
     this.userData.labels = null;
 
     // Initialize new properties
@@ -264,9 +269,6 @@ class ForceDirectedGraph extends Group {
         .then(setup)
         .then(generate)
         .then(complete)
-        .catch((error) => {
-          console.warn('Force Directed Graph:', error);
-        })
     );
 
     function register() {
@@ -782,18 +784,10 @@ class ForceDirectedGraph extends Group {
   }
 
   dispose() {
-    const { gpgpu, workerManager } = this.userData;
-    if (gpgpu) {
-      for (let i = 0; i < gpgpu.variables.length; i++) {
-        const variable = gpgpu.variables[i];
-        variable.material.dispose();
-        variable.initialValueTexture.dispose();
-        for (let j = 0; j < variable.renderTargets.length; j++) {
-          const target = variable.renderTargets[j];
-          target.dispose();
-        }
-      }
-    }
+    this.ready = false;
+    const { hit, workerManager } = this.userData;
+    disposeGraphData(this);
+    hit?.dispose();
     if (workerManager) {
       workerManager.dispose();
     }

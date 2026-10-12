@@ -11,6 +11,7 @@
     "build": "npm run build:wasm && node ./utils/build.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:types": "tsc --ignoreConfig --noEmit --strict --skipLibCheck --jsx react-jsx --module preserve --moduleResolution bundler utils/check-component-types.tsx",
     "lint": "eslint . --fix"
   },
   "files": [
@@ -20,7 +21,11 @@
     "readme.md",
     "index.html",
     "types.d.ts",
-    "asconfig.json"
+    "asconfig.json",
+    "react.d.ts",
+    "r3f.d.ts",
+    "examples",
+    "docs/react.md"
   ],
   "repository": {
     "type": "git",
@@ -51,14 +56,51 @@
   },
   "homepage": "https://github.com/jonobr1/force-directed-graph#readme",
   "peerDependencies": {
-    "three": ">=0.150.0"
+    "three": ">=0.150.0",
+    "react": ">=18 <20",
+    "@react-three/fiber": ">=8 <10"
   },
   "devDependencies": {
     "@assemblyscript/loader": "^0.28.17",
+    "@react-three/fiber": "^8.18.0",
+    "@react-three/test-renderer": "^8.2.4",
+    "@types/react": "^18.3.28",
+    "@types/react-dom": "^18.3.7",
+    "@types/three": "^0.150.2",
     "assemblyscript": "^0.28.17",
     "esbuild": "^0.28.0",
     "eslint": "^10.3.0",
+    "jsdom": "^26.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.5"
+  },
+  "exports": {
+    ".": {
+      "types": "./types.d.ts",
+      "import": "./build/fdg.module.js",
+      "require": "./build/fdg.umd.js",
+      "default": "./build/fdg.js"
+    },
+    "./react": {
+      "types": "./react.d.ts",
+      "import": "./build/react.mjs",
+      "require": "./build/react.cjs"
+    },
+    "./r3f": {
+      "types": "./r3f.d.ts",
+      "import": "./build/r3f.mjs",
+      "require": "./build/r3f.cjs"
+    },
+    "./*": "./*"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "@react-three/fiber": {
+      "optional": true
+    }
   }
 }
